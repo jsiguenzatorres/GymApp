@@ -1,0 +1,78 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+dist/
+build/
+.next/
+.expo/
+out/
+
+# Turborepo
+.turbo/
+
+# Environment — managed by Doppler, NEVER commit
+.env
+.env.local
+.env.*.local
+.env.production
+.env.staging
+
+# Secrets — NUNCA commitear
+*.pem
+*.key
+*.p8
+google-services.json
+GoogleService-Info.plist
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Testing
+coverage/
+.nyc_output/
+
+# Cache
+.cache/
+.parcel-cache/
+*.tsbuildinfo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+
+# Prisma
+# (migrations sí se commitean, client se regenera)
+apps/api/src/generated/
+
+# Mobile
+apps/mobile/.expo/
+apps/mobile/ios/
+apps/mobile/android/
+apps/mobile/*.jks
+apps/mobile/*.p8
+apps/mobile/*.p12
+apps/mobile/*.mobileprovision
+
+# Cloudflare / Railway config local
+wrangler.toml.local
+
+# Database dumps (nunca commitear datos de producción)
+*.sql.dump
+*.pg_dump
+
+# Uploads locales (van a Cloudflare R2 en producción)
+uploads/
+public/uploads/
