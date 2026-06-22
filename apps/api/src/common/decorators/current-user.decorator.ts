@@ -1,13 +1,7 @@
 import { createParamDecorator, ExecutionContext } from '@nestjs/common';
+import type { JwtPayload } from '../../modules/auth/interfaces/jwt-payload.interface';
 
-export interface JwtPayload {
-  sub: string; // userId
-  email: string;
-  gymId: string;
-  role: string;
-  iat: number;
-  exp: number;
-}
+export type { JwtPayload };
 
 /** @CurrentUser() — inyecta el payload del JWT en el parámetro del handler */
 export const CurrentUser = createParamDecorator(

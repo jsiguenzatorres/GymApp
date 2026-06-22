@@ -1,17 +1,14 @@
 import type { Metadata } from 'next';
-import { Suspense } from 'react';
-import { LoginForm } from '@/components/auth/login-form';
+import { SetupGymForm } from '@/components/auth/setup-gym-form';
 import { ThemeToggle } from '@/components/layout/theme-toggle';
 
-export const metadata: Metadata = { title: 'Iniciar Sesión' };
+export const metadata: Metadata = { title: 'Crear Gimnasio' };
 
-export default function LoginPage() {
+export default function SetupPage() {
   return (
     <div className="space-y-8">
-      {/* Header */}
       <div className="flex items-start justify-between">
         <div className="space-y-1">
-          {/* Logo mark pequeño */}
           <div className="flex items-center gap-2.5 mb-3">
             <div className="h-8 w-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
               <svg viewBox="0 0 20 20" fill="none" className="h-4 w-4">
@@ -46,16 +43,15 @@ export default function LoginPage() {
             </div>
             <span className="font-bold text-lg tracking-tight">GymApp</span>
           </div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Bienvenido</h1>
-          <p className="text-sm text-muted-foreground">Ingresa tus credenciales para continuar</p>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">Crea tu gimnasio</h1>
+          <p className="text-sm text-muted-foreground">
+            Configura tu espacio en minutos. Sin tarjeta de crédito.
+          </p>
         </div>
         <ThemeToggle />
       </div>
 
-      {/* Form */}
-      <Suspense>
-        <LoginForm />
-      </Suspense>
+      <SetupGymForm />
     </div>
   );
 }
