@@ -7,6 +7,7 @@ import { TenantMiddleware } from './common/middleware/tenant.middleware';
 import { DatabaseModule } from './modules/database/database.module';
 import { HealthModule } from './modules/health/health.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { MembersModule } from './modules/members/members.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { AuthModule } from './modules/auth/auth.module';
     DatabaseModule,
     HealthModule,
     AuthModule,
+    MembersModule,
     // Módulos de negocio se agregan aquí en cada sprint
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

@@ -1,3 +1,29 @@
+export enum BillingFrequency {
+  ONE_TIME = 'ONE_TIME',
+  WEEKLY = 'WEEKLY',
+  MONTHLY = 'MONTHLY',
+  QUARTERLY = 'QUARTERLY',
+  SEMI_ANNUAL = 'SEMI_ANNUAL',
+  ANNUAL = 'ANNUAL',
+}
+
+export const BILLING_FREQUENCY_LABELS: Record<BillingFrequency, string> = {
+  [BillingFrequency.ONE_TIME]: 'Una vez',
+  [BillingFrequency.WEEKLY]: 'Semanal',
+  [BillingFrequency.MONTHLY]: 'Mensual',
+  [BillingFrequency.QUARTERLY]: 'Trimestral',
+  [BillingFrequency.SEMI_ANNUAL]: 'Semestral',
+  [BillingFrequency.ANNUAL]: 'Anual',
+};
+
+export enum MembershipStatus {
+  TRIAL = 'TRIAL',
+  ACTIVE = 'ACTIVE',
+  FROZEN = 'FROZEN',
+  EXPIRED = 'EXPIRED',
+  CANCELLED = 'CANCELLED',
+}
+
 export enum MemberStatus {
   LEAD = 'LEAD',
   TRIAL = 'TRIAL',

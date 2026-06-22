@@ -41,6 +41,23 @@ enum SaasPlan {
   ENTERPRISE
 }
 
+enum BillingFrequency {
+  ONE_TIME
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  SEMI_ANNUAL
+  ANNUAL
+}
+
+enum MembershipStatus {
+  TRIAL
+  ACTIVE
+  FROZEN
+  EXPIRED
+  CANCELLED
+}
+
 // ─── GYMS ────────────────────────────────────────────────────────────────────
 
 model Gym {
@@ -67,8 +84,10 @@ model Gym {
   updated_at  DateTime @updatedAt
 
   // Relaciones
-  staff   Staff[]
-  members Member[]
+  staff            Staff[]
+  members          Member[]
+  membership_types MembershipType[]
+  memberships      Membership[]
 
   @@index([saas_plan, is_active])
   @@map("gyms")
@@ -154,11 +173,74 @@ model Member {
   created_at    DateTime     @default(now())
   updated_at    DateTime     @updatedAt
 
-  gym  Gym  @relation(fields: [gym_id], references: [id], onDelete: Cascade)
-  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  gym         Gym          @relation(fields: [gym_id], references: [id], onDelete: Cascade)
+  user        User         @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  memberships Membership[]
 
   @@index([gym_id, status])
   @@index([gym_id, risk_score])
   @@index([gym_id, created_at(sort: Desc)])
   @@map("members")
+}
+
+// ─── MEMBERSHIP TYPES (catálogo de planes) ───────────────────────────────────
+
+model MembershipType {
+  id                String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gym_id            String           @db.Uuid
+  name              String           @db.VarChar(150)
+  description       String?
+  price             Decimal          @db.Decimal(10, 2)
+  currency          String           @default("USD") @db.VarChar(3)
+  billing_frequency BillingFrequency @default(MONTHLY)
+  duration_days     Int
+  max_freezes       Int              @default(1)
+  max_freeze_days   Int              @default(30)
+  features          String[]
+  is_active         Boolean          @default(true)
+  is_trial          Boolean          @default(false)
+  sort_order        Int              @default(0)
+  created_at        DateTime         @default(now())
+  updated_at        DateTime         @updatedAt
+
+  gym         Gym          @relation(fields: [gym_id], references: [id], onDelete: Cascade)
+  memberships Membership[]
+
+  @@index([gym_id, is_active])
+  @@index([gym_id, sort_order])
+  @@map("membership_types")
+}
+
+// ─── MEMBERSHIPS (suscripciones activas e historial) ─────────────────────────
+
+model Membership {
+  id             String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gym_id         String           @db.Uuid
+  member_id      String           @db.Uuid
+  type_id        String           @db.Uuid
+  status         MembershipStatus @default(TRIAL)
+  start_date     DateTime         @db.Date
+  end_date       DateTime         @db.Date
+  price_paid     Decimal          @db.Decimal(10, 2)
+  currency       String           @default("USD") @db.VarChar(3)
+  // Congelación
+  freeze_count   Int              @default(0)
+  frozen_at      DateTime?
+  freeze_ends_at DateTime?
+  // Cancelación
+  cancelled_at   DateTime?
+  cancel_reason  String?
+  // Notas
+  notes          String?
+  created_at     DateTime         @default(now())
+  updated_at     DateTime         @updatedAt
+
+  gym    Gym            @relation(fields: [gym_id], references: [id], onDelete: Cascade)
+  member Member         @relation(fields: [member_id], references: [id], onDelete: Cascade)
+  type   MembershipType @relation(fields: [type_id], references: [id])
+
+  @@index([gym_id, status])
+  @@index([gym_id, member_id])
+  @@index([gym_id, end_date])
+  @@map("memberships")
 }
