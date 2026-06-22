@@ -1,9 +1,9 @@
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
+import { GeistSans } from 'geist/font/sans';
+import { GeistMono } from 'geist/font/mono';
+import { ThemeProvider } from 'next-themes';
 import { Toaster } from 'sonner';
 import './globals.css';
-
-const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
   title: { default: 'GymApp Admin', template: '%s | GymApp' },
@@ -13,10 +13,29 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="es" suppressHydrationWarning>
-      <body className={inter.className}>
-        {children}
-        <Toaster richColors position="top-right" />
+    <html
+      lang="es"
+      className={`${GeistSans.variable} ${GeistMono.variable}`}
+      suppressHydrationWarning
+    >
+      <body className="font-sans">
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="light"
+          enableSystem={false}
+          disableTransitionOnChange
+        >
+          {children}
+          <Toaster
+            richColors
+            position="top-right"
+            toastOptions={{
+              classNames: {
+                toast: 'font-sans',
+              },
+            }}
+          />
+        </ThemeProvider>
       </body>
     </html>
   );
