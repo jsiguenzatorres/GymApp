@@ -99,6 +99,11 @@ model Gym {
   memberships      Membership[]
   payment_methods  PaymentMethod[]
   payments         Payment[]
+  exercises        Exercise[]
+  workout_plans    WorkoutPlan[]
+  member_plans     MemberPlan[]
+  workout_sessions WorkoutSession[]
+  personal_records PersonalRecord[]
 
   @@index([saas_plan, is_active])
   @@map("gyms")
@@ -184,11 +189,14 @@ model Member {
   created_at    DateTime     @default(now())
   updated_at    DateTime     @updatedAt
 
-  gym             Gym             @relation(fields: [gym_id], references: [id], onDelete: Cascade)
-  user            User            @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  memberships     Membership[]
-  payment_methods PaymentMethod[]
-  payments        Payment[]
+  gym              Gym             @relation(fields: [gym_id], references: [id], onDelete: Cascade)
+  user             User            @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  memberships      Membership[]
+  payment_methods  PaymentMethod[]
+  payments         Payment[]
+  member_plans     MemberPlan[]
+  workout_sessions WorkoutSession[]
+  personal_records PersonalRecord[]
 
   @@index([gym_id, status])
   @@index([gym_id, risk_score])
@@ -327,4 +335,182 @@ model Payment {
   @@index([gym_id, created_at(sort: Desc)])
   @@index([gym_id, paid_at])
   @@map("payments")
+}
+
+// ─── EXERCISES (biblioteca de ejercicios) ────────────────────────────────────
+
+model Exercise {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gym_id            String?  @db.Uuid   // null = ejercicio global/built-in
+  name              String   @db.VarChar(200)
+  description       String?
+  muscle_groups     String[] // músculos primarios
+  secondary_muscles String[] // músculos secundarios
+  equipment         String[]
+  category          String   @default("STRENGTH") @db.VarChar(30)
+  difficulty        String   @default("INTERMEDIATE") @db.VarChar(20)
+  instructions      String?
+  video_url         String?
+  is_active         Boolean  @default(true)
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+
+  gym              Gym?             @relation(fields: [gym_id], references: [id], onDelete: Cascade)
+  workout_blocks   WorkoutBlock[]
+  workout_sets     WorkoutSet[]
+  personal_records PersonalRecord[]
+
+  @@index([gym_id])
+  @@index([category, is_active])
+  @@map("exercises")
+}
+
+// ─── WORKOUT PLANS (plantillas de entrenamiento) ─────────────────────────────
+
+model WorkoutPlan {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gym_id        String   @db.Uuid
+  name          String   @db.VarChar(200)
+  description   String?
+  goal          String?  @db.VarChar(30)
+  difficulty    String   @default("INTERMEDIATE") @db.VarChar(20)
+  days_per_week Int      @default(3)
+  is_active     Boolean  @default(true)
+  is_template   Boolean  @default(false)
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  gym          Gym              @relation(fields: [gym_id], references: [id], onDelete: Cascade)
+  days         WorkoutPlanDay[]
+  member_plans MemberPlan[]
+  sessions     WorkoutSession[]
+
+  @@index([gym_id, is_active])
+  @@map("workout_plans")
+}
+
+model WorkoutPlanDay {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  plan_id    String   @db.Uuid
+  day_number Int
+  name       String?  @db.VarChar(100)
+
+  plan     WorkoutPlan     @relation(fields: [plan_id], references: [id], onDelete: Cascade)
+  blocks   WorkoutBlock[]
+  sessions WorkoutSession[]
+
+  @@index([plan_id, day_number])
+  @@map("workout_plan_days")
+}
+
+model WorkoutBlock {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  day_id       String   @db.Uuid
+  exercise_id  String   @db.Uuid
+  block_type   String   @default("STANDARD") @db.VarChar(20)
+  order        Int
+  sets         Int      @default(3)
+  reps_min     Int?
+  reps_max     Int?
+  rpe          Float?
+  rest_seconds Int?
+  notes        String?
+
+  day      WorkoutPlanDay @relation(fields: [day_id], references: [id], onDelete: Cascade)
+  exercise Exercise       @relation(fields: [exercise_id], references: [id])
+
+  @@index([day_id, order])
+  @@map("workout_blocks")
+}
+
+// ─── MEMBER PLANS (asignación plan → miembro) ────────────────────────────────
+
+model MemberPlan {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gym_id     String   @db.Uuid
+  member_id  String   @db.Uuid
+  plan_id    String   @db.Uuid
+  is_active  Boolean  @default(true)
+  started_at DateTime @default(now())
+  notes      String?
+
+  gym    Gym         @relation(fields: [gym_id], references: [id], onDelete: Cascade)
+  member Member      @relation(fields: [member_id], references: [id], onDelete: Cascade)
+  plan   WorkoutPlan @relation(fields: [plan_id], references: [id])
+
+  @@index([gym_id, member_id, is_active])
+  @@map("member_plans")
+}
+
+// ─── WORKOUT SESSIONS (sesiones de entrenamiento) ────────────────────────────
+
+model WorkoutSession {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gym_id           String    @db.Uuid
+  member_id        String    @db.Uuid
+  plan_id          String?   @db.Uuid
+  plan_day_id      String?   @db.Uuid
+  name             String?   @db.VarChar(200)
+  started_at       DateTime  @default(now())
+  finished_at      DateTime?
+  duration_min     Int?
+  notes            String?
+  perceived_effort Int?
+  created_at       DateTime  @default(now())
+
+  gym      Gym             @relation(fields: [gym_id], references: [id], onDelete: Cascade)
+  member   Member          @relation(fields: [member_id], references: [id], onDelete: Cascade)
+  plan     WorkoutPlan?    @relation(fields: [plan_id], references: [id])
+  plan_day WorkoutPlanDay? @relation(fields: [plan_day_id], references: [id])
+  sets     WorkoutSet[]
+
+  @@index([gym_id, member_id])
+  @@index([gym_id, started_at(sort: Desc)])
+  @@map("workout_sessions")
+}
+
+// ─── WORKOUT SETS (series registradas en sesión) ─────────────────────────────
+
+model WorkoutSet {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  session_id   String   @db.Uuid
+  exercise_id  String   @db.Uuid
+  set_number   Int
+  reps         Int?
+  weight_kg    Decimal? @db.Decimal(6, 2)
+  duration_sec Int?
+  distance_m   Float?
+  is_warmup    Boolean  @default(false)
+  is_pr        Boolean  @default(false)
+  notes        String?
+  created_at   DateTime @default(now())
+
+  session  WorkoutSession @relation(fields: [session_id], references: [id], onDelete: Cascade)
+  exercise Exercise       @relation(fields: [exercise_id], references: [id])
+
+  @@index([session_id, exercise_id])
+  @@map("workout_sets")
+}
+
+// ─── PERSONAL RECORDS ────────────────────────────────────────────────────────
+
+model PersonalRecord {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gym_id      String   @db.Uuid
+  member_id   String   @db.Uuid
+  exercise_id String   @db.Uuid
+  record_type String   @db.VarChar(20) // MAX_WEIGHT | MAX_REPS | BEST_TIME
+  value       Decimal  @db.Decimal(8, 2)
+  unit        String   @db.VarChar(10) // kg | reps | seconds
+  achieved_at DateTime
+  session_id  String?  @db.Uuid
+  created_at  DateTime @default(now())
+
+  gym      Gym      @relation(fields: [gym_id], references: [id], onDelete: Cascade)
+  member   Member   @relation(fields: [member_id], references: [id], onDelete: Cascade)
+  exercise Exercise @relation(fields: [exercise_id], references: [id])
+
+  @@unique([gym_id, member_id, exercise_id, record_type])
+  @@index([gym_id, member_id])
+  @@map("personal_records")
 }
