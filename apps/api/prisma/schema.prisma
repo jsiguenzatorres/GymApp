@@ -41,6 +41,15 @@ enum SaasPlan {
   ENTERPRISE
 }
 
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+  CANCELLED
+}
+
 enum BillingFrequency {
   ONE_TIME
   WEEKLY
@@ -88,6 +97,8 @@ model Gym {
   members          Member[]
   membership_types MembershipType[]
   memberships      Membership[]
+  payment_methods  PaymentMethod[]
+  payments         Payment[]
 
   @@index([saas_plan, is_active])
   @@map("gyms")
@@ -173,9 +184,11 @@ model Member {
   created_at    DateTime     @default(now())
   updated_at    DateTime     @updatedAt
 
-  gym         Gym          @relation(fields: [gym_id], references: [id], onDelete: Cascade)
-  user        User         @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  memberships Membership[]
+  gym             Gym             @relation(fields: [gym_id], references: [id], onDelete: Cascade)
+  user            User            @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  memberships     Membership[]
+  payment_methods PaymentMethod[]
+  payments        Payment[]
 
   @@index([gym_id, status])
   @@index([gym_id, risk_score])
@@ -235,12 +248,83 @@ model Membership {
   created_at     DateTime         @default(now())
   updated_at     DateTime         @updatedAt
 
-  gym    Gym            @relation(fields: [gym_id], references: [id], onDelete: Cascade)
-  member Member         @relation(fields: [member_id], references: [id], onDelete: Cascade)
-  type   MembershipType @relation(fields: [type_id], references: [id])
+  gym      Gym            @relation(fields: [gym_id], references: [id], onDelete: Cascade)
+  member   Member         @relation(fields: [member_id], references: [id], onDelete: Cascade)
+  type     MembershipType @relation(fields: [type_id], references: [id])
+  payments Payment[]
 
   @@index([gym_id, status])
   @@index([gym_id, member_id])
   @@index([gym_id, end_date])
   @@map("memberships")
+}
+
+// ─── PAYMENT METHODS (tokens de gateway — NUNCA números de tarjeta) ──────────
+
+model PaymentMethod {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gym_id        String   @db.Uuid
+  member_id     String   @db.Uuid
+  gateway       String   @db.VarChar(30)  // stripe | mercadopago
+  gateway_token String   @db.VarChar(200) // token del gateway
+  last_four     String?  @db.VarChar(4)
+  card_brand    String?  @db.VarChar(20)
+  exp_month     Int?
+  exp_year      Int?
+  is_default    Boolean  @default(false)
+  is_active     Boolean  @default(true)
+  created_at    DateTime @default(now())
+
+  gym      Gym      @relation(fields: [gym_id], references: [id], onDelete: Cascade)
+  member   Member   @relation(fields: [member_id], references: [id], onDelete: Cascade)
+  payments Payment[]
+
+  @@index([gym_id, member_id, is_active])
+  @@map("payment_methods")
+}
+
+// ─── PAYMENTS (transacciones de cobro) ───────────────────────────────────────
+
+model Payment {
+  id                String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gym_id            String        @db.Uuid
+  member_id         String        @db.Uuid
+  membership_id     String?       @db.Uuid
+  payment_method_id String?       @db.Uuid
+
+  amount            Decimal       @db.Decimal(10, 2)
+  currency          String        @default("USD") @db.VarChar(3)
+  status            PaymentStatus @default(PENDING)
+  payment_type      String        @db.VarChar(30) // CASH|CARD|BANK_TRANSFER|STRIPE|MERCADOPAGO|OTHER
+
+  // Datos del gateway (cuando aplica)
+  gateway_payment_id String?      @db.VarChar(200)
+  gateway_status     String?      @db.VarChar(50)
+
+  // Facturación DTE El Salvador
+  invoice_type       String?      @db.VarChar(5)   // CF|CCF
+  dte_codigo         String?      @db.VarChar(100)
+  dte_numero_control String?      @db.VarChar(100)
+  dte_sello          String?      @db.VarChar(200)
+
+  // Reintentos (dunning)
+  attempt_number    Int           @default(1)
+  next_retry_at     DateTime?
+
+  description       String?
+  notes             String?
+  paid_at           DateTime?
+  created_at        DateTime      @default(now())
+  updated_at        DateTime      @updatedAt
+
+  gym            Gym            @relation(fields: [gym_id], references: [id], onDelete: Cascade)
+  member         Member         @relation(fields: [member_id], references: [id], onDelete: Cascade)
+  membership     Membership?    @relation(fields: [membership_id], references: [id])
+  payment_method PaymentMethod? @relation(fields: [payment_method_id], references: [id])
+
+  @@index([gym_id, status])
+  @@index([gym_id, member_id])
+  @@index([gym_id, created_at(sort: Desc)])
+  @@index([gym_id, paid_at])
+  @@map("payments")
 }

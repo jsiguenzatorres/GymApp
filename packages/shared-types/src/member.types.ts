@@ -1,3 +1,30 @@
+export enum PaymentStatus {
+  PENDING = 'PENDING',
+  PROCESSING = 'PROCESSING',
+  SUCCEEDED = 'SUCCEEDED',
+  FAILED = 'FAILED',
+  REFUNDED = 'REFUNDED',
+  CANCELLED = 'CANCELLED',
+}
+
+export enum PaymentType {
+  CASH = 'CASH',
+  CARD = 'CARD',
+  BANK_TRANSFER = 'BANK_TRANSFER',
+  STRIPE = 'STRIPE',
+  MERCADOPAGO = 'MERCADOPAGO',
+  OTHER = 'OTHER',
+}
+
+export const PAYMENT_TYPE_LABELS: Record<PaymentType, string> = {
+  [PaymentType.CASH]: 'Efectivo',
+  [PaymentType.CARD]: 'Tarjeta (terminal)',
+  [PaymentType.BANK_TRANSFER]: 'Transferencia',
+  [PaymentType.STRIPE]: 'Stripe',
+  [PaymentType.MERCADOPAGO]: 'MercadoPago',
+  [PaymentType.OTHER]: 'Otro',
+};
+
 export enum BillingFrequency {
   ONE_TIME = 'ONE_TIME',
   WEEKLY = 'WEEKLY',

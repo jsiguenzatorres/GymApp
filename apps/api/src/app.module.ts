@@ -8,6 +8,7 @@ import { DatabaseModule } from './modules/database/database.module';
 import { HealthModule } from './modules/health/health.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { MembersModule } from './modules/members/members.module';
+import { BillingModule } from './modules/billing/billing.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { MembersModule } from './modules/members/members.module';
     HealthModule,
     AuthModule,
     MembersModule,
+    BillingModule,
     // Módulos de negocio se agregan aquí en cada sprint
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
@@ -45,6 +47,8 @@ export class AppModule implements NestModule {
         { path: 'api/v1/auth/refresh', method: RequestMethod.POST },
         { path: 'api/v1/auth/password/reset-request', method: RequestMethod.POST },
         { path: 'api/v1/auth/password/reset', method: RequestMethod.POST },
+        { path: 'api/v1/webhooks/stripe', method: RequestMethod.POST },
+        { path: 'api/v1/webhooks/mercadopago', method: RequestMethod.POST },
       )
       .forRoutes('*');
   }
