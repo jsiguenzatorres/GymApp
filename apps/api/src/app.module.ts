@@ -13,6 +13,7 @@ import { WorkoutModule } from './modules/workout/workout.module';
 import { CrmModule } from './modules/crm/crm.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
+import { AccessModule } from './modules/access/access.module';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { AnalyticsModule } from './modules/analytics/analytics.module';
     NotificationsModule,
     CrmModule,
     AnalyticsModule,
+    AccessModule,
     // Módulos de negocio se agregan aquí en cada sprint
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

@@ -9,6 +9,7 @@ import {
   Dumbbell,
   BrainCircuit,
   BarChart3,
+  ScanLine,
   Settings,
   LogOut,
 } from 'lucide-react';
@@ -19,6 +20,7 @@ const NAV_ITEMS = [
   { href: '/membership-types', label: 'Membresías', icon: CreditCard },
   { href: '/payments', label: 'Pagos', icon: DollarSign },
   { href: '/workouts', label: 'Entrenamiento', icon: Dumbbell },
+  { href: '/access', label: 'Control de Acceso', icon: ScanLine },
   { href: '/crm', label: 'CRM / ARIA', icon: BrainCircuit },
   { href: '/analytics', label: 'Analytics', icon: BarChart3 },
 ];
