@@ -1,0 +1,8 @@
+node_modules
+dist
+.next
+.expo
+expo-cache
+coverage
+*.generated.ts
+pnpm-lock.yaml

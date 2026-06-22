@@ -1,0 +1,52 @@
+{
+  "expo": {
+    "name": "GymApp",
+    "slug": "gymapp",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#1d4ed8"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.gymapp.mobile",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Necesitamos acceso a la cámara para escanear el QR de acceso y fotografiar productos.",
+        "NSFaceIDUsageDescription": "Usa Face ID para autenticarte rápidamente.",
+        "NFCReaderUsageDescription": "Usa NFC para acceso al gym con tu tarjeta o pulsera."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#1d4ed8"
+      },
+      "package": "com.gymapp.mobile",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.NFC",
+        "android.permission.VIBRATE"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-camera",
+      [
+        "expo-local-authentication",
+        { "faceIDPermission": "Permite a GymApp usar Face ID para autenticarte." }
+      ]
+    ],
+    "scheme": "gymapp",
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "eas": { "projectId": "TBD" }
+    }
+  }
+}
