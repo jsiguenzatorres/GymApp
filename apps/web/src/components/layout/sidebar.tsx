@@ -19,7 +19,7 @@ const NAV_ITEMS = [
   { href: '/membership-types', label: 'Membresías', icon: CreditCard },
   { href: '/payments', label: 'Pagos', icon: DollarSign },
   { href: '/workouts', label: 'Entrenamiento', icon: Dumbbell },
-  { href: '/crm', label: 'CRM / ARIA', icon: BrainCircuit, soon: true },
+  { href: '/crm', label: 'CRM / ARIA', icon: BrainCircuit },
   { href: '/analytics', label: 'Analytics', icon: BarChart3, soon: true },
 ];
 

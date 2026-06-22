@@ -8,6 +8,7 @@ import {
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { PrismaService } from '../database/prisma.service';
+import { EmailService } from '../notifications/email.service';
 import { CreateMembershipTypeDto, UpdateMembershipTypeDto } from './dto/create-membership-type.dto';
 import { CreateMemberDto, UpdateMemberDto } from './dto/create-member.dto';
 import {
@@ -21,7 +22,10 @@ import { ListMembersDto } from './dto/list-members.dto';
 export class MembersService {
   private readonly logger = new Logger(MembersService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly email: EmailService,
+  ) {}
 
   // ─── MEMBERSHIP TYPES ────────────────────────────────────────────────────────
 
@@ -136,8 +140,13 @@ export class MembersService {
       return member;
     });
 
-    // TODO Sprint 1.6: enviar email "Configura tu contraseña" con link de reset
-    this.logger.log(`[DEV] Contraseña temporal para ${email}: ${tempPassword}`);
+    const gym = await this.prisma.gym.findUnique({ where: { id: gymId }, select: { name: true } });
+    const gymName = gym?.name ?? 'GymApp';
+    const fullName = `${dto.firstName} ${dto.lastName}`;
+
+    this.email
+      .sendWelcomeEmail(email, fullName, tempPassword, gymName)
+      .catch((err) => this.logger.error(`Failed to send welcome email: ${err}`));
 
     return this.getMember(gymId, result.id);
   }

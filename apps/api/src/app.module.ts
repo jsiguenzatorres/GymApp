@@ -10,6 +10,8 @@ import { AuthModule } from './modules/auth/auth.module';
 import { MembersModule } from './modules/members/members.module';
 import { BillingModule } from './modules/billing/billing.module';
 import { WorkoutModule } from './modules/workout/workout.module';
+import { CrmModule } from './modules/crm/crm.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 
 @Module({
   imports: [
@@ -33,6 +35,8 @@ import { WorkoutModule } from './modules/workout/workout.module';
     MembersModule,
     BillingModule,
     WorkoutModule,
+    NotificationsModule,
+    CrmModule,
     // Módulos de negocio se agregan aquí en cada sprint
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

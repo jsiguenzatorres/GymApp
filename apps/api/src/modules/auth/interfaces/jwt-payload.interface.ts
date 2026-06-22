@@ -5,6 +5,7 @@ export interface JwtPayload {
   email: string;
   role: UserRole;
   gymId?: string;
+  staffId?: string;
   iat?: number;
   exp?: number;
 }

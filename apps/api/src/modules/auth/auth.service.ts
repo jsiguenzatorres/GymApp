@@ -67,10 +67,17 @@ export class AuthService {
     }
 
     const gymId = user.staff?.gym_id ?? user.member?.gym_id;
+    const staffId = user.staff?.id ?? undefined;
     const firstName = user.staff?.first_name ?? user.member?.first_name;
     const lastName = user.staff?.last_name ?? user.member?.last_name;
 
-    const tokens = await this.generateTokens(user.id, user.email, user.role as UserRole, gymId);
+    const tokens = await this.generateTokens(
+      user.id,
+      user.email,
+      user.role as UserRole,
+      gymId,
+      staffId,
+    );
 
     const rtHash = createHash('sha256').update(tokens.refreshToken).digest('hex');
     await this.prisma.user.update({
@@ -202,7 +209,14 @@ export class AuthService {
     }
 
     const gymId = user.staff?.gym_id ?? user.member?.gym_id;
-    const tokens = await this.generateTokens(user.id, user.email, user.role as UserRole, gymId);
+    const staffId = user.staff?.id ?? undefined;
+    const tokens = await this.generateTokens(
+      user.id,
+      user.email,
+      user.role as UserRole,
+      gymId,
+      staffId,
+    );
 
     const newRtHash = createHash('sha256').update(tokens.refreshToken).digest('hex');
     await this.prisma.user.update({
@@ -356,8 +370,9 @@ export class AuthService {
     email: string,
     role: UserRole,
     gymId?: string | null,
+    staffId?: string,
   ): Promise<{ accessToken: string; refreshToken: string }> {
-    const payload: JwtPayload = { sub: userId, email, role, gymId: gymId ?? undefined };
+    const payload: JwtPayload = { sub: userId, email, role, gymId: gymId ?? undefined, staffId };
 
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload, {
