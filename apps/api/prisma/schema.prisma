@@ -106,6 +106,7 @@ model Gym {
   personal_records PersonalRecord[]
   crm_interactions CrmInteraction[]
   appointments     Appointment[]
+  metric_snapshots MetricSnapshot[]
 
   @@index([saas_plan, is_active])
   @@map("gyms")
@@ -574,4 +575,21 @@ model Appointment {
   @@index([gym_id, member_id])
   @@index([gym_id, status])
   @@map("appointments")
+}
+
+// ─── METRIC SNAPSHOTS (para histórico de KPIs) ───────────────────────────────
+
+model MetricSnapshot {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gym_id     String   @db.Uuid
+  date       DateTime @db.Date
+  metric_key String   @db.VarChar(50)
+  value      Decimal  @db.Decimal(14, 2)
+  created_at DateTime @default(now())
+
+  gym Gym @relation(fields: [gym_id], references: [id], onDelete: Cascade)
+
+  @@unique([gym_id, date, metric_key])
+  @@index([gym_id, date(sort: Desc)])
+  @@map("metric_snapshots")
 }

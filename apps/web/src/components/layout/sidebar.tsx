@@ -20,7 +20,7 @@ const NAV_ITEMS = [
   { href: '/payments', label: 'Pagos', icon: DollarSign },
   { href: '/workouts', label: 'Entrenamiento', icon: Dumbbell },
   { href: '/crm', label: 'CRM / ARIA', icon: BrainCircuit },
-  { href: '/analytics', label: 'Analytics', icon: BarChart3, soon: true },
+  { href: '/analytics', label: 'Analytics', icon: BarChart3 },
 ];
 
 export async function Sidebar() {
