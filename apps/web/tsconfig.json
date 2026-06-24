@@ -9,13 +9,18 @@
     "incremental": true,
     "allowJs": true,
     "noEmit": true,
-    "plugins": [{ "name": "next" }],
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
     "paths": {
       "@/*": ["./src/*"],
       "@gymapp/shared-types": ["../../packages/shared-types/src"],
       "@gymapp/shared-schemas": ["../../packages/shared-schemas/src"],
       "@gymapp/ui-components": ["../../packages/ui-components/src"]
-    }
+    },
+    "isolatedModules": true
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
   "exclude": ["node_modules"]
