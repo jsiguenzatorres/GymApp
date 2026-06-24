@@ -10,6 +10,7 @@ import {
   BrainCircuit,
   BarChart3,
   ScanLine,
+  UserCog,
   Settings,
   LogOut,
 } from 'lucide-react';
@@ -17,6 +18,7 @@ import {
 const NAV_ITEMS = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/members', label: 'Miembros', icon: Users },
+  { href: '/staff', label: 'Staff', icon: UserCog },
   { href: '/membership-types', label: 'Membresías', icon: CreditCard },
   { href: '/payments', label: 'Pagos', icon: DollarSign },
   { href: '/workouts', label: 'Entrenamiento', icon: Dumbbell },
