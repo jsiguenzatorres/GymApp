@@ -1,18 +1,19 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+﻿import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 
 const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
 type Day = (typeof DAYS)[number];
 
-interface DaySchedule {
+export interface DaySchedule {
   open: string; // "06:00"
   close: string; // "22:00"
   closed: boolean;
 }
 
-type OperatingHours = Partial<Record<Day, DaySchedule>>;
+export type OperatingHours = Partial<Record<Day, DaySchedule>>;
 
-interface SocialLinks {
+export interface SocialLinks {
   instagram?: string;
   facebook?: string;
   whatsapp?: string;
@@ -142,13 +143,13 @@ export class GymsService {
   }
 
   async updateOperatingHours(gymId: string, hours: OperatingHours) {
-    // Validar que solo lleguen días válidos
+    // Validar que solo lleguen dÃ­as vÃ¡lidos
     const invalid = Object.keys(hours).filter((k) => !(DAYS as readonly string[]).includes(k));
-    if (invalid.length) throw new ForbiddenException(`Días inválidos: ${invalid.join(', ')}`);
+    if (invalid.length) throw new ForbiddenException(`DÃ­as invÃ¡lidos: ${invalid.join(', ')}`);
 
     return this.prisma.gym.update({
       where: { id: gymId },
-      data: { operating_hours: hours },
+      data: { operating_hours: hours as Prisma.InputJsonValue },
       select: { operating_hours: true },
     });
   }
@@ -165,7 +166,7 @@ export class GymsService {
   async updateSocialLinks(gymId: string, links: SocialLinks) {
     return this.prisma.gym.update({
       where: { id: gymId },
-      data: { social_links: links },
+      data: { social_links: links as Prisma.InputJsonValue },
       select: { social_links: true },
     });
   }
@@ -201,7 +202,7 @@ export class GymsService {
       this.prisma.payment.count({
         where: {
           gym_id: gymId,
-          status: 'COMPLETED',
+          status: 'SUCCEEDED',
           created_at: { gte: new Date(new Date().setDate(1)) },
         },
       }),

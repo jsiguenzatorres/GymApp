@@ -22,7 +22,7 @@ import { StartSessionDto } from './dto/start-session.dto';
 import { LogSetDto, FinishSessionDto } from './dto/log-set.dto';
 
 @UseGuards(JwtAuthGuard)
-@Controller('api/v1')
+@Controller()
 export class WorkoutController {
   constructor(private readonly workoutService: WorkoutService) {}
 

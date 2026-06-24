@@ -27,7 +27,7 @@ import {
 import { ListMembersDto } from './dto/list-members.dto';
 
 @UseGuards(JwtAuthGuard)
-@Controller('api/v1')
+@Controller()
 export class MembersController {
   constructor(private readonly membersService: MembersService) {}
 

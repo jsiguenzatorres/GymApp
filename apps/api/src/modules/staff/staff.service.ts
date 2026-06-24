@@ -5,7 +5,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../database/prisma.service';
 import { EmailService } from '../notifications/email.service';
 
@@ -74,8 +74,8 @@ export class StaffService {
           select: { id: true, email: true, role: true, last_login_at: true, two_fa_enabled: true },
         },
         appointments: {
-          where: { occurred_at: { gte: new Date(Date.now() - 30 * 86_400_000) } },
-          orderBy: { occurred_at: 'desc' },
+          where: { scheduled_at: { gte: new Date(Date.now() - 30 * 86_400_000) } },
+          orderBy: { scheduled_at: 'desc' },
           take: 5,
           include: { member: { select: { first_name: true, last_name: true } } },
         },
@@ -181,14 +181,16 @@ export class StaffService {
       this.prisma.user.groupBy({
         by: ['role'],
         where: {
-          staff: { some: { gym_id: gymId, is_active: true } },
-          role: { in: ['GYM_ADMIN', 'TRAINER', 'RECEPTIONIST', 'NUTRITIONIST'] },
+          staff: { is: { gym_id: gymId, is_active: true } },
+          role: { in: ['GYM_ADMIN', 'TRAINER', 'RECEPTIONIST', 'NUTRITIONIST'] as never[] },
         },
         _count: { _all: true },
       }),
     ]);
 
-    const roleMap = Object.fromEntries(byRole.map((r) => [r.role, r._count._all]));
+    const roleMap = Object.fromEntries(
+      byRole.map((r) => [r.role, (r._count as { _all: number })._all]),
+    );
     return { total, active, byRole: roleMap };
   }
 

@@ -15,7 +15,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 
 @UseGuards(JwtAuthGuard)
-@Controller('api/v1/access')
+@Controller('access')
 export class AccessController {
   constructor(private readonly accessService: AccessService) {}
 

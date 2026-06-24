@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { Prisma, UserRole } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 
 interface CreateNotifDto {
@@ -25,7 +26,7 @@ export class NotificationService {
         type: dto.type,
         title: dto.title,
         body: dto.body,
-        data: dto.data ?? {},
+        data: (dto.data ?? {}) as Prisma.InputJsonValue,
         channel: dto.channel ?? 'IN_APP',
       },
     });
@@ -43,7 +44,7 @@ export class NotificationService {
       where: {
         gym_id: gymId,
         is_active: true,
-        user: { role: { in: roles }, is_active: true },
+        user: { role: { in: roles as UserRole[] }, is_active: true },
       },
       select: { user_id: true },
     });
@@ -57,7 +58,7 @@ export class NotificationService {
         type,
         title,
         body,
-        data: data ?? {},
+        data: (data ?? {}) as Prisma.InputJsonValue,
         channel: 'IN_APP',
       })),
       skipDuplicates: true,

@@ -10,7 +10,7 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { createHash, randomBytes, createCipheriv, createDecipheriv } from 'crypto';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import { authenticator } from 'otplib';
 import * as QRCode from 'qrcode';
 import { PrismaService } from '../database/prisma.service';
@@ -41,7 +41,7 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email.toLowerCase() },
       include: {
-        staff: { select: { gym_id: true, first_name: true, last_name: true } },
+        staff: { select: { id: true, gym_id: true, first_name: true, last_name: true } },
         member: { select: { gym_id: true, first_name: true, last_name: true } },
       },
     });
@@ -189,7 +189,7 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({
       where: { id: userId, is_active: true },
       include: {
-        staff: { select: { gym_id: true } },
+        staff: { select: { id: true, gym_id: true } },
         member: { select: { gym_id: true } },
       },
     });

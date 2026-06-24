@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+﻿import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { CreateInteractionDto } from './dto/create-interaction.dto';
 import { CreateAppointmentDto, UpdateAppointmentStatusDto } from './dto/create-appointment.dto';
@@ -7,7 +7,7 @@ import { CreateAppointmentDto, UpdateAppointmentStatusDto } from './dto/create-a
 export class CrmService {
   constructor(private readonly prisma: PrismaService) {}
 
-  // ─── INTERACTIONS ─────────────────────────────────────────────────────────────
+  // â”€â”€â”€ INTERACTIONS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   async createInteraction(gymId: string, staffId: string, dto: CreateInteractionDto) {
     await this.findMember(gymId, dto.memberId);
@@ -38,7 +38,7 @@ export class CrmService {
       orderBy: { occurred_at: 'desc' },
       take: 100,
       include: {
-        staff: { include: { user: { select: { first_name: true, last_name: true } } } },
+        staff: { select: { id: true, first_name: true, last_name: true } },
       },
     });
   }
@@ -50,12 +50,12 @@ export class CrmService {
       take: limit,
       include: {
         member: { select: { id: true, first_name: true, last_name: true } },
-        staff: { include: { user: { select: { first_name: true, last_name: true } } } },
+        staff: { select: { id: true, first_name: true, last_name: true } },
       },
     });
   }
 
-  // ─── APPOINTMENTS ─────────────────────────────────────────────────────────────
+  // â”€â”€â”€ APPOINTMENTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   async createAppointment(gymId: string, dto: CreateAppointmentDto) {
     await this.findMember(gymId, dto.memberId);
@@ -74,7 +74,7 @@ export class CrmService {
       },
       include: {
         member: { select: { id: true, first_name: true, last_name: true } },
-        staff: { include: { user: { select: { first_name: true, last_name: true } } } },
+        staff: { select: { id: true, first_name: true, last_name: true } },
       },
     });
   }
@@ -103,7 +103,7 @@ export class CrmService {
       orderBy: { scheduled_at: 'asc' },
       include: {
         member: { select: { id: true, first_name: true, last_name: true } },
-        staff: { include: { user: { select: { first_name: true, last_name: true } } } },
+        staff: { select: { id: true, first_name: true, last_name: true } },
       },
     });
   }
@@ -128,7 +128,7 @@ export class CrmService {
     });
   }
 
-  // ─── RISK SCORE ──────────────────────────────────────────────────────────────
+  // â”€â”€â”€ RISK SCORE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   async calculateRiskScore(gymId: string, memberId: string): Promise<number> {
     const member = await this.prisma.member.findFirst({
@@ -184,7 +184,7 @@ export class CrmService {
     if (failedPayments30d >= 3) score += 15;
     else if (failedPayments30d >= 1) score += 8;
 
-    // Estado de la membresía (peso 20%)
+    // Estado de la membresÃ­a (peso 20%)
     const mem = member.memberships[0];
     if (!mem) score += 20;
     else if (mem.status === 'FROZEN') score += 12;
@@ -198,11 +198,11 @@ export class CrmService {
       else if (daysLeft < 14) score += 5;
     }
 
-    // Interacciones recientes: más interacción = más comprometido (peso 10%)
+    // Interacciones recientes: mÃ¡s interacciÃ³n = mÃ¡s comprometido (peso 10%)
     if (recentInteractions14d === 0) score += 10;
     else if (recentInteractions14d < 2) score += 5;
 
-    // Estado del miembro (máx 20%)
+    // Estado del miembro (mÃ¡x 20%)
     if (member.status === 'PRE_CANCEL') score += 20;
     else if (member.status === 'EXPIRED') score += 15;
 
@@ -218,7 +218,7 @@ export class CrmService {
 
   async recalculateAllRiskScores(gymId: string) {
     const members = await this.prisma.member.findMany({
-      where: { gym_id: gymId, status: { in: ['ACTIVE', 'TRIAL', 'FROZEN', 'PRE_CANCEL'] } },
+      where: { gym_id: gymId, status: { in: ['ACTIVE', 'TRIAL', 'FREEZE', 'PRE_CANCEL'] } },
       select: { id: true },
     });
 
@@ -230,7 +230,7 @@ export class CrmService {
     return { total: members.length, updated };
   }
 
-  // ─── CRM OVERVIEW ────────────────────────────────────────────────────────────
+  // â”€â”€â”€ CRM OVERVIEW â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   async getOverview(gymId: string) {
     const now = new Date();
@@ -242,7 +242,7 @@ export class CrmService {
           where: {
             gym_id: gymId,
             risk_score: { gte: 70 },
-            status: { in: ['ACTIVE', 'TRIAL', 'FROZEN'] },
+            status: { in: ['ACTIVE', 'TRIAL', 'FREEZE'] },
           },
           orderBy: { risk_score: 'desc' },
           take: 10,
@@ -274,17 +274,17 @@ export class CrmService {
     return { riskAlerts, upcomingAppointments, recentInteractions, pendingFollowUps };
   }
 
-  // ─── ARIA STUB ────────────────────────────────────────────────────────────────
+  // â”€â”€â”€ ARIA STUB â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   async ariaChat(_gymId: string, _memberId: string, message: string) {
     // P2: reemplazar con LangChain + Claude claude-sonnet-4-20250514
     return {
-      response: `Hola, soy ARIA. Recibí tu mensaje: "${message}". La integración completa con IA estará disponible pronto. Por ahora, puedes contactar a la recepción para asistencia directa.`,
+      response: `Hola, soy ARIA. RecibÃ­ tu mensaje: "${message}". La integraciÃ³n completa con IA estarÃ¡ disponible pronto. Por ahora, puedes contactar a la recepciÃ³n para asistencia directa.`,
       isStub: true,
     };
   }
 
-  // ─── PRIVATE ──────────────────────────────────────────────────────────────────
+  // â”€â”€â”€ PRIVATE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   private async findMember(gymId: string, memberId: string) {
     const member = await this.prisma.member.findFirst({ where: { id: memberId, gym_id: gymId } });

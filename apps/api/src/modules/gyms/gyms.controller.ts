@@ -5,7 +5,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 
 @UseGuards(JwtAuthGuard)
-@Controller('api/v1/gym')
+@Controller('gym')
 export class GymsController {
   constructor(private readonly gymsService: GymsService) {}
 

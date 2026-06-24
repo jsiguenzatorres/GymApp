@@ -5,7 +5,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 
 @UseGuards(JwtAuthGuard)
-@Controller('api/v1/notifications')
+@Controller('notifications')
 export class NotificationController {
   constructor(private readonly notifService: NotificationService) {}
 

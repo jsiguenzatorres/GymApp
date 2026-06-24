@@ -25,7 +25,7 @@ import type { JwtPayload } from './interfaces/jwt-payload.interface';
 import type { RefreshUser } from './strategies/refresh-jwt.strategy';
 
 @ApiTags('auth')
-@Controller('api/v1/auth')
+@Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 

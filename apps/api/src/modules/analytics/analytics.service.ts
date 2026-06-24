@@ -59,7 +59,7 @@ export class AnalyticsService {
         where: {
           gym_id: gymId,
           risk_score: { gte: 70 },
-          status: { in: ['ACTIVE', 'TRIAL', 'FROZEN'] },
+          status: { in: ['ACTIVE', 'TRIAL', 'FREEZE'] },
         },
       }),
       this.prisma.member.aggregate({

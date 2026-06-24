@@ -17,7 +17,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 
 @UseGuards(JwtAuthGuard)
-@Controller('api/v1/staff')
+@Controller('staff')
 export class StaffController {
   constructor(private readonly staffService: StaffService) {}
 

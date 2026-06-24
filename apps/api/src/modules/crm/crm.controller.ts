@@ -18,7 +18,7 @@ import { CreateInteractionDto } from './dto/create-interaction.dto';
 import { CreateAppointmentDto, UpdateAppointmentStatusDto } from './dto/create-appointment.dto';
 
 @UseGuards(JwtAuthGuard)
-@Controller('api/v1')
+@Controller()
 export class CrmController {
   constructor(private readonly crmService: CrmService) {}
 

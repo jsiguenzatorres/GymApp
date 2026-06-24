@@ -23,7 +23,7 @@ import { CreatePaymentDto } from './dto/create-payment.dto';
 import { ListPaymentsDto } from './dto/list-payments.dto';
 
 @UseGuards(JwtAuthGuard)
-@Controller('api/v1')
+@Controller()
 export class BillingController {
   constructor(private readonly billingService: BillingService) {}
 
@@ -78,7 +78,7 @@ export class BillingController {
 
 // ─── WEBHOOKS (sin autenticación JWT) ─────────────────────────────────────────
 
-@Controller('api/v1/webhooks')
+@Controller('webhooks')
 export class WebhooksController {
   constructor(private readonly billingService: BillingService) {}
 

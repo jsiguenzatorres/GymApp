@@ -1,4 +1,4 @@
-import 'reflect-metadata';
+import 'reflect-metadata'; // entry point
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger, VersioningType } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
