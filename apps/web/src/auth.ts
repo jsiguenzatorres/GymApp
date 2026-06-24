@@ -16,14 +16,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (!credentials?.email || !credentials?.password) return null;
 
         try {
+          const totpRaw = credentials.totp as string | undefined;
+          const totpCode = totpRaw && /^\d{6}$/.test(totpRaw) ? totpRaw : undefined;
+
+          const loginBody: Record<string, string> = {
+            email: credentials.email as string,
+            password: credentials.password as string,
+          };
+          if (totpCode) loginBody.totp = totpCode;
+
           const res = await fetch(`${API_URL}/api/v1/auth/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              email: credentials.email,
-              password: credentials.password,
-              totp: credentials.totp || undefined,
-            }),
+            body: JSON.stringify(loginBody),
           });
 
           if (!res.ok) {
