@@ -1,6 +1,6 @@
 'use client';
 
-import Link from 'next/link';
+import { signOut } from 'next-auth/react';
 import { NavLink } from './nav-link';
 import {
   LayoutDashboard,
@@ -85,13 +85,14 @@ export function SidebarClient({ userName, userEmail, gymName = 'GymApp' }: Sideb
             <p className="truncate text-xs font-medium text-zinc-200">{userName}</p>
             <p className="truncate text-xs text-zinc-500">{userEmail}</p>
           </div>
-          <Link
-            href="/api/auth/signout"
+          <button
+            type="button"
+            onClick={() => signOut({ callbackUrl: '/login' })}
             className="rounded p-1 text-zinc-500 hover:text-zinc-200 transition-colors"
             title="Cerrar sesión"
           >
             <LogOut className="h-4 w-4" />
-          </Link>
+          </button>
         </div>
       </div>
     </aside>
