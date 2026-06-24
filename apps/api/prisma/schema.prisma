@@ -115,6 +115,7 @@ model Gym {
   appointments     Appointment[]
   metric_snapshots MetricSnapshot[]
   access_logs      AccessLog[]
+  notifications    Notification[]
 
   @@index([saas_plan, is_active])
   @@map("gyms")
@@ -145,8 +146,9 @@ model User {
   created_at          DateTime  @default(now())
   updated_at          DateTime  @updatedAt
 
-  staff  Staff?
-  member Member?
+  staff         Staff?
+  member        Member?
+  notifications Notification[]
 
   @@index([email, is_active])
   @@map("users")
@@ -623,4 +625,27 @@ model AccessLog {
   @@index([gym_id, member_id])
   @@index([gym_id, result])
   @@map("access_logs")
+}
+
+// ─── NOTIFICATIONS ────────────────────────────────────────────────────────────
+
+model Notification {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gym_id     String    @db.Uuid
+  user_id    String    @db.Uuid
+  type       String    @db.VarChar(60)    // GymEvent value, e.g. "payment.failed"
+  title      String    @db.VarChar(200)
+  body       String
+  data       Json      @default("{}")     // payload extra (memberId, amount, etc.)
+  channel    String    @default("IN_APP") @db.VarChar(20) // IN_APP | EMAIL
+  is_read    Boolean   @default(false)
+  read_at    DateTime?
+  created_at DateTime  @default(now())
+
+  gym  Gym  @relation(fields: [gym_id],  references: [id], onDelete: Cascade)
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id, is_read, created_at(sort: Desc)])
+  @@index([gym_id, created_at(sort: Desc)])
+  @@map("notifications")
 }

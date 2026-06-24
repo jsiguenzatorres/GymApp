@@ -1,9 +1,14 @@
 import { Sidebar } from '@/components/layout/sidebar';
 import { ThemeToggle } from '@/components/layout/theme-toggle';
+import { NotificationBell } from '@/components/layout/notification-bell';
 import { auth } from '@/auth';
+import { serverFetch } from '@/lib/server-api';
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
+  const unreadData = await serverFetch<{ count: number }>(
+    '/api/v1/notifications/unread-count',
+  ).catch(() => ({ count: 0 }));
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
@@ -24,6 +29,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
             <span className="hidden text-sm text-muted-foreground sm:block">
               {session?.user?.name ?? session?.user?.email}
             </span>
+            <NotificationBell initialCount={unreadData?.count ?? 0} />
             <ThemeToggle />
           </div>
         </header>
