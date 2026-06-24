@@ -15,6 +15,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { AccessModule } from './modules/access/access.module';
 import { StaffModule } from './modules/staff/staff.module';
+import { GymsModule } from './modules/gyms/gyms.module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { StaffModule } from './modules/staff/staff.module';
     AnalyticsModule,
     AccessModule,
     StaffModule,
+    GymsModule,
     // Módulos de negocio se agregan aquí en cada sprint
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

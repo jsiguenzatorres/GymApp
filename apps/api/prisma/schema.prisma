@@ -80,11 +80,18 @@ model Gym {
   timezone    String   @default("America/El_Salvador") @db.VarChar(50)
   country     String   @default("SV") @db.VarChar(2)
   currency    String   @default("USD") @db.VarChar(3)
+  // Descripción y ubicación
+  description String?
+  city        String?  @db.VarChar(100)
   // Contacto
   phone       String?  @db.VarChar(20)
   email       String?  @db.VarChar(150)
   address     String?
   website     String?
+  // Redes sociales {instagram, facebook, whatsapp, tiktok}
+  social_links Json    @default("{}")
+  // Horarios de operación {mon:{open:"06:00",close:"22:00",closed:false}, ...}
+  operating_hours Json @default("{}")
   // Fiscal (para DTE El Salvador)
   tax_id      String?  @db.VarChar(20)  // NIT/RUC
   legal_name  String?  @db.VarChar(200)
