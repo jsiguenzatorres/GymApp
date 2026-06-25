@@ -279,7 +279,7 @@ export class CrmService {
   async ariaChat(_gymId: string, _memberId: string, message: string) {
     // P2: reemplazar con LangChain + Claude claude-sonnet-4-20250514
     return {
-      response: `Hola, soy ARIA. RecibÃ­ tu mensaje: "${message}". La integraciÃ³n completa con IA estarÃ¡ disponible pronto. Por ahora, puedes contactar a la recepciÃ³n para asistencia directa.`,
+      response: `Hola, soy ARIA. Recibi tu mensaje: "${message}". La integracion completa con IA (Claude claude-sonnet-4-20250514) estara disponible en Fase 2. Por ahora puedes usar el panel de CRM para gestionar miembros manualmente.`,
       isStub: true,
     };
   }
