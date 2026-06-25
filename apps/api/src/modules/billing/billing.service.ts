@@ -102,7 +102,12 @@ export class BillingService {
       where: { id, gym_id: gymId },
       include: {
         member: {
-          select: { first_name: true, last_name: true, user: { select: { email: true } } },
+          select: {
+            id: true,
+            first_name: true,
+            last_name: true,
+            user: { select: { email: true } },
+          },
         },
         membership: { include: { type: true } },
         payment_method: { select: { gateway: true, last_four: true, card_brand: true } },
