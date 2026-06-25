@@ -1,3 +1,5 @@
+import { IsString } from 'class-validator';
+
 export class AuthUserDto {
   id: string;
   email: string;
@@ -21,5 +23,6 @@ export class TwoFactorSetupResponseDto {
 }
 
 export class RefreshTokenDto {
+  @IsString()
   refreshToken: string;
 }

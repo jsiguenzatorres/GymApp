@@ -1,4 +1,9 @@
 import { serverFetch } from '@/lib/server-api';
+import {
+  UnreadFilter,
+  MarkAllReadButton,
+  NotificationItem,
+} from '@/components/notifications/notifications-actions';
 
 interface Notification {
   id: string;
@@ -68,18 +73,10 @@ export default async function NotificationsPage({
             </p>
           )}
         </div>
-        <form method="GET">
-          <label className="flex items-center gap-2 text-sm text-gray-600">
-            <input
-              type="checkbox"
-              name="unreadOnly"
-              value="true"
-              defaultChecked={params.unreadOnly === 'true'}
-              onChange={(e) => e.currentTarget.form?.submit()}
-            />
-            Solo no leídas
-          </label>
-        </form>
+        <div className="flex items-center gap-3">
+          <UnreadFilter checked={params.unreadOnly === 'true'} />
+          <MarkAllReadButton disabled={!data || data.unreadCount === 0} />
+        </div>
       </div>
 
       {/* List */}
@@ -94,10 +91,7 @@ export default async function NotificationsPage({
         ) : (
           <ul className="divide-y divide-gray-50">
             {data.items.map((n) => (
-              <li
-                key={n.id}
-                className={`flex items-start gap-4 px-5 py-4 ${!n.is_read ? 'bg-violet-50/30' : ''}`}
-              >
+              <NotificationItem key={n.id} id={n.id} isRead={n.is_read}>
                 <span className="mt-0.5 shrink-0 text-2xl">{TYPE_ICON[n.type] ?? '🔔'}</span>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-start justify-between gap-2">
@@ -118,7 +112,7 @@ export default async function NotificationsPage({
                   <p className="mt-0.5 text-sm text-gray-500">{n.body}</p>
                   <p className="mt-1 text-xs text-gray-400">{fmtDate(n.created_at)}</p>
                 </div>
-              </li>
+              </NotificationItem>
             ))}
           </ul>
         )}
