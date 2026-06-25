@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { serverFetch } from '@/lib/server-api';
 import { MemberStatusBadge } from '@/components/members/member-status-badge';
+import { MembershipActionsClient } from '@/components/members/membership-actions-client';
 import { ArrowLeft, Phone, Mail, Calendar, MapPin, Shield } from 'lucide-react';
 
 export const metadata: Metadata = { title: 'Perfil de Miembro — GymApp' };
@@ -235,21 +236,11 @@ export default async function MemberDetailPage({ params }: PageProps) {
               )}
 
               {/* Acciones rápidas */}
-              <div className="flex gap-2 pt-1">
-                {activeMembership.status === 'ACTIVE' && (
-                  <button className="rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-muted transition-colors">
-                    Congelar
-                  </button>
-                )}
-                {activeMembership.status === 'FROZEN' && (
-                  <button className="rounded-lg border border-emerald-300 text-emerald-700 dark:text-emerald-400 px-3 py-1.5 text-xs font-medium hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors">
-                    Descongelar
-                  </button>
-                )}
-                <button className="rounded-lg border border-red-200 text-red-600 dark:text-red-400 px-3 py-1.5 text-xs font-medium hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors">
-                  Cancelar membresía
-                </button>
-              </div>
+              <MembershipActionsClient
+                memberId={id}
+                membershipId={activeMembership.id}
+                status={activeMembership.status}
+              />
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center py-8 text-center">
