@@ -105,4 +105,43 @@ export class GeminiService {
   async generate(prompt: string, model = 'gemini-2.0-flash'): Promise<string> {
     return this.chat('', prompt, [], model);
   }
+
+  // Multimodal: image + text → text response
+  async generateWithImage(
+    imageBase64: string,
+    mimeType: string,
+    prompt: string,
+    model = 'gemini-2.0-flash',
+  ): Promise<string> {
+    if (this.keys.length === 0) throw new Error('No Gemini API keys configured');
+
+    // Strip data URI prefix if present
+    const cleanBase64 = imageBase64.startsWith('data:') ? imageBase64.split(',')[1] : imageBase64;
+
+    let attempts = 0;
+    while (attempts < this.keys.length) {
+      try {
+        const genModel = this.getModel(model);
+        const result = await genModel.generateContent([
+          { inlineData: { data: cleanBase64, mimeType } },
+          prompt,
+        ]);
+        return result.response.text();
+      } catch (err: unknown) {
+        const status = (err as { status?: number })?.status ?? 0;
+        const message = (err as Error)?.message ?? '';
+        const isQuota =
+          RETRYABLE_CODES.includes(status) ||
+          message.includes('quota') ||
+          message.includes('RESOURCE_EXHAUSTED');
+        if (isQuota && this.rotateKey()) {
+          attempts++;
+          continue;
+        }
+        this.logger.error(`Gemini vision error: ${message}`);
+        throw err;
+      }
+    }
+    throw new Error('All Gemini API keys exhausted or rate-limited');
+  }
 }

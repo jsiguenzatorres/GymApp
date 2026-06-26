@@ -158,4 +158,18 @@ export class MarketplaceController {
   ) {
     return this.marketplaceService.updateOrderStatus(this.gymId(user), id, dto);
   }
+
+  // ── FOTO-COMPRA: identifica producto por imagen (Gemini Flash Vision) ─────────
+  @Post('products/by-photo')
+  identifyByPhoto(
+    @CurrentUser() user: JwtPayload,
+    @Body('image') imageBase64: string,
+    @Body('mimeType') mimeType: string,
+  ) {
+    return this.marketplaceService.identifyByPhoto(
+      this.gymId(user),
+      imageBase64,
+      mimeType ?? 'image/jpeg',
+    );
+  }
 }

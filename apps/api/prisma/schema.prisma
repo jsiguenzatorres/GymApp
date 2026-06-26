@@ -1028,6 +1028,40 @@ model ConversationSession {
   @@map("conversation_sessions")
 }
 
+// ─── Motor Científico ZEUS — Cola de investigación ──────────────────────────
+
+model ResearchQueue {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title            String
+  abstract_text    String    // resumen/abstract en español (procesado por IA)
+  raw_abstract     String?   // texto original del abstract
+  authors          String[]
+  journal          String    @db.VarChar(200)
+  published_date   DateTime? @db.Date
+  doi              String?   @db.VarChar(200)
+  pubmed_id        String?   @unique @db.VarChar(50)
+  keywords         String[]
+  source_url       String?
+
+  // Flujo de aprobación (4 niveles)
+  approval_level   Int       @default(2)   // 1=IA auto, 2=Admin, 3=Admin+Trainer, 4=Admin+ProfSalud
+  status           String    @default("PENDING") @db.VarChar(20) // PENDING|APPROVED|REJECTED|AUTO_APPROVED
+  ai_confidence    Float?    // 0.0–1.0 evaluado por Gemini
+  ai_assessment    String?   // texto de evaluación de la IA
+  reviewed_by      String?   @db.Uuid
+  reviewed_at      DateTime?
+  rejection_reason String?
+  knowledge_id     String?   @db.Uuid  // GymKnowledge creado al aprobar
+  embedding        Unsupported("vector(768)")?  // Gemini text-embedding-004
+
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @updatedAt
+
+  @@index([status, approval_level])
+  @@index([pubmed_id])
+  @@map("research_queue")
+}
+
 // ─── Base de conocimiento del gym (RAG) ──────────────────────────────────────
 
 model GymKnowledge {

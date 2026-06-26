@@ -85,10 +85,26 @@ export class RagService {
   }
 
   async buildContext(gymId: string, query: string): Promise<string> {
-    const chunks = await this.searchSimilar(gymId, query);
-    if (chunks.length === 0) return '';
-    const lines = chunks.map((c) => `[${c.type}] ${c.content}`);
+    const gymChunks = await this.searchSimilar(gymId, query);
+    if (gymChunks.length === 0) return '';
+    const lines = gymChunks.map((c) => `[${c.type}] ${c.content}`);
     return `\nCONOCIMIENTO RELEVANTE DEL GYM:\n${lines.join('\n')}\n`;
+  }
+
+  async buildZeusContext(gymId: string, query: string, scienceChunks: string[]): Promise<string> {
+    const gymChunks = await this.searchSimilar(gymId, query);
+    const parts: string[] = [];
+
+    if (gymChunks.length > 0) {
+      const gymLines = gymChunks.map((c) => `[${c.type}] ${c.content}`);
+      parts.push(`CONOCIMIENTO DEL GYM:\n${gymLines.join('\n')}`);
+    }
+
+    if (scienceChunks.length > 0) {
+      parts.push(`INVESTIGACIÓN CIENTÍFICA:\n${scienceChunks.join('\n')}`);
+    }
+
+    return parts.length > 0 ? `\n${parts.join('\n\n')}\n` : '';
   }
 
   async seedGymKnowledge(gymId: string): Promise<{ seeded: number }> {
