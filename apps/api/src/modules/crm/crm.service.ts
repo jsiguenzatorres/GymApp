@@ -1,11 +1,21 @@
-﻿import { Injectable, NotFoundException } from '@nestjs/common';
+﻿import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
+import { GeminiService } from '../ai/gemini.service';
+import { RagService } from '../ai/rag.service';
+import { ConversationService } from '../ai/conversation.service';
 import { CreateInteractionDto } from './dto/create-interaction.dto';
 import { CreateAppointmentDto, UpdateAppointmentStatusDto } from './dto/create-appointment.dto';
 
 @Injectable()
 export class CrmService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(CrmService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly gemini: GeminiService,
+    private readonly rag: RagService,
+    private readonly conversation: ConversationService,
+  ) {}
 
   // â”€â”€â”€ INTERACTIONS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -276,12 +286,57 @@ export class CrmService {
 
   // â”€â”€â”€ ARIA STUB â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-  async ariaChat(_gymId: string, _memberId: string, message: string) {
-    // P2: reemplazar con LangChain + Claude claude-sonnet-4-20250514
-    return {
-      response: `Hola, soy ARIA. Recibi tu mensaje: "${message}". La integracion completa con IA (Claude claude-sonnet-4-20250514) estara disponible en Fase 2. Por ahora puedes usar el panel de CRM para gestionar miembros manualmente.`,
-      isStub: true,
-    };
+  async ariaChat(gymId: string, memberId: string, message: string) {
+    const [gym, riskAlerts, upcomingAppointments, ragContext, history] = await Promise.all([
+      this.prisma.gym.findUnique({ where: { id: gymId }, select: { name: true, currency: true } }),
+      this.prisma.member.count({ where: { gym_id: gymId, risk_score: { gte: 70 } } }),
+      this.prisma.appointment.count({
+        where: {
+          gym_id: gymId,
+          scheduled_at: { gte: new Date(), lte: new Date(Date.now() + 7 * 86_400_000) },
+          status: { in: ['SCHEDULED', 'CONFIRMED'] },
+        },
+      }),
+      this.rag.buildContext(gymId, message),
+      memberId ? this.conversation.getHistory(gymId, memberId, 'ARIA') : Promise.resolve([]),
+    ]);
+
+    const activeMembers = await this.prisma.member.count({
+      where: { gym_id: gymId, status: { in: ['ACTIVE', 'TRIAL'] } },
+    });
+
+    const systemPrompt = `Eres ARIA, el Asistente Relacional Inteligente de ${gym?.name ?? 'el gym'}.
+Eres experta en retención de miembros, CRM deportivo y estrategias de fidelización para gimnasios en Latinoamérica.
+
+CONTEXTO ACTUAL DEL GYM:
+- Miembros activos: ${activeMembers}
+- Miembros en riesgo alto de cancelar (score ≥ 70): ${riskAlerts}
+- Citas próximas (7 días): ${upcomingAppointments}
+- Moneda: ${gym?.currency ?? 'USD'}
+${ragContext}
+INSTRUCCIONES:
+- Responde siempre en español, de forma concisa y accionable
+- Si el admin pregunta sobre miembros en riesgo, sugiere acciones concretas de retención
+- Si pregunta sobre citas o interacciones, da recomendaciones de seguimiento
+- Puedes sugerir workflows de retención, estrategias de re-engagement, o análisis de datos
+- Sé directa y profesional, como un consultor de negocio especializado en gimnasios
+- Si el miembro pregunta algo personal (membresía, citas, horarios), responde con amabilidad
+- Máximo 3 párrafos por respuesta`;
+
+    try {
+      const geminiHistory = this.conversation.toGeminiHistory(history);
+      const response = await this.gemini.chat(systemPrompt, message, geminiHistory);
+      if (memberId) void this.conversation.addMessages(gymId, memberId, 'ARIA', message, response);
+      return { response, isStub: false };
+    } catch (err) {
+      this.logger.error(`ARIA Gemini error: ${(err as Error).message}`);
+      return {
+        response:
+          'Lo siento, el servicio de IA no está disponible en este momento. Por favor intenta de nuevo en unos segundos.',
+        isStub: false,
+        error: true,
+      };
+    }
   }
 
   // â”€â”€â”€ PRIVATE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

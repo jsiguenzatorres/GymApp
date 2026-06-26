@@ -8,6 +8,8 @@ import {
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../database/prisma.service';
 import { GeminiService } from '../ai/gemini.service';
+import { RagService } from '../ai/rag.service';
+import { ConversationService } from '../ai/conversation.service';
 import { CreateExerciseDto } from './dto/create-exercise.dto';
 import { CreatePlanDto } from './dto/create-plan.dto';
 import { StartSessionDto } from './dto/start-session.dto';
@@ -20,6 +22,8 @@ export class WorkoutService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly gemini: GeminiService,
+    private readonly rag: RagService,
+    private readonly conversation: ConversationService,
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
@@ -473,7 +477,7 @@ export class WorkoutService {
   // ─── ZEUS ─────────────────────────────────────────────────────────────────────
 
   async zeusChat(gymId: string, memberId: string, message: string) {
-    const [member, activeSession, recentPRs, exercises] = await Promise.all([
+    const [member, activeSession, recentPRs, exercises, ragContext, history] = await Promise.all([
       this.prisma.member.findFirst({
         where: { id: memberId, gym_id: gymId },
         select: { first_name: true, last_name: true },
@@ -500,6 +504,8 @@ export class WorkoutService {
         select: { name: true, muscle_groups: true, equipment: true },
         take: 30,
       }),
+      this.rag.buildContext(gymId, message),
+      this.conversation.getHistory(gymId, memberId, 'ZEUS'),
     ]);
 
     const memberName = member ? `${member.first_name} ${member.last_name}` : 'el miembro';
@@ -526,7 +532,7 @@ Estás asistiendo a ${memberName} durante su entrenamiento.
 ${sessionContext}
 ${prContext}
 ${exerciseContext}
-
+${ragContext}
 INSTRUCCIONES:
 - Responde SIEMPRE en español, de forma concisa y motivadora
 - Eres un coach de élite: directo, técnico y motivador
@@ -538,7 +544,9 @@ INSTRUCCIONES:
 - Añade una frase motivadora corta al final cuando sea apropiado`;
 
     try {
-      const response = await this.gemini.chat(systemPrompt, message);
+      const geminiHistory = this.conversation.toGeminiHistory(history);
+      const response = await this.gemini.chat(systemPrompt, message, geminiHistory);
+      void this.conversation.addMessages(gymId, memberId, 'ZEUS', message, response);
       return { response, isStub: false };
     } catch (err) {
       this.logger.error(`ZEUS Gemini error: ${(err as Error).message}`);

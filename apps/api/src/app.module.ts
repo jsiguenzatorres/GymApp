@@ -23,6 +23,7 @@ import { ScheduleModule } from './modules/schedule/schedule.module';
 import { GamificationModule } from './modules/gamification/gamification.module';
 import { LeadsModule } from './modules/leads/leads.module';
 import { FeedbackModule } from './modules/feedback/feedback.module';
+import { WebhooksModule } from './modules/webhooks/webhooks.module';
 
 @Module({
   imports: [
@@ -59,6 +60,7 @@ import { FeedbackModule } from './modules/feedback/feedback.module';
     GamificationModule,
     LeadsModule,
     FeedbackModule,
+    WebhooksModule,
     // Módulos de negocio se agregan aquí en cada sprint
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
@@ -77,6 +79,9 @@ export class AppModule implements NestModule {
         { path: 'api/v1/auth/password/reset', method: RequestMethod.POST },
         { path: 'api/v1/webhooks/stripe', method: RequestMethod.POST },
         { path: 'api/v1/webhooks/mercadopago', method: RequestMethod.POST },
+        { path: 'api/v1/webhooks/whatsapp/*', method: RequestMethod.GET },
+        { path: 'api/v1/webhooks/whatsapp/*', method: RequestMethod.POST },
+        { path: 'api/v1/webhooks/telegram/*', method: RequestMethod.POST },
       )
       .forRoutes('*');
   }

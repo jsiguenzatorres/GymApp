@@ -1,4 +1,13 @@
-import { Controller, Get, Post, Body, Query, UseGuards, ForbiddenException } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Query,
+  UseGuards,
+  ForbiddenException,
+  BadRequestException,
+} from '@nestjs/common';
 import { AnalyticsService } from './analytics.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -40,7 +49,13 @@ export class AnalyticsController {
 
   // POST /api/v1/analytics/coach
   @Post('coach')
-  coachQuery(@Body() body: { query: string }, @CurrentUser() user: JwtPayload) {
-    return this.analyticsService.coachQuery(this.gymId(user), body.query);
+  async coachQuery(
+    @Body() body: { query?: string; question?: string },
+    @CurrentUser() user: JwtPayload,
+  ) {
+    const q = body.question ?? body.query ?? '';
+    if (!q.trim()) throw new BadRequestException('question requerido');
+    const answer = await this.analyticsService.businessCoachQuery(this.gymId(user), q);
+    return { answer };
   }
 }

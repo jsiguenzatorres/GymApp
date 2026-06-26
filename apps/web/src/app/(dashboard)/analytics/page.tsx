@@ -1,5 +1,6 @@
 import { serverFetch } from '@/lib/server-api';
 import { AnalyticsCharts } from '@/components/analytics/analytics-charts';
+import { BusinessCoach } from './business-coach';
 
 interface DashboardKpis {
   activeMembers: number;
@@ -147,6 +148,18 @@ export default async function AnalyticsPage() {
         revenueTrend={revenueTrend ?? []}
         memberStatusDistribution={dashboard?.memberStatusDistribution ?? []}
         membershipBreakdown={membershipBreakdown ?? []}
+      />
+
+      {/* Business Coach IA */}
+      <BusinessCoach
+        askAction={async (question: string) => {
+          'use server';
+          const res = await serverFetch<{ answer: string }>('/api/v1/analytics/coach', {
+            method: 'POST',
+            body: JSON.stringify({ question }),
+          });
+          return res?.answer ?? 'Sin respuesta del Business Coach.';
+        }}
       />
     </div>
   );

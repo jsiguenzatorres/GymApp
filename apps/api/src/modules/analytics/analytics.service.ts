@@ -1,9 +1,15 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
+import { GeminiService } from '../ai/gemini.service';
 
 @Injectable()
 export class AnalyticsService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(AnalyticsService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly gemini: GeminiService,
+  ) {}
 
   // ─── DASHBOARD KPIs ──────────────────────────────────────────────────────────
 
@@ -213,5 +219,51 @@ export class AnalyticsService {
     );
 
     return { snapshotted: entries.length, date: today.toISOString().split('T')[0] };
+  }
+
+  // ─── BUSINESS COACH IA ───────────────────────────────────────────────────────
+
+  async businessCoachQuery(gymId: string, question: string): Promise<string> {
+    const [dashboard, revenue] = await Promise.all([
+      this.getDashboard(gymId),
+      this.getRevenueTrend(gymId, 3),
+    ]);
+
+    const k = dashboard.kpis;
+    const trend = revenue
+      .map(
+        (r: { month: string; revenue: number; newMembers: number }) =>
+          `  ${r.month}: $${(r.revenue ?? 0).toFixed(2)} — ${r.newMembers} nuevos miembros`,
+      )
+      .join('\n');
+
+    const systemPrompt = `Eres el Business Coach IA de GymApp. Eres experto en analítica de negocio para gimnasios en Latinoamérica.
+
+MÉTRICAS ACTUALES DEL GYM:
+- Miembros activos: ${k.activeMembers} de ${k.totalMembers} totales
+- Nuevos este mes: ${k.newMembersThisMonth} (${k.memberGrowth > 0 ? '+' : ''}${k.memberGrowth}% vs mes anterior)
+- Ingresos este mes: $${(k.revenueThisMonth ?? 0).toFixed(2)} en ${k.transactions} transacciones
+- Ingresos pendientes: $${(k.pendingRevenue ?? 0).toFixed(2)} (${k.pendingCount} pagos)
+- Miembros en alto riesgo de cancelar: ${k.highRiskCount}
+- Score de riesgo promedio: ${(k.avgRiskScore ?? 0).toFixed(1)}/100
+- Sesiones de workout esta semana: ${k.workoutSessionsWeek}
+- Tasa de retención estimada: ${(k.retentionRate ?? 0).toFixed(1)}%
+
+TENDENCIA DE INGRESOS (últimos 3 meses):
+${trend}
+
+INSTRUCCIONES:
+- Responde en español, de forma concisa y accionable
+- Basa tus respuestas en los datos reales del gym
+- Da recomendaciones específicas y concretas con pasos claros
+- Si no tienes suficientes datos, dilo claramente y sugiere cómo obtenerlos
+- Máximo 3 párrafos bien estructurados`;
+
+    try {
+      return await this.gemini.chat(systemPrompt, question);
+    } catch (err) {
+      this.logger.error(`Business Coach error: ${(err as Error).message}`);
+      return 'El Business Coach no está disponible en este momento. Intenta de nuevo en unos segundos.';
+    }
   }
 }

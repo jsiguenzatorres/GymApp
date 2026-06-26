@@ -129,8 +129,10 @@ model Gym {
   points_transactions PointsTransaction[]
   badges              Badge[]
   member_badges       MemberBadge[]
-  leads               Lead[]
-  feedback            Feedback[]
+  leads                 Lead[]
+  feedback              Feedback[]
+  conversation_sessions ConversationSession[]
+  gym_knowledge         GymKnowledge[]
 
   @@index([saas_plan, is_active])
   @@map("gyms")
@@ -256,8 +258,9 @@ model Member {
   food_diary_entries FoodDiaryEntry[]
   class_enrollments   ClassEnrollment[]
   points_transactions PointsTransaction[]
-  member_badges       MemberBadge[]
-  feedback            Feedback[]
+  member_badges         MemberBadge[]
+  feedback              Feedback[]
+  conversation_sessions ConversationSession[]
 
   @@index([gym_id, status])
   @@index([gym_id, risk_score])
@@ -1004,4 +1007,41 @@ model Feedback {
   @@index([gym_id, type, created_at(sort: Desc)])
   @@index([gym_id, is_resolved])
   @@map("feedback")
+}
+
+// ─── Conversaciones IA (historial multi-turn) ────────────────────────────────
+
+model ConversationSession {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gym_id     String   @db.Uuid
+  member_id  String   @db.Uuid
+  agent_type String   @db.VarChar(10) // ARIA | ZEUS
+  messages   Json     @default("[]")  // [{ role, content, ts }]
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  gym    Gym    @relation(fields: [gym_id], references: [id], onDelete: Cascade)
+  member Member @relation(fields: [member_id], references: [id])
+
+  @@unique([gym_id, member_id, agent_type])
+  @@index([gym_id, member_id])
+  @@map("conversation_sessions")
+}
+
+// ─── Base de conocimiento del gym (RAG) ──────────────────────────────────────
+
+model GymKnowledge {
+  id         String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gym_id     String                     @db.Uuid
+  content    String
+  embedding  Unsupported("vector(768)")?
+  type       String                     @db.VarChar(30) // FAQ | POLICY | EXERCISE | PRODUCT | STAFF | SCHEDULE
+  source     String?                    @db.VarChar(100)
+  is_active  Boolean                    @default(true)
+  created_at DateTime                   @default(now())
+
+  gym Gym @relation(fields: [gym_id], references: [id], onDelete: Cascade)
+
+  @@index([gym_id, type])
+  @@map("gym_knowledge")
 }
