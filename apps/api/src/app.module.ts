@@ -24,6 +24,7 @@ import { GamificationModule } from './modules/gamification/gamification.module';
 import { LeadsModule } from './modules/leads/leads.module';
 import { FeedbackModule } from './modules/feedback/feedback.module';
 import { WebhooksModule } from './modules/webhooks/webhooks.module';
+import { AutomationModule } from './modules/automation/automation.module';
 
 @Module({
   imports: [
@@ -61,6 +62,7 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module';
     LeadsModule,
     FeedbackModule,
     WebhooksModule,
+    AutomationModule,
     // Módulos de negocio se agregan aquí en cada sprint
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

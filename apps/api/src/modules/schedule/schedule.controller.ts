@@ -13,11 +13,14 @@ import {
 } from '@nestjs/common';
 import { ScheduleService, CreateClassTypeDto, CreateSessionDto } from './schedule.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PlanGuard } from '../../common/guards/plan.guard';
+import { RequiresPlan } from '../../common/decorators/requires-plan.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 
+@RequiresPlan('PRO', 'ELITE', 'ENTERPRISE')
 @Controller('schedule')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PlanGuard)
 export class ScheduleController {
   constructor(private readonly scheduleService: ScheduleService) {}
 

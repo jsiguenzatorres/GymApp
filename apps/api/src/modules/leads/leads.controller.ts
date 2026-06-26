@@ -13,11 +13,14 @@ import {
 } from '@nestjs/common';
 import { LeadsService, CreateLeadDto, UpdateLeadDto } from './leads.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PlanGuard } from '../../common/guards/plan.guard';
+import { RequiresPlan } from '../../common/decorators/requires-plan.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 
+@RequiresPlan('PRO', 'ELITE', 'ENTERPRISE')
 @Controller('leads')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PlanGuard)
 export class LeadsController {
   constructor(private readonly leadsService: LeadsService) {}
 
