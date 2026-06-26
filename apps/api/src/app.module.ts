@@ -13,9 +13,13 @@ import { WorkoutModule } from './modules/workout/workout.module';
 import { CrmModule } from './modules/crm/crm.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
+import { AiModule } from './modules/ai/ai.module';
 import { AccessModule } from './modules/access/access.module';
 import { StaffModule } from './modules/staff/staff.module';
 import { GymsModule } from './modules/gyms/gyms.module';
+import { MarketplaceModule } from './modules/marketplace/marketplace.module';
+import { NutritionModule } from './modules/nutrition/nutrition.module';
+import { ScheduleModule } from './modules/schedule/schedule.module';
 
 @Module({
   imports: [
@@ -33,6 +37,7 @@ import { GymsModule } from './modules/gyms/gyms.module';
       { name: 'medium', ttl: 60000, limit: 200 },
     ]),
 
+    AiModule,
     DatabaseModule,
     HealthModule,
     AuthModule,
@@ -45,6 +50,9 @@ import { GymsModule } from './modules/gyms/gyms.module';
     AccessModule,
     StaffModule,
     GymsModule,
+    MarketplaceModule,
+    NutritionModule,
+    ScheduleModule,
     // Módulos de negocio se agregan aquí en cada sprint
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

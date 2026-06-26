@@ -123,6 +123,9 @@ model Gym {
   nutrition_plans     NutritionPlan[]
   food_items          FoodItem[]
   food_diary_entries  FoodDiaryEntry[]
+  class_types         ClassType[]
+  class_sessions      ClassSession[]
+  class_enrollments   ClassEnrollment[]
 
   @@index([saas_plan, is_active])
   @@map("gyms")
@@ -197,6 +200,7 @@ model Staff {
   user             User             @relation(fields: [user_id], references: [id], onDelete: Cascade)
   crm_interactions CrmInteraction[]
   appointments     Appointment[]
+  class_sessions   ClassSession[]
 
   @@index([gym_id, is_active])
   @@map("staff")
@@ -241,6 +245,7 @@ model Member {
   marketplace_orders MarketplaceOrder[]
   nutrition_plans    NutritionPlan[]
   food_diary_entries FoodDiaryEntry[]
+  class_enrollments  ClassEnrollment[]
 
   @@index([gym_id, status])
   @@index([gym_id, risk_score])
@@ -820,4 +825,65 @@ model FoodDiaryEntry {
   @@index([gym_id, member_id, date(sort: Desc)])
   @@index([gym_id, plan_id])
   @@map("food_diary_entries")
+}
+
+// ─── Schedule / Classes ────────────────────────────────────────────────────────
+
+model ClassType {
+  id               String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gym_id           String         @db.Uuid
+  name             String
+  description      String?
+  color            String         @default("#1d4ed8")
+  duration_minutes Int            @default(60)
+  difficulty       String?
+  is_active        Boolean        @default(true)
+  created_at       DateTime       @default(now())
+
+  gym      Gym            @relation(fields: [gym_id], references: [id], onDelete: Cascade)
+  sessions ClassSession[]
+
+  @@index([gym_id])
+  @@map("class_types")
+}
+
+model ClassSession {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gym_id           String    @db.Uuid
+  class_type_id    String    @db.Uuid
+  trainer_id       String?   @db.Uuid
+  scheduled_at     DateTime
+  duration_minutes Int
+  capacity         Int       @default(20)
+  room             String?
+  notes            String?
+  status           String    @default("SCHEDULED")
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @updatedAt
+
+  gym         Gym              @relation(fields: [gym_id], references: [id], onDelete: Cascade)
+  class_type  ClassType        @relation(fields: [class_type_id], references: [id])
+  trainer     Staff?           @relation(fields: [trainer_id], references: [id])
+  enrollments ClassEnrollment[]
+
+  @@index([gym_id, scheduled_at(sort: Desc)])
+  @@map("class_sessions")
+}
+
+model ClassEnrollment {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gym_id       String    @db.Uuid
+  session_id   String    @db.Uuid
+  member_id    String    @db.Uuid
+  status       String    @default("ENROLLED")
+  enrolled_at  DateTime  @default(now())
+  cancelled_at DateTime?
+
+  gym     Gym          @relation(fields: [gym_id], references: [id], onDelete: Cascade)
+  session ClassSession @relation(fields: [session_id], references: [id], onDelete: Cascade)
+  member  Member       @relation(fields: [member_id], references: [id])
+
+  @@unique([session_id, member_id])
+  @@index([gym_id, member_id])
+  @@map("class_enrollments")
 }

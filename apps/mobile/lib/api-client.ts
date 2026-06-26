@@ -437,3 +437,59 @@ export const exercisesApi = {
     return apiClient.get<Exercise[]>(`/api/v1/exercises${query}`, accessToken);
   },
 };
+
+// ─── Schedule / Classes ───────────────────────────────────────────────────────
+
+export interface ClassType {
+  id: string;
+  name: string;
+  color: string;
+  duration_minutes: number;
+  difficulty?: string;
+}
+
+export interface SessionWithMeta {
+  id: string;
+  scheduled_at: string;
+  duration_minutes: number;
+  capacity: number;
+  room?: string;
+  class_type: ClassType;
+  trainer?: { first_name: string; last_name: string };
+  enrolled_count: number;
+  waitlist_count: number;
+  is_full: boolean;
+  my_enrollment?: { id: string; status: 'ENROLLED' | 'WAITLIST' | 'CANCELLED' } | null;
+}
+
+export interface MyClassEnrollment {
+  id: string;
+  status: 'ENROLLED' | 'WAITLIST';
+  enrolled_at: string;
+  scheduled_at: string;
+  room?: string;
+  class_name: string;
+  class_color: string;
+  class_duration_minutes: number;
+  trainer_first_name?: string | null;
+  trainer_last_name?: string | null;
+  session_id: string;
+}
+
+export const classesApi = {
+  getSessions: (token: string, startDate: string, endDate: string) =>
+    apiClient.get<SessionWithMeta[]>(
+      `/api/v1/schedule/sessions?startDate=${startDate}&endDate=${endDate}`,
+      token,
+    ),
+  getMyEnrollments: (token: string) =>
+    apiClient.get<MyClassEnrollment[]>('/api/v1/schedule/my-enrollments', token),
+  enroll: (token: string, sessionId: string) =>
+    apiClient.post<{ id: string; status: string }>(
+      `/api/v1/schedule/sessions/${sessionId}/enroll`,
+      {},
+      token,
+    ),
+  cancelEnrollment: (token: string, sessionId: string) =>
+    apiClient.delete<void>(`/api/v1/schedule/sessions/${sessionId}/enroll`, undefined, token),
+};
