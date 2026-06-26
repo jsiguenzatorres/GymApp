@@ -1,6 +1,38 @@
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
-import { ClassEnrollment, ClassType } from '@prisma/client';
+import { ClassEnrollment, ClassSession, ClassType } from '@prisma/client';
+
+export interface CreateClassTypeDto {
+  name: string;
+  description?: string;
+  color?: string;
+  duration_minutes: number;
+  difficulty?: string;
+}
+
+export interface CreateSessionDto {
+  class_type_id: string;
+  trainer_id?: string;
+  scheduled_at: string; // ISO string
+  capacity: number;
+  room?: string;
+  notes?: string;
+}
+
+export interface AdminSessionView extends Omit<ClassSession, 'updated_at'> {
+  class_type: { name: string; color: string };
+  trainer: { first_name: string; last_name: string } | null;
+  enrolled_count: number;
+  waitlist_count: number;
+  updated_at: Date;
+}
+
+export interface SessionEnrollment {
+  id: string;
+  status: string;
+  enrolled_at: Date;
+  member: { id: string; first_name: string; last_name: string };
+}
 
 export interface SessionWithMeta {
   id: string;
@@ -278,6 +310,111 @@ export class ScheduleService {
       class_duration_minutes: e.session.class_type.duration_minutes,
       trainer_first_name: e.session.trainer?.first_name ?? null,
       trainer_last_name: e.session.trainer?.last_name ?? null,
+    }));
+  }
+
+  // ─── Admin: class type management ─────────────────────────────────────────
+
+  async getAdminClassTypes(gymId: string): Promise<ClassType[]> {
+    return this.prisma.classType.findMany({
+      where: { gym_id: gymId },
+      orderBy: { name: 'asc' },
+    });
+  }
+
+  async createClassType(gymId: string, dto: CreateClassTypeDto): Promise<ClassType> {
+    return this.prisma.classType.create({
+      data: {
+        gym_id: gymId,
+        name: dto.name,
+        description: dto.description ?? null,
+        color: dto.color ?? '#1d4ed8',
+        duration_minutes: dto.duration_minutes,
+        difficulty: dto.difficulty ?? null,
+      },
+    });
+  }
+
+  async toggleClassType(gymId: string, typeId: string): Promise<ClassType> {
+    const ct = await this.prisma.classType.findFirst({ where: { id: typeId, gym_id: gymId } });
+    if (!ct) throw new NotFoundException('Tipo de clase no encontrado');
+    return this.prisma.classType.update({
+      where: { id: typeId },
+      data: { is_active: !ct.is_active },
+    });
+  }
+
+  // ─── Admin: session management ─────────────────────────────────────────────
+
+  async createSession(gymId: string, dto: CreateSessionDto): Promise<ClassSession> {
+    const classType = await this.prisma.classType.findFirst({
+      where: { id: dto.class_type_id, gym_id: gymId },
+    });
+    if (!classType) throw new NotFoundException('Tipo de clase no encontrado');
+
+    return this.prisma.classSession.create({
+      data: {
+        gym_id: gymId,
+        class_type_id: dto.class_type_id,
+        trainer_id: dto.trainer_id ?? null,
+        scheduled_at: new Date(dto.scheduled_at),
+        duration_minutes: classType.duration_minutes,
+        capacity: dto.capacity,
+        room: dto.room ?? null,
+        notes: dto.notes ?? null,
+      },
+    });
+  }
+
+  async getAdminSessions(
+    gymId: string,
+    startDate?: Date,
+    endDate?: Date,
+  ): Promise<AdminSessionView[]> {
+    const now = new Date();
+    const start = startDate ?? now;
+    const end = endDate ?? new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+    const sessions = await this.prisma.classSession.findMany({
+      where: {
+        gym_id: gymId,
+        scheduled_at: { gte: start, lte: end },
+      },
+      include: {
+        class_type: { select: { name: true, color: true } },
+        trainer: { select: { first_name: true, last_name: true } },
+        enrollments: { select: { status: true } },
+      },
+      orderBy: { scheduled_at: 'asc' },
+    });
+
+    return sessions.map((s) => {
+      const { enrollments, ...rest } = s;
+      return {
+        ...rest,
+        enrolled_count: enrollments.filter((e) => e.status === 'ENROLLED').length,
+        waitlist_count: enrollments.filter((e) => e.status === 'WAITLIST').length,
+      };
+    });
+  }
+
+  async getSessionEnrollments(gymId: string, sessionId: string): Promise<SessionEnrollment[]> {
+    const session = await this.prisma.classSession.findFirst({
+      where: { id: sessionId, gym_id: gymId },
+    });
+    if (!session) throw new NotFoundException('Sesión no encontrada');
+
+    const enrollments = await this.prisma.classEnrollment.findMany({
+      where: { session_id: sessionId, gym_id: gymId, status: { in: ['ENROLLED', 'WAITLIST'] } },
+      include: { member: { select: { id: true, first_name: true, last_name: true } } },
+      orderBy: { enrolled_at: 'asc' },
+    });
+
+    return enrollments.map((e) => ({
+      id: e.id,
+      status: e.status,
+      enrolled_at: e.enrolled_at,
+      member: e.member,
     }));
   }
 }

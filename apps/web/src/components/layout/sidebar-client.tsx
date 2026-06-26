@@ -14,6 +14,11 @@ import {
   UserCog,
   Settings,
   LogOut,
+  Zap,
+  ShoppingBag,
+  Salad,
+  Calendar,
+  Trophy,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -31,6 +36,11 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/membership-types', label: 'Membresías', icon: CreditCard },
   { href: '/payments', label: 'Pagos', icon: DollarSign },
   { href: '/workouts', label: 'Entrenamiento', icon: Dumbbell },
+  { href: '/workouts/zeus', label: 'ZEUS Coach IA', icon: Zap },
+  { href: '/marketplace', label: 'Marketplace', icon: ShoppingBag },
+  { href: '/nutrition', label: 'Nutrición IA', icon: Salad },
+  { href: '/classes', label: 'Clases & Horarios', icon: Calendar },
+  { href: '/gamification', label: 'Gamificación', icon: Trophy },
   { href: '/access', label: 'Control de Acceso', icon: ScanLine },
   { href: '/crm', label: 'CRM / ARIA', icon: BrainCircuit },
   { href: '/analytics', label: 'Analytics', icon: BarChart3 },

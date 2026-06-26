@@ -1,6 +1,21 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
+import { Badge } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
+
+export interface CreateBadgeDto {
+  name: string;
+  description?: string;
+  icon: string;
+  condition_type: string;
+  condition_value: number;
+}
+
+export interface AwardPointsDto {
+  member_id: string;
+  amount: number;
+  description?: string;
+}
 
 // ─── Level config (from CLAUDE.md) ────────────────────────────────────────────
 const LEVELS = [
@@ -191,5 +206,82 @@ export class GamificationService {
         level_color: lv.color,
       };
     });
+  }
+
+  // ─── Admin: badge management ───────────────────────────────────────────────
+
+  async getAllBadges(gymId: string): Promise<Badge[]> {
+    return this.prisma.badge.findMany({
+      where: { gym_id: gymId },
+      orderBy: { created_at: 'asc' },
+    });
+  }
+
+  async createBadge(gymId: string, dto: CreateBadgeDto): Promise<Badge> {
+    return this.prisma.badge.create({
+      data: {
+        gym_id: gymId,
+        name: dto.name,
+        description: dto.description ?? null,
+        icon: dto.icon,
+        condition_type: dto.condition_type,
+        condition_value: dto.condition_value,
+      },
+    });
+  }
+
+  async toggleBadge(gymId: string, badgeId: string): Promise<Badge> {
+    const badge = await this.prisma.badge.findFirst({ where: { id: badgeId, gym_id: gymId } });
+    if (!badge) throw new NotFoundException('Badge no encontrado');
+    return this.prisma.badge.update({
+      where: { id: badgeId },
+      data: { is_active: !badge.is_active },
+    });
+  }
+
+  // ─── Admin: manual points ─────────────────────────────────────────────────
+
+  async adminAwardPoints(gymId: string, dto: AwardPointsDto): Promise<void> {
+    const member = await this.prisma.member.findFirst({
+      where: { id: dto.member_id, gym_id: gymId },
+      select: { id: true },
+    });
+    if (!member) throw new NotFoundException('Miembro no encontrado');
+
+    await this.awardPoints(gymId, dto.member_id, dto.amount, 'MANUAL', dto.description);
+  }
+
+  async getRecentTransactions(gymId: string, limit = 30) {
+    return this.prisma.pointsTransaction.findMany({
+      where: { gym_id: gymId },
+      orderBy: { created_at: 'desc' },
+      take: limit,
+      include: {
+        member: { select: { first_name: true, last_name: true } },
+      },
+    });
+  }
+
+  async getGymStats(gymId: string) {
+    const [totalBadges, activeBadges, totalTx, topMember] = await Promise.all([
+      this.prisma.badge.count({ where: { gym_id: gymId } }),
+      this.prisma.badge.count({ where: { gym_id: gymId, is_active: true } }),
+      this.prisma.pointsTransaction.aggregate({
+        where: { gym_id: gymId, amount: { gt: 0 } },
+        _sum: { amount: true },
+      }),
+      this.prisma.member.findFirst({
+        where: { gym_id: gymId },
+        orderBy: { points_lifetime: 'desc' },
+        select: { first_name: true, last_name: true, points_lifetime: true },
+      }),
+    ]);
+
+    return {
+      totalBadges,
+      activeBadges,
+      totalPointsAwarded: totalTx._sum.amount ?? 0,
+      topMember,
+    };
   }
 }

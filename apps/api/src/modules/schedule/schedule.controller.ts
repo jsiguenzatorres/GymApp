@@ -2,14 +2,16 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Delete,
   Param,
   Query,
+  Body,
   UseGuards,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-import { ScheduleService } from './schedule.service';
+import { ScheduleService, CreateClassTypeDto, CreateSessionDto } from './schedule.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
@@ -26,6 +28,8 @@ export class ScheduleController {
   private userId(user: JwtPayload): string {
     return user.sub;
   }
+
+  // ─── Member endpoints ─────────────────────────────────────────────────────
 
   @Get('class-types')
   getClassTypes(@CurrentUser() user: JwtPayload) {
@@ -63,5 +67,47 @@ export class ScheduleController {
   @Get('my-enrollments')
   getMyEnrollments(@CurrentUser() user: JwtPayload) {
     return this.scheduleService.getMyEnrollments(this.gymId(user), this.userId(user));
+  }
+
+  // ─── Admin endpoints ──────────────────────────────────────────────────────
+
+  @Get('admin/class-types')
+  getAdminClassTypes(@CurrentUser() user: JwtPayload) {
+    return this.scheduleService.getAdminClassTypes(this.gymId(user));
+  }
+
+  @Post('admin/class-types')
+  @HttpCode(HttpStatus.CREATED)
+  createClassType(@CurrentUser() user: JwtPayload, @Body() dto: CreateClassTypeDto) {
+    return this.scheduleService.createClassType(this.gymId(user), dto);
+  }
+
+  @Patch('admin/class-types/:id/toggle')
+  toggleClassType(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.scheduleService.toggleClassType(this.gymId(user), id);
+  }
+
+  @Post('admin/sessions')
+  @HttpCode(HttpStatus.CREATED)
+  createSession(@CurrentUser() user: JwtPayload, @Body() dto: CreateSessionDto) {
+    return this.scheduleService.createSession(this.gymId(user), dto);
+  }
+
+  @Get('admin/sessions')
+  getAdminSessions(
+    @CurrentUser() user: JwtPayload,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.scheduleService.getAdminSessions(
+      this.gymId(user),
+      startDate ? new Date(startDate) : undefined,
+      endDate ? new Date(endDate) : undefined,
+    );
+  }
+
+  @Get('admin/sessions/:id/enrollments')
+  getSessionEnrollments(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.scheduleService.getSessionEnrollments(this.gymId(user), id);
   }
 }
