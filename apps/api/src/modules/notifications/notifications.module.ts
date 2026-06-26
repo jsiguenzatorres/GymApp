@@ -1,14 +1,16 @@
 import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
 import { EmailService } from './email.service';
 import { NotificationService } from './notification.service';
 import { NotificationListener } from './notification.listener';
 import { NotificationController } from './notification.controller';
+import { FcmService } from './fcm.service';
 import { DatabaseModule } from '../database/database.module';
 
 @Module({
-  imports: [DatabaseModule],
+  imports: [DatabaseModule, ConfigModule], // ConfigModule kept for EmailService
   controllers: [NotificationController],
-  providers: [EmailService, NotificationService, NotificationListener],
-  exports: [EmailService, NotificationService],
+  providers: [EmailService, NotificationService, NotificationListener, FcmService],
+  exports: [EmailService, NotificationService, FcmService],
 })
 export class NotificationsModule {}

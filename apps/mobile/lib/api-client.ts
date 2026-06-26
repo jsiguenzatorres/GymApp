@@ -10,27 +10,53 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, options?: RequestInit, accessToken?: string): Promise<T> {
+// Registered by _layout.tsx on app start — auto-refresh on 401
+let _tokenRefresher: (() => Promise<string | null>) | null = null;
+export function setTokenRefresher(fn: () => Promise<string | null>) {
+  _tokenRefresher = fn;
+}
+
+async function rawFetch<T>(path: string, options: RequestInit, accessToken?: string): Promise<T> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
   };
-
   const res = await fetch(`${API_URL}${path}`, { ...options, headers });
-
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as { message?: string };
     throw new ApiError(body.message ?? `HTTP ${res.status}`, res.status);
   }
-
   return res.json() as Promise<T>;
 }
 
+async function request<T>(
+  path: string,
+  options: RequestInit,
+  accessToken?: string,
+  skipRefresh = false,
+): Promise<T> {
+  try {
+    return await rawFetch<T>(path, options, accessToken);
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 401 && !skipRefresh && _tokenRefresher) {
+      const newToken = await _tokenRefresher();
+      if (newToken) return rawFetch<T>(path, options, newToken);
+    }
+    throw err;
+  }
+}
+
 export const apiClient = {
-  post: <T>(path: string, body: unknown, token?: string) =>
-    request<T>(path, { method: 'POST', body: JSON.stringify(body) }, token),
+  post: <T>(path: string, body: unknown, token?: string, skipRefresh = false) =>
+    request<T>(path, { method: 'POST', body: JSON.stringify(body) }, token, skipRefresh),
 
   get: <T>(path: string, token?: string) => request<T>(path, { method: 'GET' }, token),
+
+  patch: <T>(path: string, body: unknown, token?: string) =>
+    request<T>(path, { method: 'PATCH', body: JSON.stringify(body) }, token),
+
+  delete: <T>(path: string, body?: unknown, token?: string) =>
+    request<T>(path, { method: 'DELETE', ...(body ? { body: JSON.stringify(body) } : {}) }, token),
 };
 
 export interface LoginResponse {
@@ -52,9 +78,279 @@ export const authApi = {
     apiClient.post<LoginResponse>('/api/v1/auth/login', { email, password, totp }),
 
   refresh: (refreshToken: string) =>
-    apiClient.post<{ accessToken: string; refreshToken: string }>('/api/v1/auth/refresh', {
-      refreshToken,
-    }),
+    apiClient.post<{ accessToken: string; refreshToken: string }>(
+      '/api/v1/auth/refresh',
+      { refreshToken },
+      undefined,
+      true, // skipRefresh — avoid infinite loop
+    ),
 
   me: (token: string) => apiClient.get<LoginResponse['user']>('/api/v1/auth/me', token),
+};
+
+export interface MemberProfile {
+  id: string;
+  first_name: string;
+  last_name: string;
+  phone?: string;
+  status: string;
+  risk_score?: number;
+  user: { email: string; last_login_at?: string };
+  memberships: Array<{
+    id: string;
+    status: string;
+    start_date: string;
+    end_date: string;
+    type: { name: string; price: number; duration_days: number };
+  }>;
+}
+
+export interface WorkoutPlan {
+  id: string;
+  name: string;
+  description?: string;
+  goal?: string;
+  blocks: Array<{
+    id: string;
+    name: string;
+    block_type: string;
+    sort_order: number;
+    exercises: Array<{
+      id: string;
+      sets: number;
+      reps_min: number;
+      reps_max: number;
+      rest_seconds: number;
+      sort_order: number;
+      exercise: { id: string; name: string; muscle_groups: string[] };
+    }>;
+  }>;
+}
+
+export interface WorkoutSession {
+  id: string;
+  status: string;
+  started_at: string;
+  finished_at?: string;
+  plan: { name: string } | null;
+}
+
+export interface PersonalRecord {
+  id: string;
+  value: number;
+  unit: string;
+  achieved_at: string;
+  exercise: { name: string };
+}
+
+export interface QrCodePayload {
+  qrPayload: string;
+  expiresAt: string;
+}
+
+export const memberApi = {
+  getMe: (token: string) => apiClient.get<MemberProfile>('/api/v1/members/me', token),
+  getPlans: (memberId: string, token: string) =>
+    apiClient.get<WorkoutPlan[]>(`/api/v1/members/${memberId}/plans`, token),
+  getSessions: (memberId: string, token: string) =>
+    apiClient.get<{ data: WorkoutSession[] }>(
+      `/api/v1/members/${memberId}/workout-sessions`,
+      token,
+    ),
+  getPRs: (memberId: string, token: string) =>
+    apiClient.get<PersonalRecord[]>(`/api/v1/members/${memberId}/personal-records`, token),
+};
+
+export const accessApi = {
+  getMyQr: (token: string) => apiClient.get<QrCodePayload>('/api/v1/access/my-qr', token),
+};
+
+export const zeusApi = {
+  chat: (message: string, token: string, memberId?: string) =>
+    apiClient.post<{ reply: string }>('/api/v1/workout/zeus/chat', { message, memberId }, token),
+};
+
+export interface ProductCategory {
+  id: string;
+  name: string;
+  description?: string;
+  image_url?: string;
+  sort_order: number;
+}
+
+export interface Product {
+  id: string;
+  name: string;
+  description?: string;
+  price: string;
+  stock: number;
+  sku?: string;
+  image_url?: string;
+  is_active: boolean;
+  category_id: string;
+  category?: { name: string };
+}
+
+export interface NutritionPlan {
+  id: string;
+  name: string;
+  goal: string;
+  kcal_target: number;
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+  is_active: boolean;
+  notes?: string;
+  member: { id: string; first_name: string; last_name: string };
+}
+
+export interface DiaryEntry {
+  id: string;
+  meal_type: string;
+  quantity_g: number;
+  kcal: number;
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+  food_item: { name: string; brand?: string };
+}
+
+export interface DiaryDay {
+  entries: DiaryEntry[];
+  totals: { kcal: number; protein_g: number; carbs_g: number; fat_g: number };
+}
+
+export const marketplaceApi = {
+  getCategories: (token: string) =>
+    apiClient.get<ProductCategory[]>('/api/v1/product-categories', token),
+  getProducts: (token: string, categoryId?: string) =>
+    apiClient.get<Product[]>(
+      `/api/v1/products${categoryId ? `?categoryId=${categoryId}` : ''}`,
+      token,
+    ),
+  createOrder: (
+    token: string,
+    body: { items: { productId: string; quantity: number }[]; notes?: string },
+  ) => apiClient.post<{ id: string; status: string }>('/api/v1/marketplace-orders', body, token),
+};
+
+export const nutritionApi = {
+  getMyPlans: (memberId: string, token: string) =>
+    apiClient.get<NutritionPlan[]>(`/api/v1/nutrition-plans?memberId=${memberId}`, token),
+  getDiary: (memberId: string, date: string, token: string) =>
+    apiClient.get<DiaryDay>(`/api/v1/members/${memberId}/food-diary?date=${date}`, token),
+  aiSuggest: (planId: string, memberId: string, context: string, token: string) =>
+    apiClient.post<{ suggestion: string }>(
+      '/api/v1/nutrition/ai-suggest',
+      { planId, memberId, context },
+      token,
+    ),
+};
+
+export const sessionApi = {
+  start: (
+    token: string,
+    body: { memberId: string; planId?: string; planDayId?: string; name?: string },
+  ) =>
+    apiClient.post<{ id: string; status: string; started_at: string }>(
+      '/api/v1/workout-sessions',
+      body,
+      token,
+    ),
+
+  logSet: (
+    token: string,
+    sessionId: string,
+    body: {
+      exerciseId: string;
+      setNumber: number;
+      reps?: number;
+      weightKg?: number;
+      notes?: string;
+    },
+  ) => apiClient.post<{ id: string }>(`/api/v1/workout-sessions/${sessionId}/sets`, body, token),
+
+  finish: (token: string, sessionId: string, body: { notes?: string; perceivedEffort?: number }) =>
+    apiClient.patch<{ id: string; status: string; finished_at: string }>(
+      `/api/v1/workout-sessions/${sessionId}/finish`,
+      body,
+      token,
+    ),
+};
+
+// ─── ARIA ────────────────────────────────────────────────────────────────────
+
+export const ariaApi = {
+  chat: (message: string, token: string, memberId?: string) =>
+    apiClient.post<{ reply: string }>('/api/v1/aria/chat', { message, memberId }, token),
+};
+
+// ─── Orders ──────────────────────────────────────────────────────────────────
+
+export interface MarketplaceOrder {
+  id: string;
+  status: string;
+  total_amount: string;
+  created_at: string;
+  items: Array<{
+    id: string;
+    quantity: number;
+    unit_price: string;
+    product: { name: string };
+  }>;
+}
+
+export const ordersApi = {
+  getMyOrders: (token: string, page = 1) =>
+    apiClient.get<{ data: MarketplaceOrder[]; total: number }>(
+      `/api/v1/marketplace-orders?page=${page}&limit=20`,
+      token,
+    ),
+};
+
+// ─── Access log ───────────────────────────────────────────────────────────────
+
+export interface AccessLog {
+  id: string;
+  result: string;
+  method: string;
+  created_at: string;
+}
+
+export const accessLogApi = {
+  getMyLogs: (memberId: string, token: string, page = 1) =>
+    apiClient.get<{ data: AccessLog[]; total: number }>(
+      `/api/v1/access/members/${memberId}/logs?page=${page}&limit=30`,
+      token,
+    ),
+};
+
+// ─── Password reset (public) ──────────────────────────────────────────────────
+
+export const passwordApi = {
+  requestReset: (email: string) =>
+    apiClient.post<void>('/api/v1/auth/password/reset-request', { email }),
+
+  reset: (token: string, newPassword: string) =>
+    apiClient.post<void>('/api/v1/auth/password/reset', { token, newPassword }),
+};
+
+// ─── Profile update ───────────────────────────────────────────────────────────
+
+export const profileApi = {
+  update: (
+    memberId: string,
+    token: string,
+    data: { firstName?: string; lastName?: string; phone?: string },
+  ) => apiClient.patch<MemberProfile>(`/api/v1/members/${memberId}`, data, token),
+};
+
+// ─── Push notifications / FCM tokens ─────────────────────────────────────────
+
+export const pushApi = {
+  registerToken: (token: string, platform: 'ios' | 'android', accessToken: string) =>
+    apiClient.post<void>('/api/v1/notifications/device-token', { token, platform }, accessToken),
+
+  removeToken: (token: string, accessToken: string) =>
+    apiClient.delete<void>('/api/v1/notifications/device-token', { token }, accessToken),
 };

@@ -1,5 +1,18 @@
-import { Controller, Get, Patch, Param, Query, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Delete,
+  Patch,
+  Param,
+  Query,
+  Body,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
 import { NotificationService } from './notification.service';
+import { FcmService } from './fcm.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
@@ -7,7 +20,10 @@ import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 @UseGuards(JwtAuthGuard)
 @Controller('notifications')
 export class NotificationController {
-  constructor(private readonly notifService: NotificationService) {}
+  constructor(
+    private readonly notifService: NotificationService,
+    private readonly fcm: FcmService,
+  ) {}
 
   // GET /api/v1/notifications
   @Get()
@@ -40,5 +56,24 @@ export class NotificationController {
   @Patch('read-all')
   markAllAsRead(@CurrentUser() user: JwtPayload) {
     return this.notifService.markAllAsRead(user.sub);
+  }
+
+  // POST /api/v1/notifications/device-token
+  // Called by mobile on login/app-open to keep FCM token up to date
+  @Post('device-token')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async registerToken(
+    @CurrentUser() user: JwtPayload,
+    @Body() body: { token: string; platform: 'ios' | 'android' },
+  ) {
+    await this.fcm.registerToken(user.sub, body.token, body.platform);
+  }
+
+  // DELETE /api/v1/notifications/device-token
+  // Called on logout to stop receiving push notifications
+  @Delete('device-token')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async removeToken(@Body() body: { token: string }) {
+    await this.fcm.removeToken(body.token);
   }
 }

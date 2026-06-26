@@ -74,6 +74,12 @@ export class BillingController {
   getBillingSummary(@CurrentUser() user: JwtPayload) {
     return this.billingService.getBillingSummary(this.gymId(user));
   }
+
+  @Post('payments/stripe-intent')
+  @HttpCode(HttpStatus.CREATED)
+  createStripeIntent(@CurrentUser() user: JwtPayload, @Body() dto: CreatePaymentDto) {
+    return this.billingService.createStripeIntent(this.gymId(user), dto);
+  }
 }
 
 // ─── WEBHOOKS (sin autenticación JWT) ─────────────────────────────────────────

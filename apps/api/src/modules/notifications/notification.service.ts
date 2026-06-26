@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma, UserRole } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
+import { FcmService } from './fcm.service';
 
 interface CreateNotifDto {
   gymId: string;
@@ -14,7 +15,10 @@ interface CreateNotifDto {
 
 @Injectable()
 export class NotificationService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly fcm: FcmService,
+  ) {}
 
   // ─── CREAR ────────────────────────────────────────────────────────────────
 
@@ -79,7 +83,24 @@ export class NotificationService {
     });
     if (!member) return;
 
-    return this.create({ gymId, userId: member.user_id, type, title, body, data });
+    const [notification] = await Promise.all([
+      this.create({ gymId, userId: member.user_id, type, title, body, data }),
+      this.fcm.sendToUser(
+        member.user_id,
+        { title, body },
+        { type, gymId, memberId, ...(data ? this.toStringRecord(data) : {}) },
+      ),
+    ]);
+
+    return notification;
+  }
+
+  private toStringRecord(obj: Record<string, unknown>): Record<string, string> {
+    return Object.fromEntries(
+      Object.entries(obj)
+        .filter(([, v]) => v != null)
+        .map(([k, v]) => [k, String(v)]),
+    );
   }
 
   // ─── LEER ────────────────────────────────────────────────────────────────

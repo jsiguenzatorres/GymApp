@@ -114,9 +114,15 @@ model Gym {
   personal_records PersonalRecord[]
   crm_interactions CrmInteraction[]
   appointments     Appointment[]
-  metric_snapshots MetricSnapshot[]
-  access_logs      AccessLog[]
-  notifications    Notification[]
+  metric_snapshots    MetricSnapshot[]
+  access_logs         AccessLog[]
+  notifications       Notification[]
+  product_categories  ProductCategory[]
+  products            Product[]
+  marketplace_orders  MarketplaceOrder[]
+  nutrition_plans     NutritionPlan[]
+  food_items          FoodItem[]
+  food_diary_entries  FoodDiaryEntry[]
 
   @@index([saas_plan, is_active])
   @@map("gyms")
@@ -150,9 +156,24 @@ model User {
   staff         Staff?
   member        Member?
   notifications Notification[]
+  device_tokens DeviceToken[]
 
   @@index([email, is_active])
   @@map("users")
+}
+
+model DeviceToken {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id    String   @db.Uuid
+  token      String   @unique @db.VarChar(255)
+  platform   String   @db.VarChar(10)  // ios | android
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@map("device_tokens")
 }
 
 // ─── STAFF (empleados del gym) ───────────────────────────────────────────────
@@ -214,9 +235,12 @@ model Member {
   member_plans     MemberPlan[]
   workout_sessions WorkoutSession[]
   personal_records PersonalRecord[]
-  crm_interactions CrmInteraction[]
-  appointments     Appointment[]
-  access_logs      AccessLog[]
+  crm_interactions   CrmInteraction[]
+  appointments       Appointment[]
+  access_logs        AccessLog[]
+  marketplace_orders MarketplaceOrder[]
+  nutrition_plans    NutritionPlan[]
+  food_diary_entries FoodDiaryEntry[]
 
   @@index([gym_id, status])
   @@index([gym_id, risk_score])
@@ -649,4 +673,151 @@ model Notification {
   @@index([user_id, is_read, created_at(sort: Desc)])
   @@index([gym_id, created_at(sort: Desc)])
   @@map("notifications")
+}
+
+// ─── MARKETPLACE ──────────────────────────────────────────────────────────────
+
+model ProductCategory {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gym_id      String   @db.Uuid
+  name        String   @db.VarChar(100)
+  description String?
+  image_url   String?
+  sort_order  Int      @default(0)
+  is_active   Boolean  @default(true)
+  created_at  DateTime @default(now())
+
+  gym      Gym       @relation(fields: [gym_id], references: [id], onDelete: Cascade)
+  products Product[]
+
+  @@index([gym_id, sort_order])
+  @@map("product_categories")
+}
+
+model Product {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gym_id      String   @db.Uuid
+  category_id String?  @db.Uuid
+  name        String   @db.VarChar(200)
+  description String?
+  price       Decimal  @db.Decimal(10, 2)
+  stock       Int      @default(0)
+  sku         String?  @db.VarChar(50)
+  image_url   String?
+  is_active   Boolean  @default(true)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  gym         Gym              @relation(fields: [gym_id], references: [id], onDelete: Cascade)
+  category    ProductCategory? @relation(fields: [category_id], references: [id])
+  order_items OrderItem[]
+
+  @@index([gym_id, is_active])
+  @@index([gym_id, category_id])
+  @@map("products")
+}
+
+model MarketplaceOrder {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gym_id     String   @db.Uuid
+  member_id  String   @db.Uuid
+  status     String   @default("PENDING") @db.VarChar(20) // PENDING|CONFIRMED|READY|DELIVERED|CANCELLED
+  total      Decimal  @db.Decimal(10, 2)
+  notes      String?
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  gym    Gym         @relation(fields: [gym_id], references: [id], onDelete: Cascade)
+  member Member      @relation(fields: [member_id], references: [id])
+  items  OrderItem[]
+
+  @@index([gym_id, status])
+  @@index([gym_id, member_id])
+  @@index([gym_id, created_at(sort: Desc)])
+  @@map("marketplace_orders")
+}
+
+model OrderItem {
+  id         String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  order_id   String  @db.Uuid
+  product_id String  @db.Uuid
+  quantity   Int
+  unit_price Decimal @db.Decimal(10, 2)
+  subtotal   Decimal @db.Decimal(10, 2)
+
+  order   MarketplaceOrder @relation(fields: [order_id], references: [id], onDelete: Cascade)
+  product Product          @relation(fields: [product_id], references: [id])
+
+  @@map("order_items")
+}
+
+// ─── NUTRICIÓN ────────────────────────────────────────────────────────────────
+
+model NutritionPlan {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gym_id       String   @db.Uuid
+  member_id    String   @db.Uuid
+  name         String   @db.VarChar(200)
+  goal         String   @default("MAINTENANCE") @db.VarChar(30) // WEIGHT_LOSS|MUSCLE_GAIN|MAINTENANCE|PERFORMANCE
+  kcal_target  Int
+  protein_g    Int
+  carbs_g      Int
+  fat_g        Int
+  notes        String?
+  is_active    Boolean  @default(true)
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+
+  gym             Gym              @relation(fields: [gym_id], references: [id], onDelete: Cascade)
+  member          Member           @relation(fields: [member_id], references: [id])
+  food_diary_entries FoodDiaryEntry[]
+
+  @@index([gym_id, member_id])
+  @@index([gym_id, is_active])
+  @@map("nutrition_plans")
+}
+
+model FoodItem {
+  id              String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gym_id          String? @db.Uuid  // null = item global de la biblioteca
+  name            String  @db.VarChar(200)
+  brand           String? @db.VarChar(100)
+  kcal_per_100g   Float
+  protein_per_100g Float
+  carbs_per_100g  Float
+  fat_per_100g    Float
+  is_verified     Boolean @default(false)
+  created_at      DateTime @default(now())
+
+  gym               Gym?             @relation(fields: [gym_id], references: [id], onDelete: Cascade)
+  food_diary_entries FoodDiaryEntry[]
+
+  @@index([gym_id])
+  @@map("food_items")
+}
+
+model FoodDiaryEntry {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gym_id       String   @db.Uuid
+  member_id    String   @db.Uuid
+  plan_id      String?  @db.Uuid
+  food_item_id String   @db.Uuid
+  date         DateTime @db.Date
+  meal_type    String   @default("LUNCH") @db.VarChar(20) // BREAKFAST|LUNCH|DINNER|SNACK
+  quantity_g   Float
+  kcal         Float
+  protein_g    Float
+  carbs_g      Float
+  fat_g        Float
+  notes        String?
+  created_at   DateTime @default(now())
+
+  gym       Gym            @relation(fields: [gym_id], references: [id], onDelete: Cascade)
+  member    Member         @relation(fields: [member_id], references: [id])
+  plan      NutritionPlan? @relation(fields: [plan_id], references: [id])
+  food_item FoodItem       @relation(fields: [food_item_id], references: [id])
+
+  @@index([gym_id, member_id, date(sort: Desc)])
+  @@index([gym_id, plan_id])
+  @@map("food_diary_entries")
 }

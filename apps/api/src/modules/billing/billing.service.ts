@@ -1,5 +1,6 @@
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
+import { StripeService } from './stripe.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { ListPaymentsDto } from './dto/list-payments.dto';
 
@@ -7,7 +8,10 @@ import { ListPaymentsDto } from './dto/list-payments.dto';
 export class BillingService {
   private readonly logger = new Logger(BillingService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly stripe: StripeService,
+  ) {}
 
   // ─── PAGOS ───────────────────────────────────────────────────────────────────
 
@@ -117,33 +121,6 @@ export class BillingService {
     return { ...payment, amount: Number(payment.amount) };
   }
 
-  async refundPayment(gymId: string, id: string, reason?: string) {
-    const payment = await this.prisma.payment.findFirst({
-      where: { id, gym_id: gymId },
-    });
-    if (!payment) throw new NotFoundException('Pago no encontrado');
-
-    if (payment.status !== 'SUCCEEDED') {
-      throw new BadRequestException('Solo se pueden reembolsar pagos exitosos');
-    }
-
-    // Para pagos manuales: marcar como reembolsado directamente
-    // Para Stripe/MercadoPago: llamar al gateway (se implementa en Sprint integración gateway)
-    if (['STRIPE', 'MERCADOPAGO'].includes(payment.payment_type)) {
-      this.logger.warn(`[STUB] Gateway refund not yet implemented for ${payment.payment_type}`);
-    }
-
-    const updated = await this.prisma.payment.update({
-      where: { id },
-      data: {
-        status: 'REFUNDED',
-        notes: reason ? `Reembolso: ${reason}` : payment.notes,
-      },
-    });
-
-    return { ...updated, amount: Number(updated.amount) };
-  }
-
   async getMemberPayments(gymId: string, memberId: string) {
     const member = await this.prisma.member.findFirst({ where: { id: memberId, gym_id: gymId } });
     if (!member) throw new NotFoundException('Miembro no encontrado');
@@ -212,16 +189,131 @@ export class BillingService {
     };
   }
 
-  // ─── WEBHOOK STUBS ───────────────────────────────────────────────────────────
+  // ─── Stripe Payment Intent (para pagos online) ───────────────────────────────
 
-  async handleStripeWebhook(_payload: Buffer, _signature: string): Promise<void> {
-    // TODO Sprint integración Stripe: verificar signature con stripe.webhooks.constructEvent
-    // y procesar eventos: payment_intent.succeeded, payment_intent.payment_failed, etc.
-    this.logger.log('[STUB] Stripe webhook received');
+  async createStripeIntent(gymId: string, dto: CreatePaymentDto) {
+    const member = await this.prisma.member.findFirst({
+      where: { id: dto.memberId, gym_id: gymId },
+      include: { user: { select: { email: true } } },
+    });
+    if (!member) throw new NotFoundException('Miembro no encontrado');
+
+    const intent = await this.stripe.createPaymentIntent({
+      amount: dto.amount,
+      currency: dto.currency ?? 'usd',
+      metadata: {
+        gymId,
+        memberId: dto.memberId,
+        memberEmail: member.user.email,
+        ...(dto.membershipId ? { membershipId: dto.membershipId } : {}),
+      },
+      description: dto.description,
+    });
+
+    if (!intent) {
+      // Stripe not configured — fall back to manual record
+      return this.createPayment(gymId, dto);
+    }
+
+    // Create a PENDING payment record linked to Stripe
+    const payment = await this.prisma.payment.create({
+      data: {
+        gym_id: gymId,
+        member_id: dto.memberId,
+        membership_id: dto.membershipId,
+        amount: dto.amount,
+        currency: dto.currency ?? 'USD',
+        status: 'PENDING',
+        payment_type: 'STRIPE',
+        description: dto.description,
+        gateway_payment_id: intent.paymentIntentId,
+        gateway_status: 'requires_payment_method',
+      },
+    });
+
+    return { payment, clientSecret: intent.clientSecret };
+  }
+
+  // ─── Stripe refund via gateway ────────────────────────────────────────────────
+
+  async refundPayment(gymId: string, id: string, reason?: string) {
+    const payment = await this.prisma.payment.findFirst({ where: { id, gym_id: gymId } });
+    if (!payment) throw new NotFoundException('Pago no encontrado');
+    if (payment.status !== 'SUCCEEDED') {
+      throw new BadRequestException('Solo se pueden reembolsar pagos exitosos');
+    }
+
+    if (payment.payment_type === 'STRIPE' && payment.gateway_payment_id) {
+      const refund = await this.stripe.createRefund(payment.gateway_payment_id, reason);
+      if (!refund) this.logger.warn(`[STRIPE] Refund skipped — client not configured`);
+    } else if (payment.payment_type === 'MERCADOPAGO') {
+      this.logger.warn(`[STUB] MercadoPago refund not yet implemented`);
+    }
+
+    const updated = await this.prisma.payment.update({
+      where: { id },
+      data: { status: 'REFUNDED', notes: reason ? `Reembolso: ${reason}` : payment.notes },
+    });
+    return { ...updated, amount: Number(updated.amount) };
+  }
+
+  // ─── Stripe webhook ───────────────────────────────────────────────────────────
+
+  async handleStripeWebhook(payload: Buffer, signature: string): Promise<void> {
+    const event = this.stripe.constructWebhookEvent(payload, signature);
+
+    if (!event) {
+      this.logger.warn('[STRIPE] Webhook ignored — credentials not configured');
+      return;
+    }
+
+    this.logger.log(`Stripe event: ${event.type}`);
+
+    switch (event.type) {
+      case 'payment_intent.succeeded': {
+        const pi = event.data.object as { id: string; amount: number };
+        await this.prisma.payment.updateMany({
+          where: { gateway_payment_id: pi.id },
+          data: {
+            status: 'SUCCEEDED',
+            gateway_status: 'succeeded',
+            paid_at: new Date(),
+            amount: pi.amount / 100,
+          },
+        });
+        break;
+      }
+
+      case 'payment_intent.payment_failed': {
+        const pi = event.data.object as { id: string; last_payment_error?: { message?: string } };
+        await this.prisma.payment.updateMany({
+          where: { gateway_payment_id: pi.id },
+          data: {
+            status: 'FAILED',
+            gateway_status: 'failed',
+            notes: pi.last_payment_error?.message ?? 'Pago fallido via Stripe',
+          },
+        });
+        break;
+      }
+
+      case 'charge.refunded': {
+        const charge = event.data.object as { payment_intent?: string };
+        if (charge.payment_intent) {
+          await this.prisma.payment.updateMany({
+            where: { gateway_payment_id: charge.payment_intent },
+            data: { status: 'REFUNDED', gateway_status: 'refunded' },
+          });
+        }
+        break;
+      }
+
+      default:
+        this.logger.debug(`Unhandled Stripe event: ${event.type}`);
+    }
   }
 
   async handleMercadoPagoWebhook(_data: Record<string, unknown>): Promise<void> {
-    // TODO Sprint integración MercadoPago
-    this.logger.log('[STUB] MercadoPago webhook received');
+    this.logger.log('[STUB] MercadoPago webhook received — not yet implemented');
   }
 }
