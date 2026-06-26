@@ -3,10 +3,13 @@ import { TtsService } from './tts.service';
 import { SttService } from './stt.service';
 import { RagService } from './rag.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PlanGuard } from '../../common/guards/plan.guard';
+import { RequiresPlan } from '../../common/decorators/requires-plan.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 
-@UseGuards(JwtAuthGuard)
+@RequiresPlan('PRO', 'ELITE', 'ENTERPRISE')
+@UseGuards(JwtAuthGuard, PlanGuard)
 @Controller('ai')
 export class AiController {
   constructor(

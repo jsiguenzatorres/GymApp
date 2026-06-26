@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,9 +8,11 @@ import {
   ActivityIndicator,
   Alert,
   RefreshControl,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useAuthStore } from '@/store/auth.store';
 import {
   marketplaceApi,
@@ -37,7 +39,14 @@ const ORDER_STATUS_COLOR: Record<string, string> = {
 
 export default function MarketplaceScreen() {
   const { accessToken } = useAuthStore();
-  const [view, setView] = useState<'store' | 'orders'>('store');
+  const [view, setView] = useState<'store' | 'orders' | 'camera'>('store');
+  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+  const cameraRef = useRef<CameraView>(null);
+  const [photoUri, setPhotoUri] = useState<string | null>(null);
+  const [identifying, setIdentifying] = useState(false);
+  const [photoMatches, setPhotoMatches] = useState<
+    Array<{ id: string; name: string; price: string; confidence: number }>
+  >([]);
 
   // Store state
   const [categories, setCategories] = useState<ProductCategory[]>([]);
@@ -111,6 +120,54 @@ export default function MarketplaceScreen() {
   }, 0);
   const cartCount = Object.values(cart).reduce((a, b) => a + b, 0);
 
+  const openCamera = async () => {
+    if (!cameraPermission?.granted) {
+      const result = await requestCameraPermission();
+      if (!result.granted) {
+        Alert.alert(
+          'Permiso requerido',
+          'Necesitamos acceso a la cámara para identificar productos.',
+        );
+        return;
+      }
+    }
+    setPhotoUri(null);
+    setPhotoMatches([]);
+    setView('camera');
+  };
+
+  const capturePhoto = async () => {
+    if (!cameraRef.current) return;
+    try {
+      const photo = await cameraRef.current.takePictureAsync({ base64: true, quality: 0.7 });
+      if (!photo) return;
+      setPhotoUri(photo.uri);
+      if (photo.base64 && accessToken) {
+        setIdentifying(true);
+        try {
+          const result = await marketplaceApi.identifyByPhoto(
+            accessToken,
+            photo.base64,
+            'image/jpeg',
+          );
+          setPhotoMatches(result.matches ?? []);
+          if ((result.matches ?? []).length === 0) {
+            Alert.alert(
+              'Sin coincidencias',
+              'No encontramos productos similares. Intenta con otra foto.',
+            );
+          }
+        } catch {
+          Alert.alert('Error', 'No se pudo identificar el producto. Intenta de nuevo.');
+        } finally {
+          setIdentifying(false);
+        }
+      }
+    } catch {
+      Alert.alert('Error', 'No se pudo capturar la foto.');
+    }
+  };
+
   const placeOrder = async () => {
     if (!accessToken || cartCount === 0) return;
     const items = Object.entries(cart).map(([productId, quantity]) => ({ productId, quantity }));
@@ -157,7 +214,79 @@ export default function MarketplaceScreen() {
             📦 Mis pedidos
           </Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, view === 'camera' && styles.tabActive]}
+          onPress={openCamera}
+        >
+          <Text style={[styles.tabText, view === 'camera' && styles.tabTextActive]}>📷 Foto</Text>
+        </TouchableOpacity>
       </View>
+
+      {/* ── CAMERA VIEW ── */}
+      {view === 'camera' && (
+        <View style={styles.cameraContainer}>
+          {!photoUri ? (
+            <>
+              <CameraView ref={cameraRef} style={styles.camera} facing="back" />
+              <View style={styles.cameraControls}>
+                <TouchableOpacity onPress={() => setView('store')} style={styles.cameraCancelBtn}>
+                  <Text style={styles.cameraCancelText}>Cancelar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={capturePhoto} style={styles.captureBtn}>
+                  <View style={styles.captureInner} />
+                </TouchableOpacity>
+                <View style={{ width: 70 }} />
+              </View>
+              <Text style={styles.cameraHint}>Apunta al producto para identificarlo</Text>
+            </>
+          ) : (
+            <ScrollView contentContainerStyle={styles.photoResultContainer}>
+              <Image source={{ uri: photoUri }} style={styles.photoPreview} resizeMode="cover" />
+              {identifying ? (
+                <View style={styles.identifyingRow}>
+                  <ActivityIndicator color="#1d4ed8" />
+                  <Text style={styles.identifyingText}>Identificando producto…</Text>
+                </View>
+              ) : photoMatches.length > 0 ? (
+                <>
+                  <Text style={styles.matchesTitle}>Productos encontrados</Text>
+                  {photoMatches.map((match) => (
+                    <View key={match.id} style={styles.matchCard}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.matchName}>{match.name}</Text>
+                        <Text style={styles.matchConfidence}>
+                          Coincidencia: {Math.round(match.confidence * 100)}%
+                        </Text>
+                      </View>
+                      <View style={styles.matchRight}>
+                        <Text style={styles.matchPrice}>${parseFloat(match.price).toFixed(2)}</Text>
+                        <TouchableOpacity
+                          onPress={() => {
+                            addToCart(match.id);
+                            setView('store');
+                          }}
+                          style={styles.matchAddBtn}
+                        >
+                          <Text style={styles.matchAddText}>+ Agregar</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ))}
+                </>
+              ) : null}
+              <TouchableOpacity
+                onPress={() => {
+                  setPhotoUri(null);
+                  setPhotoMatches([]);
+                }}
+                style={styles.retakeBtn}
+              >
+                <Text style={styles.retakeBtnText}>📷 Tomar otra foto</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          )}
+        </View>
+      )}
 
       {/* ── ORDERS VIEW ── */}
       {view === 'orders' && (
@@ -465,4 +594,74 @@ const styles = StyleSheet.create({
   orderItemMeta: { fontSize: 13, color: '#6b7280', fontWeight: '500' },
   orderFooter: { borderTopWidth: 1, borderTopColor: '#f3f4f6', paddingTop: 8 },
   orderTotal: { fontSize: 15, fontWeight: '700', color: '#111827' },
+  // Camera
+  cameraContainer: { flex: 1, backgroundColor: '#000' },
+  camera: { flex: 1 },
+  cameraControls: {
+    position: 'absolute',
+    bottom: 40,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 30,
+  },
+  cameraCancelBtn: { padding: 12 },
+  cameraCancelText: { color: '#fff', fontSize: 15, fontWeight: '600' },
+  captureBtn: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: 'rgba(255,255,255,0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  captureInner: { width: 58, height: 58, borderRadius: 29, backgroundColor: '#fff' },
+  cameraHint: {
+    position: 'absolute',
+    top: 24,
+    left: 0,
+    right: 0,
+    textAlign: 'center',
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  photoResultContainer: { padding: 16, gap: 16, paddingBottom: 60 },
+  photoPreview: { width: '100%', height: 220, borderRadius: 14, backgroundColor: '#e5e7eb' },
+  identifyingRow: { flexDirection: 'row', alignItems: 'center', gap: 12, justifyContent: 'center' },
+  identifyingText: { color: '#374151', fontSize: 14 },
+  matchesTitle: { fontSize: 16, fontWeight: '700', color: '#111827' },
+  matchCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 14,
+    gap: 10,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  matchName: { fontSize: 14, fontWeight: '600', color: '#111827' },
+  matchConfidence: { fontSize: 12, color: '#9ca3af', marginTop: 2 },
+  matchRight: { alignItems: 'flex-end', gap: 6 },
+  matchPrice: { fontSize: 15, fontWeight: '700', color: '#1d4ed8' },
+  matchAddBtn: {
+    backgroundColor: '#1d4ed8',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  matchAddText: { color: '#fff', fontSize: 13, fontWeight: '600' },
+  retakeBtn: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 12,
+    padding: 14,
+    alignItems: 'center',
+  },
+  retakeBtnText: { color: '#374151', fontWeight: '600', fontSize: 14 },
 });

@@ -232,6 +232,17 @@ export const marketplaceApi = {
     token: string,
     body: { items: { productId: string; quantity: number }[]; notes?: string },
   ) => apiClient.post<{ id: string; status: string }>('/api/v1/marketplace-orders', body, token),
+  identifyByPhoto: (token: string, image: string, mimeType: string) =>
+    apiClient.post<{
+      identified: { name: string; brand?: string } | null;
+      matches: Array<{
+        id: string;
+        name: string;
+        price: string;
+        confidence: number;
+        description?: string;
+      }>;
+    }>('/api/v1/products/by-photo', { image, mimeType }, token),
 };
 
 export const nutritionApi = {

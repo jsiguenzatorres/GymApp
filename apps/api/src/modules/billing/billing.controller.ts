@@ -19,13 +19,17 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { BillingService } from './billing.service';
+import { MercadoPagoService } from './mercadopago.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { ListPaymentsDto } from './dto/list-payments.dto';
 
 @UseGuards(JwtAuthGuard)
 @Controller()
 export class BillingController {
-  constructor(private readonly billingService: BillingService) {}
+  constructor(
+    private readonly billingService: BillingService,
+    private readonly mpService: MercadoPagoService,
+  ) {}
 
   private gymId(user: JwtPayload): string {
     if (!user.gymId) throw new ForbiddenException('Sin contexto de gym');
@@ -79,6 +83,33 @@ export class BillingController {
   @HttpCode(HttpStatus.CREATED)
   createStripeIntent(@CurrentUser() user: JwtPayload, @Body() dto: CreatePaymentDto) {
     return this.billingService.createStripeIntent(this.gymId(user), dto);
+  }
+
+  // ─── MERCADOPAGO ──────────────────────────────────────────────────────────────
+
+  @Post('billing/mp/preference')
+  @HttpCode(HttpStatus.CREATED)
+  createMpPreference(
+    @CurrentUser() user: JwtPayload,
+    @Body()
+    body: {
+      items: { id: string; title: string; quantity: number; unit_price: number }[];
+      payerEmail: string;
+      payerName?: string;
+      externalReference: string;
+    },
+  ) {
+    return this.mpService.createPreference(
+      body.items,
+      { email: body.payerEmail, name: body.payerName },
+      this.gymId(user),
+      body.externalReference,
+    );
+  }
+
+  @Get('billing/mp/payment/:paymentId')
+  checkMpPayment(@CurrentUser() _user: JwtPayload, @Param('paymentId') paymentId: string) {
+    return this.mpService.getPaymentStatus(paymentId);
   }
 }
 

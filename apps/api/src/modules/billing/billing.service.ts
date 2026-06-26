@@ -1,6 +1,7 @@
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { StripeService } from './stripe.service';
+import { MercadoPagoService } from './mercadopago.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { ListPaymentsDto } from './dto/list-payments.dto';
 
@@ -11,6 +12,7 @@ export class BillingService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly stripe: StripeService,
+    private readonly mp: MercadoPagoService,
   ) {}
 
   // ─── PAGOS ───────────────────────────────────────────────────────────────────
@@ -313,7 +315,36 @@ export class BillingService {
     }
   }
 
-  async handleMercadoPagoWebhook(_data: Record<string, unknown>): Promise<void> {
-    this.logger.log('[STUB] MercadoPago webhook received — not yet implemented');
+  async handleMercadoPagoWebhook(data: Record<string, unknown>): Promise<void> {
+    const result = await this.mp.processWebhook(
+      data as Parameters<typeof this.mp.processWebhook>[0],
+    );
+    if (!result) return;
+
+    this.logger.log(
+      `MP webhook: paymentId=${result.paymentId} status=${result.status} ref=${result.externalReference}`,
+    );
+
+    // externalReference = our internal payment UUID
+    if (!result.externalReference) return;
+
+    const payment = await this.prisma.payment.findFirst({
+      where: { id: result.externalReference },
+    });
+    if (!payment) return;
+
+    const newStatus: 'SUCCEEDED' | 'FAILED' | 'PENDING' =
+      result.status === 'approved'
+        ? 'SUCCEEDED'
+        : result.status === 'rejected'
+          ? 'FAILED'
+          : 'PENDING';
+
+    await this.prisma.payment.update({
+      where: { id: payment.id },
+      data: { status: newStatus },
+    });
+
+    this.logger.log(`Payment ${payment.id} updated to ${newStatus} via MercadoPago`);
   }
 }

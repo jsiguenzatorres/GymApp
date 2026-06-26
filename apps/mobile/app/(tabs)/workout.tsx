@@ -15,6 +15,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useAuthStore } from '@/store/auth.store';
 import { memberApi, zeusApi, WorkoutPlan } from '@/lib/api-client';
+import { useStt } from '@/hooks/useStt';
+import { useTts } from '@/hooks/useTts';
 
 interface Message {
   role: 'user' | 'zeus';
@@ -37,7 +39,10 @@ export default function WorkoutTab() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
+  const [ttsEnabled, setTtsEnabled] = useState(true);
   const flatRef = useRef<FlatList>(null);
+  const stt = useStt(accessToken);
+  const tts = useTts(accessToken);
 
   const loadPlan = useCallback(async () => {
     if (!accessToken) return;
@@ -66,6 +71,7 @@ export default function WorkoutTab() {
     try {
       const res = await zeusApi.chat(text.trim(), accessToken, memberId ?? undefined);
       setMessages((prev) => [...prev, { role: 'zeus', text: res.reply }]);
+      if (ttsEnabled && res.reply) tts.speak(res.reply);
     } catch {
       setMessages((prev) => [
         ...prev,
@@ -104,8 +110,19 @@ export default function WorkoutTab() {
           {zeusOpen && (
             <View style={styles.zeusBox}>
               <View style={styles.zeusHeader}>
-                <Text style={styles.zeusTitle}>⚡ ZEUS Coach IA</Text>
-                <Text style={styles.zeusSubtitle}>Tu entrenador personal en tiempo real</Text>
+                <View>
+                  <Text style={styles.zeusTitle}>⚡ ZEUS Coach IA</Text>
+                  <Text style={styles.zeusSubtitle}>Tu entrenador personal en tiempo real</Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => {
+                    setTtsEnabled((v) => !v);
+                    if (tts.isPlaying) tts.stop();
+                  }}
+                  style={[styles.ttsToggle, ttsEnabled && styles.ttsToggleOn]}
+                >
+                  <Text style={styles.ttsToggleText}>{ttsEnabled ? '🔊' : '🔇'}</Text>
+                </TouchableOpacity>
               </View>
 
               {/* Messages */}
@@ -152,17 +169,34 @@ export default function WorkoutTab() {
                 <TextInput
                   value={input}
                   onChangeText={setInput}
-                  placeholder="Pregunta a ZEUS..."
-                  placeholderTextColor="#9ca3af"
+                  placeholder={stt.isRecording ? 'Escuchando…' : 'Pregunta a ZEUS...'}
+                  placeholderTextColor={stt.isRecording ? '#f59e0b' : '#9ca3af'}
                   style={styles.textInput}
                   onSubmitEditing={() => sendMessage(input)}
                   returnKeyType="send"
-                  editable={!sending}
+                  editable={!sending && !stt.isRecording}
                 />
                 <TouchableOpacity
+                  onPress={async () => {
+                    if (stt.isRecording) {
+                      const text = await stt.stopAndTranscribe();
+                      if (text?.trim()) sendMessage(text);
+                    } else {
+                      await stt.startRecording();
+                    }
+                  }}
+                  disabled={sending}
+                  style={[styles.micBtn, stt.isRecording && styles.micBtnActive]}
+                >
+                  <Text style={styles.micBtnText}>{stt.isRecording ? '⏹' : '🎙'}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
                   onPress={() => sendMessage(input)}
-                  disabled={!input.trim() || sending}
-                  style={[styles.sendBtn, (!input.trim() || sending) && { opacity: 0.4 }]}
+                  disabled={!input.trim() || sending || stt.isRecording}
+                  style={[
+                    styles.sendBtn,
+                    (!input.trim() || sending || stt.isRecording) && { opacity: 0.4 },
+                  ]}
                 >
                   <Text style={styles.sendBtnText}>↑</Text>
                 </TouchableOpacity>
@@ -266,9 +300,26 @@ const styles = StyleSheet.create({
   zeusBtnActive: { backgroundColor: '#78350f' },
   zeusBtnText: { color: '#fbbf24', fontWeight: '700', fontSize: 14 },
   zeusBox: { backgroundColor: '#1c1917', borderRadius: 16, overflow: 'hidden' },
-  zeusHeader: { padding: 16, borderBottomWidth: 1, borderBottomColor: '#292524' },
+  zeusHeader: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#292524',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
   zeusTitle: { color: '#fbbf24', fontSize: 15, fontWeight: '700' },
   zeusSubtitle: { color: '#78716c', fontSize: 12, marginTop: 2 },
+  ttsToggle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#292524',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  ttsToggleOn: { backgroundColor: '#451a03' },
+  ttsToggleText: { fontSize: 16 },
   messagesContainer: { padding: 16, gap: 10, minHeight: 120 },
   emptyChat: { color: '#a8a29e', fontSize: 14, textAlign: 'center', marginBottom: 12 },
   suggestions: { gap: 8 },
@@ -295,6 +346,16 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 14,
   },
+  micBtn: {
+    width: 40,
+    height: 40,
+    backgroundColor: '#292524',
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  micBtnActive: { backgroundColor: '#7f1d1d' },
+  micBtnText: { fontSize: 18 },
   sendBtn: {
     width: 40,
     height: 40,
