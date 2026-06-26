@@ -126,6 +126,9 @@ model Gym {
   class_types         ClassType[]
   class_sessions      ClassSession[]
   class_enrollments   ClassEnrollment[]
+  points_transactions PointsTransaction[]
+  badges              Badge[]
+  member_badges       MemberBadge[]
 
   @@index([saas_plan, is_active])
   @@map("gyms")
@@ -224,6 +227,9 @@ model Member {
   risk_score            Int       @default(0) // 0-100
   risk_score_updated_at DateTime?
   loyalty_level         String    @default("bronze") @db.VarChar(20)
+  // Gamificación
+  points_lifetime       Int       @default(0) // FitCoins acumulados históricamente (nivel)
+  points_balance        Int       @default(0) // FitCoins disponibles (gastables)
   // Metadata
   referred_by   String?      @db.Uuid
   source        String?      @db.VarChar(50) // walk-in|referral|social_media|web
@@ -245,10 +251,13 @@ model Member {
   marketplace_orders MarketplaceOrder[]
   nutrition_plans    NutritionPlan[]
   food_diary_entries FoodDiaryEntry[]
-  class_enrollments  ClassEnrollment[]
+  class_enrollments   ClassEnrollment[]
+  points_transactions PointsTransaction[]
+  member_badges       MemberBadge[]
 
   @@index([gym_id, status])
   @@index([gym_id, risk_score])
+  @@index([gym_id, points_lifetime(sort: Desc)])
   @@index([gym_id, created_at(sort: Desc)])
   @@map("members")
 }
@@ -886,4 +895,57 @@ model ClassEnrollment {
   @@unique([session_id, member_id])
   @@index([gym_id, member_id])
   @@map("class_enrollments")
+}
+
+// ─── Gamificación ─────────────────────────────────────────────────────────────
+
+model PointsTransaction {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gym_id       String   @db.Uuid
+  member_id    String   @db.Uuid
+  amount       Int      // positivo = ganar, negativo = gastar
+  type         String   @db.VarChar(50) // CHECK_IN | WORKOUT_COMPLETE | PR_ACHIEVED | BADGE_UNLOCKED | MANUAL
+  description  String?
+  reference_id String?  @db.Uuid
+  created_at   DateTime @default(now())
+
+  gym    Gym    @relation(fields: [gym_id], references: [id], onDelete: Cascade)
+  member Member @relation(fields: [member_id], references: [id])
+
+  @@index([gym_id, member_id, created_at(sort: Desc)])
+  @@map("points_transactions")
+}
+
+model Badge {
+  id              String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gym_id          String      @db.Uuid
+  name            String      @db.VarChar(100)
+  description     String?
+  icon            String      @default("🏆") @db.VarChar(10)
+  condition_type  String      @db.VarChar(50) // CHECKIN_COUNT | WORKOUT_COUNT | PR_COUNT | POINTS_EARNED | STREAK_DAYS
+  condition_value Int
+  is_active       Boolean     @default(true)
+  created_at      DateTime    @default(now())
+
+  gym           Gym           @relation(fields: [gym_id], references: [id], onDelete: Cascade)
+  member_badges MemberBadge[]
+
+  @@index([gym_id, is_active])
+  @@map("badges")
+}
+
+model MemberBadge {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gym_id    String   @db.Uuid
+  member_id String   @db.Uuid
+  badge_id  String   @db.Uuid
+  earned_at DateTime @default(now())
+
+  gym    Gym    @relation(fields: [gym_id], references: [id], onDelete: Cascade)
+  member Member @relation(fields: [member_id], references: [id])
+  badge  Badge  @relation(fields: [badge_id], references: [id])
+
+  @@unique([member_id, badge_id])
+  @@index([gym_id, member_id])
+  @@map("member_badges")
 }

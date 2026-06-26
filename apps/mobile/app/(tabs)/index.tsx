@@ -240,6 +240,11 @@ export default function HomeTab() {
               },
               { emoji: '🏢', label: 'Mi Gym', onPress: () => router.push('/gym' as never) },
               { emoji: '🗓️', label: 'Clases', onPress: () => router.push('/classes' as never) },
+              {
+                emoji: '🏅',
+                label: 'Logros',
+                onPress: () => router.push('/gamification' as never),
+              },
               { emoji: '🛒', label: 'Tienda', onPress: () => router.push('/marketplace') },
               { emoji: '🥗', label: 'Nutrición', onPress: () => router.push('/nutrition') },
               { emoji: '💜', label: 'Chat ARIA', onPress: () => router.push('/aria') },

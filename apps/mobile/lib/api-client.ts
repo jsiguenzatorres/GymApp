@@ -476,6 +476,53 @@ export interface MyClassEnrollment {
   session_id: string;
 }
 
+// ─── Gamificación ─────────────────────────────────────────────────────────────
+
+export interface MemberStats {
+  balance: number;
+  lifetime: number;
+  level: {
+    name: string;
+    color: string;
+    emoji: string;
+    nextName: string | null;
+    nextThreshold: number | null;
+    progress: number;
+  };
+  recentTransactions: Array<{
+    id: string;
+    amount: number;
+    type: string;
+    description: string | null;
+    created_at: string;
+  }>;
+  badges: Array<{
+    id: string;
+    name: string;
+    description: string | null;
+    icon: string;
+    earned_at: string;
+  }>;
+}
+
+export interface LeaderboardEntry {
+  rank: number;
+  member_id: string;
+  first_name: string;
+  last_name: string;
+  avatar_url: string | null;
+  points_lifetime: number;
+  level_name: string;
+  level_emoji: string;
+  level_color: string;
+}
+
+export const gamificationApi = {
+  getMyStats: (token: string) => apiClient.get<MemberStats>('/api/v1/gamification/my-stats', token),
+  getLeaderboard: (token: string) =>
+    apiClient.get<LeaderboardEntry[]>('/api/v1/gamification/leaderboard', token),
+};
+
 export const classesApi = {
   getSessions: (token: string, startDate: string, endDate: string) =>
     apiClient.get<SessionWithMeta[]>(

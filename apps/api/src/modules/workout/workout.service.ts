@@ -5,7 +5,9 @@ import {
   BadRequestException,
   ForbiddenException,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../database/prisma.service';
+import { GeminiService } from '../ai/gemini.service';
 import { CreateExerciseDto } from './dto/create-exercise.dto';
 import { CreatePlanDto } from './dto/create-plan.dto';
 import { StartSessionDto } from './dto/start-session.dto';
@@ -15,7 +17,11 @@ import { LogSetDto, FinishSessionDto } from './dto/log-set.dto';
 export class WorkoutService {
   private readonly logger = new Logger(WorkoutService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly gemini: GeminiService,
+    private readonly eventEmitter: EventEmitter2,
+  ) {}
 
   // ─── EJERCICIOS ───────────────────────────────────────────────────────────────
 
@@ -332,7 +338,7 @@ export class WorkoutService {
     const finishedAt = new Date();
     const durationMin = Math.round((finishedAt.getTime() - session.started_at.getTime()) / 60000);
 
-    return this.prisma.workoutSession.update({
+    const updated = await this.prisma.workoutSession.update({
       where: { id: sessionId },
       data: {
         finished_at: finishedAt,
@@ -348,6 +354,14 @@ export class WorkoutService {
         member: { select: { first_name: true, last_name: true } },
       },
     });
+
+    this.eventEmitter.emit('workout.session_finished', {
+      gymId,
+      memberId: session.member_id,
+      sessionId,
+    });
+
+    return updated;
   }
 
   async getSession(gymId: string, id: string) {
@@ -454,5 +468,85 @@ export class WorkoutService {
     if (active.gym_id !== gymId) throw new ForbiddenException();
 
     return this.finishSession(gymId, active.id, {});
+  }
+
+  // ─── ZEUS ─────────────────────────────────────────────────────────────────────
+
+  async zeusChat(gymId: string, memberId: string, message: string) {
+    const [member, activeSession, recentPRs, exercises] = await Promise.all([
+      this.prisma.member.findFirst({
+        where: { id: memberId, gym_id: gymId },
+        select: { first_name: true, last_name: true },
+      }),
+      this.prisma.workoutSession.findFirst({
+        where: { member_id: memberId, gym_id: gymId, finished_at: null },
+        include: {
+          plan: { select: { name: true, goal: true } },
+          sets: {
+            orderBy: { created_at: 'desc' },
+            take: 10,
+            include: { exercise: { select: { name: true, muscle_groups: true } } },
+          },
+        },
+      }),
+      this.prisma.personalRecord.findMany({
+        where: { member_id: memberId, gym_id: gymId },
+        orderBy: { achieved_at: 'desc' },
+        take: 5,
+        include: { exercise: { select: { name: true } } },
+      }),
+      this.prisma.exercise.findMany({
+        where: { gym_id: gymId },
+        select: { name: true, muscle_groups: true, equipment: true },
+        take: 30,
+      }),
+    ]);
+
+    const memberName = member ? `${member.first_name} ${member.last_name}` : 'el miembro';
+
+    const sessionContext = activeSession
+      ? `SESIÓN ACTIVA: Plan "${activeSession.plan?.name ?? 'sin plan'}" (objetivo: ${activeSession.plan?.goal ?? 'N/A'}).
+Últimas series: ${activeSession.sets
+          .slice(0, 5)
+          .map((s) => `${s.exercise.name} ${s.weight_kg ?? 0}kg × ${s.reps ?? 0} reps`)
+          .join(', ')}`
+      : 'Sin sesión activa ahora mismo.';
+
+    const prContext = recentPRs.length
+      ? `PRs recientes: ${recentPRs.map((pr) => `${pr.exercise.name} ${pr.value}${pr.unit}`).join(', ')}`
+      : 'Sin PRs registrados aún.';
+
+    const exerciseContext = exercises.length
+      ? `Ejercicios disponibles en el gym: ${exercises.map((e) => e.name).join(', ')}`
+      : '';
+
+    const systemPrompt = `Eres ZEUS (Zone Expert Universal Support), el coach de workout en tiempo real de GymApp.
+Estás asistiendo a ${memberName} durante su entrenamiento.
+
+${sessionContext}
+${prContext}
+${exerciseContext}
+
+INSTRUCCIONES:
+- Responde SIEMPRE en español, de forma concisa y motivadora
+- Eres un coach de élite: directo, técnico y motivador
+- Si preguntan por un ejercicio, da instrucciones técnicas claras (postura, respiración, tempo)
+- Si preguntan por sustituciones, sugiere 2 alternativas con el mismo músculo objetivo
+- Si preguntan sobre peso o reps, basa tu respuesta en los PRs del miembro
+- Si no hay sesión activa, ayuda a planificar el entrenamiento del día
+- Máximo 2 párrafos. Usa términos de fitness en español cuando sea posible
+- Añade una frase motivadora corta al final cuando sea apropiado`;
+
+    try {
+      const response = await this.gemini.chat(systemPrompt, message);
+      return { response, isStub: false };
+    } catch (err) {
+      this.logger.error(`ZEUS Gemini error: ${(err as Error).message}`);
+      return {
+        response: 'ZEUS no disponible en este momento. Consulta con tu trainer directamente.',
+        isStub: false,
+        error: true,
+      };
+    }
   }
 }

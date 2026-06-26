@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { createHmac, randomBytes } from 'crypto';
 import * as QRCode from 'qrcode';
 import { PrismaService } from '../database/prisma.service';
@@ -32,6 +33,7 @@ export class AccessService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly eventEmitter: EventEmitter2,
   ) {
     this.secret = this.config.get<string>('QR_SECRET') ?? 'dev-qr-secret-change-in-prod';
   }
@@ -167,6 +169,7 @@ export class AccessService {
 
     // 7. Acceso concedido
     await this.log(gymId, member.id, 'GRANTED', 'QR', payload.n, deviceId);
+    this.eventEmitter.emit('member.checked_in', { gymId, memberId: member.id });
     return {
       result: 'GRANTED',
       memberId: member.id,

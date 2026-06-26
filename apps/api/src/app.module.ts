@@ -20,6 +20,7 @@ import { GymsModule } from './modules/gyms/gyms.module';
 import { MarketplaceModule } from './modules/marketplace/marketplace.module';
 import { NutritionModule } from './modules/nutrition/nutrition.module';
 import { ScheduleModule } from './modules/schedule/schedule.module';
+import { GamificationModule } from './modules/gamification/gamification.module';
 
 @Module({
   imports: [
@@ -53,6 +54,7 @@ import { ScheduleModule } from './modules/schedule/schedule.module';
     MarketplaceModule,
     NutritionModule,
     ScheduleModule,
+    GamificationModule,
     // Módulos de negocio se agregan aquí en cada sprint
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

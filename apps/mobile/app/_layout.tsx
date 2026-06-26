@@ -125,6 +125,10 @@ export default function RootLayout() {
           <Stack.Screen name="exercises" options={{ headerShown: false, presentation: 'modal' }} />
           <Stack.Screen name="classes" options={{ headerShown: false, presentation: 'modal' }} />
           <Stack.Screen
+            name="gamification"
+            options={{ headerShown: false, presentation: 'modal' }}
+          />
+          <Stack.Screen
             name="session"
             options={{ headerShown: false, presentation: 'fullScreenModal' }}
           />
