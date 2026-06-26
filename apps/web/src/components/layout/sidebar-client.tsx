@@ -19,6 +19,8 @@ import {
   Salad,
   Calendar,
   Trophy,
+  UserPlus,
+  MessageSquare,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -39,6 +41,8 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/workouts/zeus', label: 'ZEUS Coach IA', icon: Zap },
   { href: '/marketplace', label: 'Marketplace', icon: ShoppingBag },
   { href: '/nutrition', label: 'Nutrición IA', icon: Salad },
+  { href: '/leads', label: 'Pipeline de Leads', icon: UserPlus },
+  { href: '/feedback', label: 'Feedback & NPS', icon: MessageSquare },
   { href: '/classes', label: 'Clases & Horarios', icon: Calendar },
   { href: '/gamification', label: 'Gamificación', icon: Trophy },
   { href: '/access', label: 'Control de Acceso', icon: ScanLine },
