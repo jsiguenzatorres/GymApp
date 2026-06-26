@@ -248,6 +248,25 @@ export const nutritionApi = {
 };
 
 export const sessionApi = {
+  getDetail: (token: string, sessionId: string) =>
+    apiClient.get<{
+      id: string;
+      status: string;
+      started_at: string;
+      finished_at?: string;
+      duration_seconds?: number;
+      perceived_effort?: number;
+      notes?: string;
+      plan: { name: string } | null;
+      sets: Array<{
+        id: string;
+        set_number: number;
+        reps?: number;
+        weight_kg?: number;
+        exercise: { name: string };
+      }>;
+    }>(`/api/v1/workout-sessions/${sessionId}`, token),
+
   start: (
     token: string,
     body: { memberId: string; planId?: string; planDayId?: string; name?: string },

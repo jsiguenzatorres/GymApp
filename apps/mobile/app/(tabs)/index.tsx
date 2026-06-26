@@ -227,6 +227,12 @@ export default function HomeTab() {
             {[
               { emoji: '🏋️', label: 'Entrenar', onPress: () => router.push('/(tabs)/workout') },
               { emoji: '📱', label: 'Mi QR', onPress: () => router.push('/(tabs)/qr') },
+              {
+                emoji: '📊',
+                label: 'Mi Progreso',
+                onPress: () => router.push('/progress' as never),
+              },
+              { emoji: '📋', label: 'Historial', onPress: () => router.push('/history' as never) },
               { emoji: '🛒', label: 'Tienda', onPress: () => router.push('/marketplace') },
               { emoji: '🥗', label: 'Nutrición', onPress: () => router.push('/nutrition') },
               { emoji: '💜', label: 'Chat ARIA', onPress: () => router.push('/aria') },
@@ -236,12 +242,6 @@ export default function HomeTab() {
                 onPress: () => router.push('/appointments' as never),
               },
               { emoji: '💳', label: 'Mis Pagos', onPress: () => router.push('/payments' as never) },
-              {
-                emoji: '🔔',
-                label: 'Avisos',
-                onPress: () => router.push('/notifications' as never),
-              },
-              { emoji: '👤', label: 'Mi Perfil', onPress: () => router.push('/(tabs)/profile') },
             ].map((a) => (
               <TouchableOpacity key={a.label} style={styles.actionBtn} onPress={a.onPress}>
                 <Text style={styles.actionEmoji}>{a.emoji}</Text>

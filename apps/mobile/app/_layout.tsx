@@ -119,6 +119,8 @@ export default function RootLayout() {
             options={{ headerShown: false, presentation: 'modal' }}
           />
           <Stack.Screen name="payments" options={{ headerShown: false, presentation: 'modal' }} />
+          <Stack.Screen name="history" options={{ headerShown: false, presentation: 'modal' }} />
+          <Stack.Screen name="progress" options={{ headerShown: false, presentation: 'modal' }} />
           <Stack.Screen
             name="session"
             options={{ headerShown: false, presentation: 'fullScreenModal' }}
