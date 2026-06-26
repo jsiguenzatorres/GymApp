@@ -373,3 +373,67 @@ export const pushApi = {
   removeToken: (token: string, accessToken: string) =>
     apiClient.delete<void>('/api/v1/notifications/device-token', { token }, accessToken),
 };
+
+// ─── Gym Info ─────────────────────────────────────────────────────────────────
+
+export interface GymProfile {
+  id: string;
+  name: string;
+  city?: string;
+  address?: string;
+  phone?: string;
+  email?: string;
+  website?: string;
+  instagram?: string;
+  facebook?: string;
+  description?: string;
+}
+
+export interface OperatingHours {
+  day_of_week: number;
+  open_time: string;
+  close_time: string;
+  is_closed: boolean;
+}
+
+export interface StaffMember {
+  id: string;
+  first_name: string;
+  last_name: string;
+  role: string;
+  bio?: string;
+  specialties?: string[];
+  is_active: boolean;
+}
+
+export const gymApi = {
+  getProfile: (accessToken: string) =>
+    apiClient.get<GymProfile>('/api/v1/gym/profile', accessToken),
+  getHours: (accessToken: string) =>
+    apiClient.get<OperatingHours[]>('/api/v1/gym/operating-hours', accessToken),
+  getStaff: (accessToken: string) => apiClient.get<StaffMember[]>('/api/v1/staff', accessToken),
+};
+
+// ─── Exercises ────────────────────────────────────────────────────────────────
+
+export interface Exercise {
+  id: string;
+  name: string;
+  description?: string;
+  primary_muscle_group?: string;
+  secondary_muscle_groups?: string[];
+  equipment?: string;
+  difficulty?: 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED';
+  instructions?: string;
+  video_url?: string;
+}
+
+export const exercisesApi = {
+  list: (accessToken: string, params?: { search?: string; muscleGroup?: string }) => {
+    const qs = new URLSearchParams();
+    if (params?.search) qs.set('search', params.search);
+    if (params?.muscleGroup) qs.set('muscleGroup', params.muscleGroup);
+    const query = qs.toString() ? `?${qs.toString()}` : '';
+    return apiClient.get<Exercise[]>(`/api/v1/exercises${query}`, accessToken);
+  },
+};

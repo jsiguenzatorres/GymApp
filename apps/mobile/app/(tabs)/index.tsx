@@ -233,6 +233,12 @@ export default function HomeTab() {
                 onPress: () => router.push('/progress' as never),
               },
               { emoji: '📋', label: 'Historial', onPress: () => router.push('/history' as never) },
+              {
+                emoji: '💪',
+                label: 'Ejercicios',
+                onPress: () => router.push('/exercises' as never),
+              },
+              { emoji: '🏢', label: 'Mi Gym', onPress: () => router.push('/gym' as never) },
               { emoji: '🛒', label: 'Tienda', onPress: () => router.push('/marketplace') },
               { emoji: '🥗', label: 'Nutrición', onPress: () => router.push('/nutrition') },
               { emoji: '💜', label: 'Chat ARIA', onPress: () => router.push('/aria') },
