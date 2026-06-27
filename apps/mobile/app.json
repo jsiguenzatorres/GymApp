@@ -44,9 +44,6 @@
     "scheme": "gymapp",
     "experiments": {
       "typedRoutes": true
-    },
-    "extra": {
-      "eas": { "projectId": "TBD" }
     }
   }
 }
