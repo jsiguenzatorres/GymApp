@@ -30,7 +30,10 @@
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.NFC",
-        "android.permission.VIBRATE"
+        "android.permission.VIBRATE",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT"
       ]
     },
     "plugins": [
@@ -38,12 +41,22 @@
       "expo-camera",
       [
         "expo-local-authentication",
-        { "faceIDPermission": "Permite a GymApp usar Face ID para autenticarte." }
+        {
+          "faceIDPermission": "Permite a GymApp usar Face ID para autenticarte."
+        }
       ]
     ],
     "scheme": "gymapp",
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "5853d764-b3de-4bfe-9e87-78ddb0c8dfe3"
+      }
     }
   }
 }
