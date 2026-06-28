@@ -68,6 +68,7 @@ export class GeminiService {
 
     let attempts = 0;
     const maxAttempts = this.keys.length;
+    let lastError = '';
 
     while (attempts < maxAttempts) {
       try {
@@ -81,6 +82,7 @@ export class GeminiService {
       } catch (err: unknown) {
         const status = (err as { status?: number })?.status ?? 0;
         const message = (err as Error)?.message ?? '';
+        lastError = `[key#${this.currentKeyIndex} status=${status}] ${message.slice(0, 200)}`;
         const isQuota =
           RETRYABLE_CODES.includes(status) ||
           message.includes('quota') ||
@@ -99,7 +101,7 @@ export class GeminiService {
       }
     }
 
-    throw new Error('All Gemini API keys exhausted or rate-limited');
+    throw new Error(`All Gemini API keys exhausted. Last: ${lastError}`);
   }
 
   async generate(prompt: string, model = 'gemini-2.0-flash-lite'): Promise<string> {
