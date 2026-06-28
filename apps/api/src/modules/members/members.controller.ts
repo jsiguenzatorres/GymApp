@@ -65,6 +65,12 @@ export class MembersController {
 
   // ─── MEMBERS ─────────────────────────────────────────────────────────────────
 
+  // GET /api/v1/members/me — perfil del miembro autenticado (para app móvil)
+  @Get('members/me')
+  getMyMemberProfile(@CurrentUser() user: JwtPayload) {
+    return this.membersService.findMyProfile(user.sub, this.gymId(user));
+  }
+
   @Get('members')
   listMembers(@CurrentUser() user: JwtPayload, @Query() query: ListMembersDto) {
     return this.membersService.listMembers(this.gymId(user), query);

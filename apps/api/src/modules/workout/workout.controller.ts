@@ -162,4 +162,12 @@ export class WorkoutController {
   getWorkoutStats(@CurrentUser() user: JwtPayload) {
     return this.workoutService.getWorkoutStats(this.gymId(user));
   }
+
+  // ─── ZEUS ─────────────────────────────────────────────────────────────────────
+
+  @Post('workout/zeus/chat')
+  zeusChat(@CurrentUser() user: JwtPayload, @Body() body: { message: string; memberId?: string }) {
+    const memberId = body.memberId ?? user.sub;
+    return this.workoutService.zeusChat(this.gymId(user), memberId, body.message);
+  }
 }

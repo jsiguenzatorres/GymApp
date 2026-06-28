@@ -201,6 +201,22 @@ export class MembersService {
     };
   }
 
+  async findMyProfile(userId: string, gymId: string) {
+    const member = await this.prisma.member.findFirst({
+      where: { user_id: userId, gym_id: gymId },
+      include: {
+        user: { select: { email: true, last_login_at: true } },
+        memberships: {
+          orderBy: { created_at: 'desc' },
+          take: 1,
+          include: { type: true },
+        },
+      },
+    });
+    if (!member) throw new NotFoundException('Perfil de miembro no encontrado');
+    return member;
+  }
+
   async getMember(gymId: string, id: string) {
     const member = await this.prisma.member.findFirst({
       where: { id, gym_id: gymId },
