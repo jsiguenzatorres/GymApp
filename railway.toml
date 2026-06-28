@@ -3,7 +3,7 @@ builder = "nixpacks"
 buildCommand = "pnpm install --frozen-lockfile && pnpm --filter @gymapp/shared-types build && pnpm --filter api exec prisma generate && pnpm --filter api build"
 
 [deploy]
-startCommand = "node apps/api/dist/main"
+startCommand = "pnpm --filter api exec prisma migrate deploy && node apps/api/dist/main"
 healthcheckPath = "/api/v1/health"
 healthcheckTimeout = 300
 restartPolicyType = "on_failure"

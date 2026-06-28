@@ -96,6 +96,12 @@ model Gym {
   // Fiscal (para DTE El Salvador)
   tax_id      String?  @db.VarChar(20)  // NIT/RUC
   legal_name  String?  @db.VarChar(200)
+  // Plan Fundadores (oferta única primeros 50 gyms — precio congelado de por vida)
+  is_founder              Boolean   @default(false)
+  founder_plan_type       SaasPlan?
+  founder_locked_price    Decimal?  @db.Decimal(10, 2)
+  founder_locked_at       DateTime?
+
   // Metadata
   created_at  DateTime @default(now())
   updated_at  DateTime @updatedAt
@@ -1078,4 +1084,27 @@ model GymKnowledge {
 
   @@index([gym_id, type])
   @@map("gym_knowledge")
+}
+
+// ─── Plan Fundadores (oferta única de lanzamiento) ───────────────────────────
+// Singleton: solo debe existir UNA fila con key='default'.
+// Tracking de cupos para precio congelado de por vida a los primeros 50 gyms.
+
+model FounderOffer {
+  id                    String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  key                   String   @unique @default("default") @db.VarChar(50)
+  total_slots           Int      @default(50)
+  starter_price         Decimal  @default(59.00) @db.Decimal(10, 2)
+  pro_price             Decimal  @default(99.00) @db.Decimal(10, 2)
+  elite_price           Decimal  @default(199.00) @db.Decimal(10, 2)
+  regular_starter_price Decimal  @default(79.00) @db.Decimal(10, 2)
+  regular_pro_price     Decimal  @default(149.00) @db.Decimal(10, 2)
+  regular_elite_price   Decimal  @default(299.00) @db.Decimal(10, 2)
+  active                Boolean  @default(true)
+  deadline_at           DateTime?
+  free_months           Int      @default(3)
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+
+  @@map("founder_offers")
 }

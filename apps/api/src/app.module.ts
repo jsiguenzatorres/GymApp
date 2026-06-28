@@ -25,6 +25,7 @@ import { LeadsModule } from './modules/leads/leads.module';
 import { FeedbackModule } from './modules/feedback/feedback.module';
 import { WebhooksModule } from './modules/webhooks/webhooks.module';
 import { AutomationModule } from './modules/automation/automation.module';
+import { FounderModule } from './modules/founder/founder.module';
 
 @Module({
   imports: [
@@ -63,6 +64,7 @@ import { AutomationModule } from './modules/automation/automation.module';
     FeedbackModule,
     WebhooksModule,
     AutomationModule,
+    FounderModule,
     // Módulos de negocio se agregan aquí en cada sprint
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
@@ -84,6 +86,7 @@ export class AppModule implements NestModule {
         { path: 'api/v1/webhooks/whatsapp/*', method: RequestMethod.GET },
         { path: 'api/v1/webhooks/whatsapp/*', method: RequestMethod.POST },
         { path: 'api/v1/webhooks/telegram/*', method: RequestMethod.POST },
+        { path: 'api/v1/founder-offer/status', method: RequestMethod.GET },
       )
       .forRoutes('*');
   }
