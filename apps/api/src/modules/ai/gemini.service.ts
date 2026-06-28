@@ -28,11 +28,14 @@ export class GeminiService {
     this.logger.log(`GeminiService initialized with ${keys.length} API key(s)`);
   }
 
-  private getModel(modelName = 'gemini-2.0-flash-lite'): GenerativeModel {
+  private getModel(modelName = 'gemini-2.0-flash-lite', systemPrompt?: string): GenerativeModel {
     const key = this.keys[this.currentKeyIndex];
     const genAI = new GoogleGenerativeAI(key);
     return genAI.getGenerativeModel({
       model: modelName,
+      ...(systemPrompt
+        ? { systemInstruction: { role: 'system', parts: [{ text: systemPrompt }] } }
+        : {}),
       safetySettings: [
         {
           category: HarmCategory.HARM_CATEGORY_HARASSMENT,
@@ -68,12 +71,9 @@ export class GeminiService {
 
     while (attempts < maxAttempts) {
       try {
-        const genModel = this.getModel(model);
+        const genModel = this.getModel(model, systemPrompt);
 
-        const chat = genModel.startChat({
-          systemInstruction: systemPrompt,
-          history,
-        });
+        const chat = genModel.startChat({ history });
 
         const result = await chat.sendMessage(userMessage);
         const text = result.response.text();
