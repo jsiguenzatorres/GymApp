@@ -9,6 +9,7 @@ import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
 import { PrismaService } from '../database/prisma.service';
 import { EmailService } from '../notifications/email.service';
+import { StorageService } from '../storage/storage.service';
 import { CreateMembershipTypeDto, UpdateMembershipTypeDto } from './dto/create-membership-type.dto';
 import { CreateMemberDto, UpdateMemberDto } from './dto/create-member.dto';
 import {
@@ -25,6 +26,7 @@ export class MembersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly email: EmailService,
+    private readonly storage: StorageService,
   ) {}
 
   // ─── MEMBERSHIP TYPES ────────────────────────────────────────────────────────
@@ -215,6 +217,21 @@ export class MembersService {
     });
     if (!member) throw new NotFoundException('Perfil de miembro no encontrado');
     return member;
+  }
+
+  async updateMyAvatar(userId: string, gymId: string, imageDataUri: string) {
+    const member = await this.prisma.member.findFirst({
+      where: { user_id: userId, gym_id: gymId },
+      select: { id: true },
+    });
+    if (!member) throw new NotFoundException('Perfil de miembro no encontrado');
+
+    const { url } = await this.storage.uploadAvatar(member.id, imageDataUri);
+    return this.prisma.member.update({
+      where: { id: member.id },
+      data: { avatar_url: url },
+      select: { id: true, avatar_url: true },
+    });
   }
 
   async getMember(gymId: string, id: string) {

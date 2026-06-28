@@ -12,7 +12,8 @@
       "infoPlist": {
         "NSCameraUsageDescription": "Necesitamos acceso a la cámara para escanear el QR de acceso y fotografiar productos.",
         "NSFaceIDUsageDescription": "Usa Face ID para autenticarte rápidamente.",
-        "NFCReaderUsageDescription": "Usa NFC para acceso al gym con tu tarjeta o pulsera."
+        "NFCReaderUsageDescription": "Usa NFC para acceso al gym con tu tarjeta o pulsera.",
+        "NSPhotoLibraryUsageDescription": "Permite seleccionar una foto de tu galería para tu avatar de perfil."
       }
     },
     "android": {
@@ -23,7 +24,8 @@
         "android.permission.VIBRATE",
         "android.permission.RECORD_AUDIO",
         "android.permission.USE_BIOMETRIC",
-        "android.permission.USE_FINGERPRINT"
+        "android.permission.USE_FINGERPRINT",
+        "android.permission.READ_MEDIA_IMAGES"
       ]
     },
     "plugins": [

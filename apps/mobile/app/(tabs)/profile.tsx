@@ -7,9 +7,11 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
 import { useAuthStore } from '@/store/auth.store';
 import {
   memberApi,
@@ -58,6 +60,7 @@ export default function ProfileTab() {
   const [prs, setPrs] = useState<PersonalRecord[]>([]);
   const [accessLogs, setAccessLogs] = useState<AccessLog[]>([]);
   const [loading, setLoading] = useState(true);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   const load = useCallback(async () => {
     if (!accessToken) return;
@@ -95,6 +98,41 @@ export default function ProfileTab() {
     ]);
   };
 
+  const handleChangeAvatar = async () => {
+    if (!accessToken || uploadingAvatar) return;
+
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert('Permiso requerido', 'Necesitamos acceso a tu galería para cambiar tu foto.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.7,
+      base64: true,
+    });
+
+    if (result.canceled || !result.assets?.[0]?.base64) return;
+
+    const asset = result.assets[0];
+    const mime = asset.mimeType ?? 'image/jpeg';
+    const dataUri = `data:${mime};base64,${asset.base64}`;
+
+    setUploadingAvatar(true);
+    try {
+      const res = await memberApi.uploadAvatar(accessToken, dataUri);
+      setProfile((p) => (p ? { ...p, avatar_url: res.avatar_url } : p));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'No se pudo subir la imagen';
+      Alert.alert('Error', msg);
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
   if (loading) {
     return (
       <SafeAreaView style={styles.center}>
@@ -124,9 +162,25 @@ export default function ProfileTab() {
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {/* Avatar */}
         <View style={styles.avatarSection}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{initials || '?'}</Text>
-          </View>
+          <TouchableOpacity
+            style={styles.avatar}
+            onPress={handleChangeAvatar}
+            disabled={uploadingAvatar}
+            activeOpacity={0.7}
+          >
+            {profile?.avatar_url ? (
+              <Image source={{ uri: profile.avatar_url }} style={styles.avatarImage} />
+            ) : (
+              <Text style={styles.avatarText}>{initials || '?'}</Text>
+            )}
+            <View style={styles.avatarBadge}>
+              {uploadingAvatar ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.avatarBadgeIcon}>📷</Text>
+              )}
+            </View>
+          </TouchableOpacity>
           <Text style={styles.name}>
             {firstName} {lastName}
           </Text>
@@ -278,8 +332,29 @@ const styles = StyleSheet.create({
     backgroundColor: '#1d4ed8',
     justifyContent: 'center',
     alignItems: 'center',
+    position: 'relative',
+    overflow: 'visible',
+  },
+  avatarImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
   },
   avatarText: { color: '#fff', fontSize: 28, fontWeight: '800' },
+  avatarBadge: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#111827',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
+  avatarBadgeIcon: { fontSize: 13, color: '#fff' },
   name: { fontSize: 20, fontWeight: '700', color: '#111827' },
   email: { fontSize: 13, color: '#6b7280' },
   statusBadge: { borderRadius: 100, paddingHorizontal: 14, paddingVertical: 4 },

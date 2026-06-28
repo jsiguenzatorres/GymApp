@@ -71,6 +71,13 @@ export class MembersController {
     return this.membersService.findMyProfile(user.sub, this.gymId(user));
   }
 
+  // POST /api/v1/members/me/avatar — subir foto de perfil (base64 data URI)
+  // Body: { image: "data:image/jpeg;base64,..." }
+  @Post('members/me/avatar')
+  uploadMyAvatar(@CurrentUser() user: JwtPayload, @Body() body: { image: string }) {
+    return this.membersService.updateMyAvatar(user.sub, this.gymId(user), body.image);
+  }
+
   @Get('members')
   listMembers(@CurrentUser() user: JwtPayload, @Query() query: ListMembersDto) {
     return this.membersService.listMembers(this.gymId(user), query);

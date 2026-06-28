@@ -93,6 +93,7 @@ export interface MemberProfile {
   first_name: string;
   last_name: string;
   phone?: string;
+  avatar_url?: string | null;
   status: string;
   risk_score?: number;
   user: { email: string; last_login_at?: string };
@@ -150,6 +151,12 @@ export interface QrCodePayload {
 
 export const memberApi = {
   getMe: (token: string) => apiClient.get<MemberProfile>('/api/v1/members/me', token),
+  uploadAvatar: (token: string, imageDataUri: string) =>
+    apiClient.post<{ id: string; avatar_url: string }>(
+      '/api/v1/members/me/avatar',
+      { image: imageDataUri },
+      token,
+    ),
   getPlans: (memberId: string, token: string) =>
     apiClient.get<WorkoutPlan[]>(`/api/v1/members/${memberId}/plans`, token),
   getSessions: (memberId: string, token: string) =>
