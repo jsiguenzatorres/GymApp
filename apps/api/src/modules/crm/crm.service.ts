@@ -329,12 +329,14 @@ INSTRUCCIONES:
       if (memberId) void this.conversation.addMessages(gymId, memberId, 'ARIA', message, response);
       return { response, isStub: false };
     } catch (err) {
-      this.logger.error(`ARIA Gemini error: ${(err as Error).message}`);
+      const errMsg = (err as Error).message ?? String(err);
+      this.logger.error(`ARIA Gemini error: ${errMsg}`);
       return {
         response:
           'Lo siento, el servicio de IA no está disponible en este momento. Por favor intenta de nuevo en unos segundos.',
         isStub: false,
         error: true,
+        debugError: errMsg.slice(0, 500),
       };
     }
   }
