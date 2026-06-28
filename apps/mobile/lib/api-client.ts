@@ -395,10 +395,23 @@ export interface GymProfile {
   phone?: string;
   email?: string;
   website?: string;
-  instagram?: string;
-  facebook?: string;
   description?: string;
+  social_links?: { instagram?: string; facebook?: string; twitter?: string };
+  operating_hours?: GymOperatingHoursMap;
 }
+
+export interface DayHours {
+  open: string;
+  close: string;
+  closed: boolean;
+}
+
+export type GymOperatingHoursMap = Partial<
+  Record<
+    'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday',
+    DayHours
+  >
+>;
 
 export interface OperatingHours {
   day_of_week: number;
@@ -417,11 +430,31 @@ export interface StaffMember {
   is_active: boolean;
 }
 
+const DAY_NAME_TO_NUMBER: Record<string, number> = {
+  sunday: 0,
+  monday: 1,
+  tuesday: 2,
+  wednesday: 3,
+  thursday: 4,
+  friday: 5,
+  saturday: 6,
+};
+
 export const gymApi = {
   getProfile: (accessToken: string) =>
     apiClient.get<GymProfile>('/api/v1/gym/profile', accessToken),
-  getHours: (accessToken: string) =>
-    apiClient.get<OperatingHours[]>('/api/v1/gym/operating-hours', accessToken),
+  getHours: async (accessToken: string): Promise<OperatingHours[]> => {
+    const map = await apiClient.get<GymOperatingHoursMap>(
+      '/api/v1/gym/operating-hours',
+      accessToken,
+    );
+    return Object.entries(map ?? {}).map(([day, h]) => ({
+      day_of_week: DAY_NAME_TO_NUMBER[day] ?? 0,
+      open_time: h?.open ?? '',
+      close_time: h?.close ?? '',
+      is_closed: h?.closed ?? false,
+    }));
+  },
   getStaff: (accessToken: string) => apiClient.get<StaffMember[]>('/api/v1/staff', accessToken),
 };
 
@@ -431,9 +464,9 @@ export interface Exercise {
   id: string;
   name: string;
   description?: string;
-  primary_muscle_group?: string;
-  secondary_muscle_groups?: string[];
-  equipment?: string;
+  muscle_groups?: string[];
+  secondary_muscles?: string[];
+  equipment?: string[];
   difficulty?: 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED';
   instructions?: string;
   video_url?: string;

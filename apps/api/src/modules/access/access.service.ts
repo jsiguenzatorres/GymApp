@@ -43,7 +43,7 @@ export class AccessService {
   async generateQrCode(
     gymId: string,
     memberId: string,
-  ): Promise<{ payload: string; dataUrl: string }> {
+  ): Promise<{ payload: string; qrPayload: string; expiresAt: string; dataUrl: string }> {
     const member = await this.prisma.member.findFirst({
       where: { id: memberId, gym_id: gymId },
       select: { id: true, status: true },
@@ -69,7 +69,24 @@ export class AccessService {
       color: { dark: '#1e1b4b', light: '#ffffff' },
     });
 
-    return { payload: payloadStr, dataUrl };
+    return {
+      payload: payloadStr,
+      qrPayload: payloadStr,
+      expiresAt: new Date(exp).toISOString(),
+      dataUrl,
+    };
+  }
+
+  async generateMyQrCode(
+    gymId: string,
+    userId: string,
+  ): Promise<{ payload: string; qrPayload: string; expiresAt: string; dataUrl: string }> {
+    const member = await this.prisma.member.findFirst({
+      where: { user_id: userId, gym_id: gymId },
+      select: { id: true },
+    });
+    if (!member) throw new NotFoundException('No tienes perfil de miembro en este gym');
+    return this.generateQrCode(gymId, member.id);
   }
 
   // ─── VALIDACIÓN DE QR ─────────────────────────────────────────────────────────

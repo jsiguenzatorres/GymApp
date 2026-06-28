@@ -140,14 +140,16 @@ interface ExerciseCardProps {
 
 function ExerciseCard({ exercise }: ExerciseCardProps) {
   const [expanded, setExpanded] = useState(false);
-  const muscleKey = getMuscleKey(exercise.primary_muscle_group);
-  const muscleLabel = getMuscleLabel(exercise.primary_muscle_group);
+  const primaryMuscle = exercise.muscle_groups?.[0];
+  const muscleKey = getMuscleKey(primaryMuscle);
+  const muscleLabel = getMuscleLabel(primaryMuscle);
   const abbrev = getMuscleAbbrev(muscleKey);
   const circleColor = getMuscleColor(muscleKey);
   const diffConfig = exercise.difficulty ? DIFFICULTY_CONFIG[exercise.difficulty] : null;
 
-  const equipmentText = exercise.equipment
-    ? exercise.equipment.charAt(0).toUpperCase() + exercise.equipment.slice(1)
+  const firstEquipment = exercise.equipment?.[0];
+  const equipmentText = firstEquipment
+    ? firstEquipment.charAt(0).toUpperCase() + firstEquipment.slice(1).toLowerCase()
     : null;
 
   const subtitleParts = [muscleLabel, equipmentText].filter(Boolean);
@@ -201,11 +203,11 @@ function ExerciseCard({ exercise }: ExerciseCardProps) {
             </View>
           ) : null}
 
-          {exercise.secondary_muscle_groups && exercise.secondary_muscle_groups.length > 0 && (
+          {exercise.secondary_muscles && exercise.secondary_muscles.length > 0 && (
             <View style={styles.expandedSection}>
               <Text style={styles.expandedLabel}>Músculos secundarios</Text>
               <View style={styles.secondaryChips}>
-                {exercise.secondary_muscle_groups.map((mg, idx) => (
+                {exercise.secondary_muscles.map((mg, idx) => (
                   <View key={idx} style={styles.secondaryChip}>
                     <Text style={styles.secondaryChipText}>{getMuscleLabel(mg) || mg}</Text>
                   </View>
@@ -277,7 +279,7 @@ export default function ExercisesScreen() {
       ex.name.toLowerCase().includes(debouncedSearch.toLowerCase());
 
     const matchesChip =
-      selectedChip === 'all' || getMuscleKey(ex.primary_muscle_group) === selectedChip;
+      selectedChip === 'all' || getMuscleKey(ex.muscle_groups?.[0]) === selectedChip;
 
     return matchesSearch && matchesChip;
   });

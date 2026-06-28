@@ -27,8 +27,7 @@ export class AccessController {
   // GET /api/v1/access/my-qr — el propio miembro obtiene su QR
   @Get('my-qr')
   getMyQr(@CurrentUser() user: JwtPayload) {
-    // Para miembros: su propio QR. Para staff: se pasa memberId por query
-    return this.accessService.generateQrCode(this.gymId(user), user.sub);
+    return this.accessService.generateMyQrCode(this.gymId(user), user.sub);
   }
 
   // GET /api/v1/access/member/:id/qr — staff genera QR para un miembro
