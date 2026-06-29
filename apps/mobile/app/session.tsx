@@ -21,11 +21,21 @@ import { useAuthStore } from '@/store/auth.store';
 import {
   sessionApi,
   exercisesApi,
+  workoutApi,
   WorkoutPlan,
   WeightSuggestion,
   ExerciseHistorySession,
   ExerciseSubstitute,
 } from '@/lib/api-client';
+
+const ZEUS_QUICK_PROMPTS = [
+  '¿Qué tan pesado debería ir?',
+  'Me duele algo, ¿qué hago?',
+  'No puedo terminar la última serie',
+  '¿Cuánto descansar?',
+  'Dame motivación',
+  '¿Estoy haciendo bien la técnica?',
+];
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -163,6 +173,34 @@ export default function SessionScreen() {
   const [restSecondsLeft, setRestSecondsLeft] = useState(0);
   const [restTotalSeconds, setRestTotalSeconds] = useState(0);
   const [restNextExName, setRestNextExName] = useState('');
+
+  // ZEUS (E1)
+  const [zeusOpen, setZeusOpen] = useState(false);
+  const [zeusMessage, setZeusMessage] = useState('');
+  const [zeusHistory, setZeusHistory] = useState<Array<{ role: 'me' | 'zeus'; text: string }>>([]);
+  const [zeusLoading, setZeusLoading] = useState(false);
+
+  const askZeus = useCallback(
+    async (q: string) => {
+      const text = q.trim();
+      if (!text || !token || !memberId) return;
+      setZeusHistory((prev) => [...prev, { role: 'me', text }]);
+      setZeusMessage('');
+      setZeusLoading(true);
+      try {
+        const res = await workoutApi.zeusChat(token, text, memberId);
+        setZeusHistory((prev) => [...prev, { role: 'zeus', text: res.response }]);
+      } catch (err) {
+        setZeusHistory((prev) => [
+          ...prev,
+          { role: 'zeus', text: err instanceof Error ? err.message : 'Error con ZEUS' },
+        ]);
+      } finally {
+        setZeusLoading(false);
+      }
+    },
+    [token, memberId],
+  );
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const restRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -680,14 +718,18 @@ export default function SessionScreen() {
               ))}
             </View>
 
+            <Text style={styles.notesLabel}>📝 Nota para tu trainer (opcional)</Text>
             <TextInput
               value={finishNotes}
               onChangeText={setFinishNotes}
-              placeholder="Notas opcionales (lesión, sensación, PR…)"
+              placeholder="Ej: me dolió rodilla en sentadillas, peso fácil en press, falta de energía…"
               placeholderTextColor="#9ca3af"
               style={styles.notesInput}
               multiline
             />
+            <Text style={styles.notesHelper}>
+              Tu trainer verá esto y podrá ajustar tu próximo entreno
+            </Text>
 
             <View style={styles.modalActions}>
               <TouchableOpacity
@@ -706,6 +748,127 @@ export default function SessionScreen() {
                 ) : (
                   <Text style={styles.confirmFinishText}>Guardar sesión</Text>
                 )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* FAB ZEUS — siempre visible */}
+      <TouchableOpacity
+        style={styles.zeusFab}
+        onPress={() => setZeusOpen(true)}
+        activeOpacity={0.85}
+      >
+        <Text style={styles.zeusFabIcon}>⚡</Text>
+        <Text style={styles.zeusFabLabel}>ZEUS</Text>
+      </TouchableOpacity>
+
+      {/* Modal ZEUS — bottom sheet */}
+      <Modal
+        visible={zeusOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setZeusOpen(false)}
+      >
+        <KeyboardAvoidingView
+          style={styles.zeusOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <TouchableOpacity
+            style={{ flex: 1 }}
+            activeOpacity={1}
+            onPress={() => setZeusOpen(false)}
+          />
+          <View style={styles.zeusSheet}>
+            <View style={styles.zeusHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.zeusTitle}>⚡ ZEUS · Tu coach IA</Text>
+                <Text style={styles.zeusSubtitle}>Pregúntame cualquier cosa sobre tu entreno</Text>
+              </View>
+              <TouchableOpacity onPress={() => setZeusOpen(false)} style={styles.zeusCloseBtn}>
+                <Text style={styles.zeusCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Historial */}
+            <ScrollView
+              style={styles.zeusChat}
+              contentContainerStyle={{ padding: 14, gap: 10 }}
+              showsVerticalScrollIndicator={false}
+            >
+              {zeusHistory.length === 0 && !zeusLoading && (
+                <View style={styles.zeusWelcome}>
+                  <Text style={styles.zeusWelcomeText}>
+                    Toca una pregunta rápida o escribe la tuya 👇
+                  </Text>
+                </View>
+              )}
+              {zeusHistory.map((m, i) => (
+                <View
+                  key={i}
+                  style={[
+                    styles.zeusBubble,
+                    m.role === 'me' ? styles.zeusBubbleMe : styles.zeusBubbleZeus,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.zeusBubbleText,
+                      m.role === 'me' ? { color: '#fff' } : { color: '#111827' },
+                    ]}
+                  >
+                    {m.text}
+                  </Text>
+                </View>
+              ))}
+              {zeusLoading && (
+                <View style={[styles.zeusBubble, styles.zeusBubbleZeus]}>
+                  <ActivityIndicator color="#7c3aed" />
+                </View>
+              )}
+            </ScrollView>
+
+            {/* Quick prompts */}
+            {zeusHistory.length === 0 && (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.zeusQuickRow}
+              >
+                {ZEUS_QUICK_PROMPTS.map((p) => (
+                  <TouchableOpacity
+                    key={p}
+                    style={styles.zeusQuickChip}
+                    onPress={() => askZeus(p)}
+                    disabled={zeusLoading}
+                  >
+                    <Text style={styles.zeusQuickText}>{p}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+
+            {/* Input */}
+            <View style={styles.zeusInputRow}>
+              <TextInput
+                value={zeusMessage}
+                onChangeText={setZeusMessage}
+                placeholder="Escríbele a ZEUS…"
+                style={styles.zeusInput}
+                editable={!zeusLoading}
+                onSubmitEditing={() => askZeus(zeusMessage)}
+                returnKeyType="send"
+              />
+              <TouchableOpacity
+                style={[
+                  styles.zeusSendBtn,
+                  (zeusLoading || !zeusMessage.trim()) && { opacity: 0.4 },
+                ]}
+                onPress={() => askZeus(zeusMessage)}
+                disabled={zeusLoading || !zeusMessage.trim()}
+              >
+                <Text style={styles.zeusSendText}>↑</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -975,6 +1138,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   effortNum: { color: '#d1d5db', fontSize: 14, fontWeight: '600' },
+  notesLabel: { fontSize: 12, color: '#d1d5db', fontWeight: '700', marginBottom: 4 },
   notesInput: {
     backgroundColor: '#374151',
     borderRadius: 12,
@@ -982,7 +1146,9 @@ const styles = StyleSheet.create({
     color: '#f3f4f6',
     fontSize: 14,
     minHeight: 60,
+    textAlignVertical: 'top',
   },
+  notesHelper: { fontSize: 10, color: '#9ca3af', marginTop: 4, fontStyle: 'italic' },
   modalActions: { flexDirection: 'row', gap: 10, marginTop: 4 },
   cancelModalBtn: {
     flex: 1,
@@ -1000,4 +1166,116 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   confirmFinishText: { color: '#111827', fontWeight: '700', fontSize: 15 },
+
+  // ZEUS
+  zeusFab: {
+    position: 'absolute',
+    bottom: 24,
+    right: 18,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#7c3aed',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
+  },
+  zeusFabIcon: { fontSize: 24, color: '#fff' },
+  zeusFabLabel: { color: '#fff', fontSize: 9, fontWeight: '800', marginTop: -2 },
+
+  zeusOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' },
+  zeusSheet: {
+    backgroundColor: '#f9fafb',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingBottom: 20,
+    minHeight: '55%',
+    maxHeight: '85%',
+  },
+  zeusHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  zeusTitle: { fontSize: 17, fontWeight: '800', color: '#111827' },
+  zeusSubtitle: { fontSize: 11, color: '#6b7280', marginTop: 1 },
+  zeusCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#f3f4f6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  zeusCloseText: { fontSize: 16, color: '#6b7280', fontWeight: '700' },
+
+  zeusChat: { flex: 1 },
+  zeusWelcome: { padding: 20, alignItems: 'center' },
+  zeusWelcomeText: { fontSize: 12, color: '#9ca3af', textAlign: 'center' },
+  zeusBubble: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 16,
+    maxWidth: '85%',
+  },
+  zeusBubbleMe: {
+    backgroundColor: '#7c3aed',
+    alignSelf: 'flex-end',
+    borderBottomRightRadius: 4,
+  },
+  zeusBubbleZeus: {
+    backgroundColor: '#fff',
+    alignSelf: 'flex-start',
+    borderBottomLeftRadius: 4,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  zeusBubbleText: { fontSize: 13, lineHeight: 19 },
+
+  zeusQuickRow: { paddingHorizontal: 12, paddingVertical: 8, gap: 8 },
+  zeusQuickChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#c4b5fd',
+    marginRight: 8,
+  },
+  zeusQuickText: { fontSize: 12, color: '#7c3aed', fontWeight: '600' },
+
+  zeusInputRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    gap: 8,
+    alignItems: 'flex-end',
+  },
+  zeusInput: {
+    flex: 1,
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: '#111827',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    maxHeight: 80,
+  },
+  zeusSendBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#7c3aed',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  zeusSendText: { color: '#fff', fontSize: 20, fontWeight: '900' },
 });

@@ -480,6 +480,17 @@ export interface NotifPref {
   time_of_day: string | null;
 }
 
+export interface ZeusResponse {
+  response: string;
+  isStub?: boolean;
+  error?: boolean;
+}
+
+export const workoutApi = {
+  zeusChat: (token: string, message: string, memberId?: string) =>
+    apiClient.post<ZeusResponse>('/api/v1/workout/zeus/chat', { message, memberId }, token),
+};
+
 export const notifPrefsApi = {
   list: (token: string) => apiClient.get<NotifPref[]>('/api/v1/me/notification-prefs', token),
   seed: (token: string) =>

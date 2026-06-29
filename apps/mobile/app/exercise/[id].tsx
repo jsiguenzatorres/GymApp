@@ -12,8 +12,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
+import Svg, { Line, Circle, Polyline, Text as SvgText } from 'react-native-svg';
 import { useAuthStore } from '@/store/auth.store';
-import { exercisesApi, Exercise } from '@/lib/api-client';
+import { exercisesApi, Exercise, ExerciseHistorySession } from '@/lib/api-client';
 import { MuscleMap } from '@/components/MuscleMap';
 
 const MUSCLE_LABEL: Record<string, string> = {
@@ -44,10 +45,125 @@ function muscleLabel(code: string): string {
   return MUSCLE_LABEL[code.toUpperCase()] ?? code;
 }
 
+// ─── Gráfica evolución de carga (E2) ────────────────────────────────────────
+function LoadEvolutionChart({ history }: { history: ExerciseHistorySession[] }) {
+  // Usa el peso máximo por sesión, en orden cronológico ascendente
+  const points = history
+    .filter((s) => s.sets.some((st) => st.weight_kg))
+    .map((s) => ({
+      date: new Date(s.date),
+      max: Math.max(...s.sets.map((st) => Number(st.weight_kg ?? 0))),
+    }))
+    .reverse(); // BD viene desc, queremos asc para gráfica izq→der
+
+  if (points.length < 2) return null;
+
+  const W = 320;
+  const H = 130;
+  const padX = 30;
+  const padY = 20;
+  const innerW = W - padX * 2;
+  const innerH = H - padY * 2;
+
+  const min = Math.min(...points.map((p) => p.max));
+  const max = Math.max(...points.map((p) => p.max));
+  const range = max - min || 1;
+
+  const xs = points.map((_, i) => padX + (i * innerW) / (points.length - 1));
+  const ys = points.map((p) => padY + innerH - ((p.max - min) / range) * innerH);
+  const polylinePoints = xs.map((x, i) => `${x},${ys[i]}`).join(' ');
+
+  const first = points[0].max;
+  const last = points[points.length - 1].max;
+  const delta = last - first;
+  const deltaPct = first > 0 ? Math.round((delta / first) * 100) : 0;
+
+  return (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>📈 Evolución de carga</Text>
+      <Text
+        style={{
+          fontSize: 12,
+          color: delta > 0 ? '#15803d' : delta < 0 ? '#dc2626' : '#6b7280',
+          fontWeight: '700',
+          marginBottom: 8,
+        }}
+      >
+        {delta > 0 ? '+' : ''}
+        {delta.toFixed(1)} kg ({deltaPct > 0 ? '+' : ''}
+        {deltaPct}%) en las últimas {points.length} sesiones
+      </Text>
+      <Svg width={W} height={H}>
+        {/* Eje Y referencias */}
+        <Line x1={padX} y1={padY} x2={padX} y2={H - padY} stroke="#e5e7eb" strokeWidth={1} />
+        <Line
+          x1={padX}
+          y1={H - padY}
+          x2={W - padX}
+          y2={H - padY}
+          stroke="#e5e7eb"
+          strokeWidth={1}
+        />
+        <SvgText x={4} y={padY + 4} fontSize="9" fill="#9ca3af">
+          {max.toFixed(0)}
+        </SvgText>
+        <SvgText x={4} y={H - padY + 4} fontSize="9" fill="#9ca3af">
+          {min.toFixed(0)}
+        </SvgText>
+
+        {/* Línea */}
+        <Polyline
+          points={polylinePoints}
+          fill="none"
+          stroke="#1d4ed8"
+          strokeWidth={2.5}
+          strokeLinejoin="round"
+        />
+
+        {/* Puntos */}
+        {xs.map((x, i) => (
+          <Circle key={i} cx={x} cy={ys[i]} r={4} fill="#fff" stroke="#1d4ed8" strokeWidth={2} />
+        ))}
+
+        {/* Última etiqueta */}
+        <SvgText
+          x={xs[xs.length - 1]}
+          y={ys[ys.length - 1] - 8}
+          fontSize="10"
+          fill="#1d4ed8"
+          fontWeight="bold"
+          textAnchor="middle"
+        >
+          {last.toFixed(1)}kg
+        </SvgText>
+      </Svg>
+      <View
+        style={{
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+          marginTop: 4,
+          paddingHorizontal: padX,
+        }}
+      >
+        <Text style={{ fontSize: 10, color: '#9ca3af' }}>
+          {points[0].date.toLocaleDateString('es-SV', { day: '2-digit', month: 'short' })}
+        </Text>
+        <Text style={{ fontSize: 10, color: '#9ca3af' }}>
+          {points[points.length - 1].date.toLocaleDateString('es-SV', {
+            day: '2-digit',
+            month: 'short',
+          })}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
 export default function ExerciseDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { accessToken } = useAuthStore();
   const [exercise, setExercise] = useState<Exercise | null>(null);
+  const [history, setHistory] = useState<ExerciseHistorySession[]>([]);
   const [loading, setLoading] = useState(true);
   const [frameIdx, setFrameIdx] = useState(0);
   const videoRef = useRef<Video>(null);
@@ -60,6 +176,10 @@ export default function ExerciseDetailScreen() {
       .then(setExercise)
       .catch(() => Alert.alert('Error', 'No se pudo cargar el ejercicio'))
       .finally(() => setLoading(false));
+    exercisesApi
+      .getHistory(accessToken, id, 12)
+      .then(setHistory)
+      .catch(() => {});
   }, [id, accessToken]);
 
   // Animación 2-frame en la imagen grande
@@ -199,6 +319,9 @@ export default function ExerciseDetailScreen() {
             <Text style={styles.bodyText}>{exercise.instructions}</Text>
           </View>
         )}
+
+        {/* Evolución de carga (E2) */}
+        {history.length >= 2 && <LoadEvolutionChart history={history} />}
 
         <View style={{ height: 30 }} />
       </ScrollView>
