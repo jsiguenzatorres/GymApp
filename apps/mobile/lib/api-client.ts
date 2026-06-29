@@ -502,6 +502,36 @@ export interface Exercise {
   image_urls?: string[];
 }
 
+export interface ExerciseHistorySession {
+  session_id: string;
+  date: string;
+  sets: Array<{
+    set_number: number;
+    reps: number | null;
+    weight_kg: number | null;
+    is_pr: boolean;
+  }>;
+  total_volume: number;
+}
+
+export interface WeightSuggestion {
+  has_history: boolean;
+  suggested_weight_kg: number | null;
+  last_weight_kg: number | null;
+  last_reps: number | null;
+  last_date: string | null;
+  reason: string;
+}
+
+export interface ExerciseSubstitute {
+  id: string;
+  name: string;
+  muscle_groups: string[];
+  equipment: string[];
+  difficulty: string | null;
+  image_urls: string[];
+}
+
 export const exercisesApi = {
   list: (accessToken: string, params?: { search?: string; muscleGroup?: string }) => {
     const qs = new URLSearchParams();
@@ -512,6 +542,18 @@ export const exercisesApi = {
   },
   getById: (accessToken: string, id: string) =>
     apiClient.get<Exercise>(`/api/v1/exercises/${id}`, accessToken),
+  getHistory: (accessToken: string, id: string, limit = 5) =>
+    apiClient.get<ExerciseHistorySession[]>(
+      `/api/v1/exercises/${id}/history?limit=${limit}`,
+      accessToken,
+    ),
+  getSuggestion: (accessToken: string, id: string) =>
+    apiClient.get<WeightSuggestion>(`/api/v1/exercises/${id}/suggestion`, accessToken),
+  getSubstitutes: (accessToken: string, id: string, limit = 8) =>
+    apiClient.get<ExerciseSubstitute[]>(
+      `/api/v1/exercises/${id}/substitutes?limit=${limit}`,
+      accessToken,
+    ),
 };
 
 // ─── Schedule / Classes ───────────────────────────────────────────────────────

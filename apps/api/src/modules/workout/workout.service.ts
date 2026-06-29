@@ -67,6 +67,161 @@ export class WorkoutService {
     return exercise;
   }
 
+  // ─── HISTORIAL DE EJERCICIO (para mostrar "última vez levantaste X kg") ─────
+  async getMyExerciseHistory(gymId: string, userId: string, exerciseId: string, limit = 5) {
+    const member = await this.prisma.member.findFirst({
+      where: { user_id: userId, gym_id: gymId },
+      select: { id: true },
+    });
+    if (!member) throw new NotFoundException('Perfil de miembro no encontrado');
+
+    // Trae las últimas N sesiones donde el miembro hizo este ejercicio, con sus sets
+    const sessions = await this.prisma.workoutSession.findMany({
+      where: {
+        member_id: member.id,
+        sets: { some: { exercise_id: exerciseId } },
+      },
+      orderBy: { started_at: 'desc' },
+      take: limit,
+      select: {
+        id: true,
+        started_at: true,
+        finished_at: true,
+        sets: {
+          where: { exercise_id: exerciseId },
+          orderBy: { set_number: 'asc' },
+          select: {
+            set_number: true,
+            reps: true,
+            weight_kg: true,
+            is_pr: true,
+          },
+        },
+      },
+    });
+
+    return sessions.map((s) => ({
+      session_id: s.id,
+      date: s.started_at,
+      sets: s.sets.map((st) => ({
+        set_number: st.set_number,
+        reps: st.reps,
+        weight_kg: st.weight_kg ? Number(st.weight_kg) : null,
+        is_pr: st.is_pr,
+      })),
+      total_volume: s.sets.reduce(
+        (acc, st) => acc + (st.weight_kg ? Number(st.weight_kg) : 0) * (st.reps ?? 0),
+        0,
+      ),
+    }));
+  }
+
+  // ─── SUGERENCIA DE PESO (progresión doble simplificada) ────────────────────
+  async getWeightSuggestion(gymId: string, userId: string, exerciseId: string) {
+    const member = await this.prisma.member.findFirst({
+      where: { user_id: userId, gym_id: gymId },
+      select: { id: true },
+    });
+    if (!member) throw new NotFoundException('Perfil de miembro no encontrado');
+
+    // Última sesión que tenga este ejercicio (con peso registrado)
+    const lastSet = await this.prisma.workoutSet.findFirst({
+      where: {
+        exercise_id: exerciseId,
+        session: { member_id: member.id },
+        weight_kg: { not: null },
+      },
+      orderBy: { created_at: 'desc' },
+      select: {
+        reps: true,
+        weight_kg: true,
+        session: { select: { started_at: true } },
+      },
+    });
+
+    if (!lastSet || !lastSet.weight_kg) {
+      return {
+        has_history: false,
+        suggested_weight_kg: null,
+        last_weight_kg: null,
+        last_reps: null,
+        last_date: null,
+        reason: 'Primer entreno con este ejercicio — empieza ligero y enfoca técnica.',
+      };
+    }
+
+    const lastWeight = Number(lastSet.weight_kg);
+    const lastReps = lastSet.reps ?? 0;
+
+    // Progresión doble simplificada:
+    //   - si llegó a 10+ reps con peso, subir 2.5 kg
+    //   - si llegó a 7-9, mantener peso (subir reps)
+    //   - si llegó a <7, mantener (volumen aún por construir)
+    let suggested = lastWeight;
+    let reason = 'Mismo peso — enfoca técnica y completa las repeticiones objetivo.';
+    if (lastReps >= 10) {
+      suggested = lastWeight + 2.5;
+      reason = `Última vez completaste ${lastReps} reps con ${lastWeight}kg — listo para subir.`;
+    } else if (lastReps >= 7) {
+      reason = `Última vez: ${lastReps} reps. Intenta sumar al menos 1 rep antes de subir peso.`;
+    }
+
+    return {
+      has_history: true,
+      suggested_weight_kg: suggested,
+      last_weight_kg: lastWeight,
+      last_reps: lastReps,
+      last_date: lastSet.session.started_at,
+      reason,
+    };
+  }
+
+  // ─── SUSTITUTOS (ejercicios alternativos con mismo grupo muscular primario) ─
+  async getSubstitutes(gymId: string, exerciseId: string, limit = 8) {
+    const base = await this.prisma.exercise.findFirst({
+      where: { id: exerciseId, is_active: true, OR: [{ gym_id: gymId }, { gym_id: null }] },
+      select: { muscle_groups: true, equipment: true },
+    });
+    if (!base) throw new NotFoundException('Ejercicio no encontrado');
+
+    const primary = base.muscle_groups?.[0];
+    if (!primary) return [];
+
+    // Match por grupo muscular primario, excluyendo el actual, priorizando mismo equipo
+    const candidates = await this.prisma.exercise.findMany({
+      where: {
+        id: { not: exerciseId },
+        is_active: true,
+        OR: [{ gym_id: gymId }, { gym_id: null }],
+        muscle_groups: { has: primary },
+      },
+      select: {
+        id: true,
+        name: true,
+        muscle_groups: true,
+        equipment: true,
+        difficulty: true,
+        image_urls: true,
+      },
+      take: 50, // sobre-traer y ordenar en memoria por similitud
+    });
+
+    const baseEquip = new Set((base.equipment ?? []).map((e) => e.toUpperCase()));
+    const scored = candidates
+      .map((c) => {
+        const sharedEquip = (c.equipment ?? []).filter((e) =>
+          baseEquip.has(e.toUpperCase()),
+        ).length;
+        const sameEquip = sharedEquip > 0 ? 1 : 0;
+        // Prefiere mismo equipo → bonus de 10
+        return { ...c, score: sameEquip * 10 + Math.random() * 0.1 };
+      })
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit);
+
+    return scored.map(({ score: _score, ...rest }) => rest);
+  }
+
   async createExercise(gymId: string, dto: CreateExerciseDto) {
     const exercise = await this.prisma.exercise.create({
       data: {

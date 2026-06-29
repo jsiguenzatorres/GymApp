@@ -54,6 +54,37 @@ export class WorkoutController {
     return this.workoutService.getExercise(this.gymId(user), id);
   }
 
+  // GET /exercises/:id/history — últimas N sesiones del miembro autenticado con ese ejercicio
+  @Get('exercises/:id/history')
+  getExerciseHistory(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.workoutService.getMyExerciseHistory(
+      this.gymId(user),
+      user.sub,
+      id,
+      limit ? parseInt(limit) : 5,
+    );
+  }
+
+  // GET /exercises/:id/suggestion — peso sugerido próximo set
+  @Get('exercises/:id/suggestion')
+  getExerciseSuggestion(@CurrentUser() user: JwtPayload, @Param('id', ParseUUIDPipe) id: string) {
+    return this.workoutService.getWeightSuggestion(this.gymId(user), user.sub, id);
+  }
+
+  // GET /exercises/:id/substitutes — ejercicios alternativos (similar grupo muscular + equipo)
+  @Get('exercises/:id/substitutes')
+  getExerciseSubstitutes(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.workoutService.getSubstitutes(this.gymId(user), id, limit ? parseInt(limit) : 8);
+  }
+
   @Post('exercises')
   @HttpCode(HttpStatus.CREATED)
   createExercise(@CurrentUser() user: JwtPayload, @Body() dto: CreateExerciseDto) {
