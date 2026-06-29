@@ -1442,3 +1442,71 @@ model MemberOnboarding {
 
   @@map("member_onboardings")
 }
+
+// ─── Blog del gym (Sprint G8) ───────────────────────────────────────────────
+
+model BlogPost {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gym_id      String   @db.Uuid
+  title       String   @db.VarChar(200)
+  slug        String   @db.VarChar(200)
+  excerpt     String?
+  content_md  String   // markdown
+  cover_url   String?
+  author_name String?  @db.VarChar(100)
+  category    String?  @db.VarChar(50)
+  tags        String[]
+  is_published Boolean @default(false)
+  published_at DateTime?
+  views_count Int      @default(0)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  @@unique([gym_id, slug])
+  @@index([gym_id, is_published, published_at(sort: Desc)])
+  @@map("blog_posts")
+}
+
+// ─── Subscription engine — Stripe / MercadoPago (Sprint G4) ────────────────
+// Tracking de suscripciones de membresía del miembro al gym.
+// Activación real con APIs requiere claves (env STRIPE_SECRET / MP_TOKEN).
+// Sin claves: los endpoints crean PENDING y el staff cobra manual.
+
+model BillingSubscription {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gym_id            String   @db.Uuid
+  member_id         String   @db.Uuid
+  membership_type_id String  @db.Uuid
+  provider          String   @db.VarChar(20) // stripe | mercadopago | manual
+  external_id       String?  @db.VarChar(200) // Stripe sub_xxx o MP preapproval_id
+  external_customer_id String? @db.VarChar(200)
+  status            String   @default("PENDING") @db.VarChar(20) // PENDING | ACTIVE | PAST_DUE | CANCELLED | SUSPENDED
+  amount_usd        Decimal  @db.Decimal(10, 2)
+  interval          String   @default("month") @db.VarChar(20) // month | week | year
+  current_period_start DateTime?
+  current_period_end   DateTime?
+  cancel_at_period_end Boolean @default(false)
+  metadata          Json?
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+
+  @@index([gym_id, status])
+  @@index([member_id])
+  @@unique([provider, external_id])
+  @@map("billing_subscriptions")
+}
+
+model BillingWebhookEvent {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  provider     String   @db.VarChar(20)
+  event_type   String   @db.VarChar(100)
+  external_id  String   @unique @db.VarChar(200) // event id del provider — para idempotencia
+  payload      Json
+  processed    Boolean  @default(false)
+  processed_at DateTime?
+  error        String?
+  received_at  DateTime @default(now())
+
+  @@index([provider, processed, received_at(sort: Desc)])
+  @@map("billing_webhook_events")
+}

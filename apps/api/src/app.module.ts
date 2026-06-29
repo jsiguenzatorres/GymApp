@@ -36,6 +36,8 @@ import { CreditModule } from './modules/credit/credit.module';
 import { ScheduledTasksModule } from './modules/scheduled-tasks/scheduled-tasks.module';
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
 import { OnboardingModule } from './modules/onboarding/onboarding.module';
+import { BlogModule } from './modules/blog/blog.module';
+import { BillingEngineModule } from './modules/billing-engine/billing-engine.module';
 
 @Module({
   imports: [
@@ -86,6 +88,8 @@ import { OnboardingModule } from './modules/onboarding/onboarding.module';
     ScheduledTasksModule,
     SubscriptionsModule,
     OnboardingModule,
+    BlogModule,
+    BillingEngineModule,
     // Módulos de negocio se agregan aquí en cada sprint
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
@@ -104,6 +108,8 @@ export class AppModule implements NestModule {
         { path: 'api/v1/auth/password/reset', method: RequestMethod.POST },
         { path: 'api/v1/webhooks/stripe', method: RequestMethod.POST },
         { path: 'api/v1/webhooks/mercadopago', method: RequestMethod.POST },
+        { path: 'api/v1/webhooks/billing/stripe', method: RequestMethod.POST },
+        { path: 'api/v1/webhooks/billing/mercadopago', method: RequestMethod.POST },
         { path: 'api/v1/webhooks/whatsapp/*', method: RequestMethod.GET },
         { path: 'api/v1/webhooks/whatsapp/*', method: RequestMethod.POST },
         { path: 'api/v1/webhooks/telegram/*', method: RequestMethod.POST },

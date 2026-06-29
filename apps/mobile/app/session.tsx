@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
+import * as Speech from 'expo-speech';
 import {
   View,
   Text,
@@ -190,6 +191,12 @@ export default function SessionScreen() {
       try {
         const res = await workoutApi.zeusChat(token, text, memberId);
         setZeusHistory((prev) => [...prev, { role: 'zeus', text: res.response }]);
+        // ZEUS también lee en voz alta (TTS nativo gratis)
+        try {
+          Speech.speak(res.response.slice(0, 400), { language: 'es-ES' });
+        } catch {
+          // silent
+        }
       } catch (err) {
         setZeusHistory((prev) => [
           ...prev,

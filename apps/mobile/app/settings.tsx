@@ -248,6 +248,18 @@ export default function SettingsScreen() {
             <Row label="Datos de salud" onPress={() => router.push('/health-data' as never)} />
           </Section>
 
+          {/* ── Comunidad y contenido ── */}
+          <Section title="Comunidad y contenido">
+            <Row
+              label="🌟 Comunidad (retos, ranking, recompensas)"
+              onPress={() => router.push('/community' as never)}
+            />
+            <Divider />
+            <Row label="📰 Blog del gym" onPress={() => router.push('/blog' as never)} />
+            <Divider />
+            <Row label="💬 Enviar feedback" onPress={() => router.push('/feedback' as never)} />
+          </Section>
+
           {/* ── App info ── */}
           <Section title="Acerca de">
             <Row label="Versión" value="1.0.0" />

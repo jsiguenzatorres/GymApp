@@ -50,4 +50,34 @@ export class HealthDataController {
     const memberId = await this.resolveMemberId(user);
     return this.healthData.delete(memberId, id);
   }
+
+  // POST bulk-import — para que clientes nativos (HealthKit/Health Connect)
+  // envíen lotes de mediciones de una vez (G7)
+  @Post('bulk-import')
+  async bulkImport(
+    @CurrentUser() user: JwtPayload,
+    @Body()
+    body: {
+      source: 'apple_health' | 'google_fit' | 'wearable';
+      entries: Array<{
+        kind: HealthKind;
+        value: number;
+        unit?: string;
+        recorded_at: string;
+        notes?: string;
+      }>;
+    },
+  ) {
+    const memberId = await this.resolveMemberId(user);
+    let ok = 0;
+    for (const entry of body.entries.slice(0, 500)) {
+      try {
+        await this.healthData.log(memberId, entry);
+        ok++;
+      } catch {
+        // skip
+      }
+    }
+    return { imported: ok, total: body.entries.length, source: body.source };
+  }
 }

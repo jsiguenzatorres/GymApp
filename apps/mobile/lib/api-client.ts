@@ -617,6 +617,47 @@ export interface MemberOnboarding {
   completed_at: string | null;
 }
 
+// ─── Blog (Sprint G8) ────────────────────────────────────────────────────
+export interface BlogPostSummary {
+  id: string;
+  title: string;
+  slug: string;
+  excerpt: string | null;
+  cover_url: string | null;
+  author_name: string | null;
+  category: string | null;
+  tags: string[];
+  published_at: string | null;
+  views_count: number;
+}
+
+export interface BlogPost extends BlogPostSummary {
+  content_md: string;
+}
+
+export const blogApi = {
+  list: (token: string, category?: string) =>
+    apiClient.get<BlogPostSummary[]>(
+      `/api/v1/me/blog${category ? `?category=${encodeURIComponent(category)}` : ''}`,
+      token,
+    ),
+  getBySlug: (token: string, slug: string) =>
+    apiClient.get<BlogPost>(`/api/v1/me/blog/${slug}`, token),
+};
+
+// ─── Feedback / NPS (Sprint G5) ──────────────────────────────────────────
+export const feedbackApi = {
+  create: (
+    token: string,
+    body: {
+      member_id: string;
+      type?: 'NPS' | 'GENERAL' | 'COMPLAINT' | 'SUGGESTION';
+      nps_score?: number;
+      comment?: string;
+    },
+  ) => apiClient.post('/api/v1/feedback', body, token),
+};
+
 export const onboardingApi = {
   get: (token: string) => apiClient.get<MemberOnboarding>('/api/v1/me/onboarding', token),
   submitParq: (token: string, answers: Record<string, boolean>) =>

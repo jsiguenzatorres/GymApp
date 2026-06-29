@@ -40,6 +40,8 @@ const LIMIT = args.limit ? parseInt(args.limit) : null;
 const SUPABASE_URL = (process.env.SUPABASE_URL ?? '').replace(/\/$/, '');
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
 const BUCKET = process.env.SUPABASE_EXERCISE_BUCKET ?? 'exercise-media';
+// Free tier Supabase tiene límite fijo de 50MB. Dejamos margen.
+const MAX_FILE_BYTES = parseInt(process.env.SUPABASE_MAX_FILE_MB ?? '49') * 1024 * 1024;
 
 if (!SUPABASE_URL || !SERVICE_KEY) {
   console.error('❌ Faltan SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY en env');
@@ -82,6 +84,11 @@ async function downloadAndUpload(externalUrl, pathInBucket) {
   if (!dlRes.ok) throw new Error(`download ${dlRes.status}`);
   const buffer = Buffer.from(await dlRes.arrayBuffer());
   if (buffer.length === 0) throw new Error('empty file');
+  if (buffer.length > MAX_FILE_BYTES) {
+    throw new Error(
+      `oversize ${(buffer.length / 1024 / 1024).toFixed(1)}MB > ${(MAX_FILE_BYTES / 1024 / 1024).toFixed(0)}MB`,
+    );
+  }
 
   // 2) subir a Supabase Storage
   const ext = extOf(externalUrl);
