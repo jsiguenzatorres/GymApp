@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -12,11 +12,15 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
+import * as LocalAuthentication from 'expo-local-authentication';
+import * as SecureStore from 'expo-secure-store';
 import { useAuthStore } from '@/store/auth.store';
 import { authApi, ApiError } from '@/lib/api-client';
 import { THEME_LIGHT, COLORS, RADIUS, SPACING, TYPOGRAPHY } from '@/theme';
 
 const T = THEME_LIGHT.colors;
+const BIOMETRIC_EMAIL_KEY = 'gymapp_biometric_email';
+const BIOMETRIC_PWD_KEY = 'gymapp_biometric_pwd';
 
 export default function LoginScreen() {
   const { setTokens, setUser } = useAuthStore();
@@ -28,6 +32,44 @@ export default function LoginScreen() {
   const [showTotp, setShowTotp] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [biometricAvailable, setBiometricAvailable] = useState(false);
+
+  useEffect(() => {
+    LocalAuthentication.hasHardwareAsync().then((has) => {
+      if (has) {
+        LocalAuthentication.isEnrolledAsync().then((enrolled) => {
+          setBiometricAvailable(enrolled);
+        });
+      }
+    });
+  }, []);
+
+  const handleBiometricLogin = async () => {
+    try {
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage: 'Accede a GymApp',
+        fallbackLabel: 'Usar contraseña',
+      });
+      if (!result.success) return;
+
+      const savedEmail = await SecureStore.getItemAsync(BIOMETRIC_EMAIL_KEY);
+      const savedPwd = await SecureStore.getItemAsync(BIOMETRIC_PWD_KEY);
+      if (!savedEmail || !savedPwd) {
+        setError('Primero inicia sesión con email y contraseña para activar biométrico.');
+        return;
+      }
+      setIsLoading(true);
+      const data = await authApi.login(savedEmail, savedPwd);
+      await setTokens(data.accessToken, data.refreshToken);
+      setUser(data.user);
+      router.replace('/(tabs)');
+    } catch (err) {
+      if (err instanceof ApiError) setError(err.message || 'Error de autenticación');
+      else setError('Error biométrico. Usa email y contraseña.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleLogin = async () => {
     if (!email.trim() || !password) return;
@@ -38,6 +80,11 @@ export default function LoginScreen() {
       const data = await authApi.login(email.trim().toLowerCase(), password, totp || undefined);
       await setTokens(data.accessToken, data.refreshToken);
       setUser(data.user);
+      // Save credentials so biometric login can reuse them
+      if (biometricAvailable) {
+        await SecureStore.setItemAsync(BIOMETRIC_EMAIL_KEY, email.trim().toLowerCase());
+        await SecureStore.setItemAsync(BIOMETRIC_PWD_KEY, password);
+      }
       router.replace('/(tabs)');
     } catch (err) {
       if (err instanceof ApiError) {
@@ -182,6 +229,14 @@ export default function LoginScreen() {
             </View>
           )}
 
+          {/* Forgot password */}
+          <TouchableOpacity
+            onPress={() => router.push('/(auth)/forgot-password')}
+            style={styles.forgotBtn}
+          >
+            <Text style={[styles.forgotText, { color: T.primary }]}>¿Olvidaste tu contraseña?</Text>
+          </TouchableOpacity>
+
           {/* Botón submit */}
           <TouchableOpacity
             onPress={handleLogin}
@@ -199,6 +254,19 @@ export default function LoginScreen() {
               <Text style={styles.btnText}>Ingresar</Text>
             )}
           </TouchableOpacity>
+
+          {/* Biometric login */}
+          {biometricAvailable && (
+            <TouchableOpacity
+              onPress={handleBiometricLogin}
+              disabled={isLoading}
+              style={[styles.biometricBtn, { borderColor: T.primary + '40' }]}
+            >
+              <Text style={[styles.biometricText, { color: T.primary }]}>
+                🔑 Acceder con Face ID / Huella
+              </Text>
+            </TouchableOpacity>
+          )}
 
           <Text style={[styles.footer, { color: T.textMuted }]}>
             ¿Eres miembro? <Text style={{ color: T.primary }}>Contacta a tu gimnasio</Text>
@@ -242,6 +310,8 @@ const styles = StyleSheet.create({
   totpToggle: { marginBottom: SPACING[4] },
   totpToggleText: { fontSize: TYPOGRAPHY.size.sm },
   hint: { fontSize: TYPOGRAPHY.size.xs, marginTop: 4 },
+  forgotBtn: { alignSelf: 'flex-end', marginBottom: SPACING[3] },
+  forgotText: { fontSize: TYPOGRAPHY.size.sm, fontWeight: '500' },
   btn: {
     borderRadius: RADIUS.lg,
     paddingVertical: 14,
@@ -251,5 +321,13 @@ const styles = StyleSheet.create({
   },
   btnDisabled: { opacity: 0.5 },
   btnText: { color: '#fff', fontSize: TYPOGRAPHY.size.base, fontWeight: '600' },
+  biometricBtn: {
+    borderWidth: 1.5,
+    borderRadius: RADIUS.lg,
+    paddingVertical: 13,
+    alignItems: 'center',
+    marginBottom: SPACING[4],
+  },
+  biometricText: { fontSize: TYPOGRAPHY.size.sm, fontWeight: '600' },
   footer: { textAlign: 'center', fontSize: TYPOGRAPHY.size.sm },
 });

@@ -5,10 +5,11 @@ import {
   SPACING,
   RADIUS,
   ANIMATION,
+  COLORS,
 } from '@gymapp/shared-types';
 import type { AppTheme } from '@gymapp/shared-types';
 
-export { THEME_LIGHT, THEME_DARK, TYPOGRAPHY, SPACING, RADIUS, ANIMATION };
+export { THEME_LIGHT, THEME_DARK, TYPOGRAPHY, SPACING, RADIUS, ANIMATION, COLORS };
 export type { AppTheme };
 
 /**
