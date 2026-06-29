@@ -1,5 +1,6 @@
 import { serverFetch } from '@/lib/server-api';
 import { redirect } from 'next/navigation';
+import { revalidatePath } from 'next/cache';
 import { BlogEditor } from './blog-editor';
 
 interface BlogPost {
@@ -22,6 +23,7 @@ async function deleteAction(formData: FormData) {
   'use server';
   const id = formData.get('id') as string;
   await serverFetch(`/api/v1/admin/blog/${id}`, { method: 'DELETE' });
+  revalidatePath('/blog');
   redirect('/blog');
 }
 
@@ -33,6 +35,7 @@ async function togglePublishAction(formData: FormData) {
     method: 'PATCH',
     body: JSON.stringify({ is_published: !isPublished }),
   });
+  revalidatePath('/blog');
   redirect('/blog');
 }
 
@@ -64,6 +67,7 @@ async function createOrUpdateAction(formData: FormData) {
       body: JSON.stringify(payload),
     });
   }
+  revalidatePath('/blog');
   redirect('/blog');
 }
 

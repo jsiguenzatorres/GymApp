@@ -23,6 +23,7 @@ export default function SubscriptionsScreen() {
   const { accessToken } = useAuthStore();
   const [subs, setSubs] = useState<ProductSubscription[]>([]);
   const [loading, setLoading] = useState(true);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!accessToken) return;
@@ -42,13 +43,16 @@ export default function SubscriptionsScreen() {
   }, [load]);
 
   const toggleStatus = async (sub: ProductSubscription) => {
-    if (!accessToken) return;
+    if (!accessToken || updatingId) return; // lock: evita double-tap
+    setUpdatingId(sub.id);
     const newStatus = sub.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE';
     try {
       await subscriptionsApi.update(accessToken, sub.id, { status: newStatus });
       await load();
     } catch (err) {
       Alert.alert('Error', err instanceof Error ? err.message : 'No se pudo actualizar');
+    } finally {
+      setUpdatingId(null);
     }
   };
 
@@ -144,7 +148,11 @@ export default function SubscriptionsScreen() {
 
                 {sub.status !== 'CANCELLED' && (
                   <View style={styles.subActions}>
-                    <TouchableOpacity style={styles.actionBtn} onPress={() => toggleStatus(sub)}>
+                    <TouchableOpacity
+                      style={[styles.actionBtn, updatingId === sub.id && { opacity: 0.5 }]}
+                      onPress={() => toggleStatus(sub)}
+                      disabled={updatingId === sub.id}
+                    >
                       <Text style={styles.actionText}>
                         {sub.status === 'ACTIVE' ? '⏸ Pausar' : '▶ Reactivar'}
                       </Text>

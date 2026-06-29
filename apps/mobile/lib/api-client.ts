@@ -105,7 +105,7 @@ export interface MemberProfile {
     status: string;
     start_date: string;
     end_date: string;
-    type: { name: string; price: number; duration_days: number };
+    type: { id: string; name: string; price: number; duration_days: number };
   }>;
 }
 

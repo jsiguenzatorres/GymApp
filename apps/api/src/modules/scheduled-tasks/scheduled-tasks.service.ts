@@ -236,8 +236,14 @@ export class ScheduledTasksService {
 
     try {
       // Solo miembros con tier ELITE
+      const now = new Date();
       const eliteAddons = await this.prisma.memberAddon.findMany({
-        where: { status: 'ACTIVE', tier: 'ELITE', type: 'NUTRITION' },
+        where: {
+          status: 'ACTIVE',
+          tier: 'ELITE',
+          type: 'NUTRITION',
+          OR: [{ ends_at: null }, { ends_at: { gte: now } }],
+        },
         include: {
           member: { select: { id: true, gym_id: true, user_id: true } },
         },

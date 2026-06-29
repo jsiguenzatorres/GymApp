@@ -1,5 +1,6 @@
 import { serverFetch } from '@/lib/server-api';
 import { redirect } from 'next/navigation';
+import { revalidatePath } from 'next/cache';
 import { ChallengeForm } from './challenge-form';
 
 interface Challenge {
@@ -29,6 +30,7 @@ async function deleteAction(formData: FormData) {
   'use server';
   const id = formData.get('id') as string;
   await serverFetch(`/api/v1/admin/challenges/${id}`, { method: 'DELETE' });
+  revalidatePath('/challenges');
   redirect('/challenges');
 }
 
@@ -40,6 +42,7 @@ async function toggleAction(formData: FormData) {
     method: 'PATCH',
     body: JSON.stringify({ is_active: !isActive }),
   });
+  revalidatePath('/challenges');
   redirect('/challenges');
 }
 
@@ -59,6 +62,7 @@ async function createAction(formData: FormData) {
     method: 'POST',
     body: JSON.stringify(payload),
   });
+  revalidatePath('/challenges');
   redirect('/challenges');
 }
 

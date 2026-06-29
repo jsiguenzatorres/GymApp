@@ -204,6 +204,18 @@ export class GamificationExtrasService {
       cover_emoji?: string;
     },
   ) {
+    if (!Number.isFinite(dto.goal_value) || dto.goal_value < 1) {
+      throw new BadRequestException('goal_value debe ser >= 1');
+    }
+    if (
+      dto.reward_points !== undefined &&
+      (!Number.isFinite(dto.reward_points) || dto.reward_points < 0)
+    ) {
+      throw new BadRequestException('reward_points no puede ser negativo');
+    }
+    if (new Date(dto.ends_at) <= new Date(dto.starts_at)) {
+      throw new BadRequestException('ends_at debe ser posterior a starts_at');
+    }
     return this.prisma.challenge.create({
       data: {
         gym_id: gymId,
@@ -271,6 +283,12 @@ export class GamificationExtrasService {
       cover_emoji?: string;
     },
   ) {
+    if (!Number.isFinite(dto.cost_points) || dto.cost_points < 1) {
+      throw new BadRequestException('cost_points debe ser >= 1');
+    }
+    if (dto.stock !== undefined && !Number.isFinite(dto.stock)) {
+      throw new BadRequestException('stock inválido');
+    }
     return this.prisma.reward.create({
       data: {
         gym_id: gymId,

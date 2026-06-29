@@ -1,5 +1,6 @@
 import { serverFetch } from '@/lib/server-api';
 import { redirect } from 'next/navigation';
+import { revalidatePath } from 'next/cache';
 import { RewardForm } from './reward-form';
 
 interface Reward {
@@ -27,6 +28,7 @@ async function deleteRewardAction(formData: FormData) {
   'use server';
   const id = formData.get('id') as string;
   await serverFetch(`/api/v1/admin/rewards/${id}`, { method: 'DELETE' });
+  revalidatePath('/rewards');
   redirect('/rewards');
 }
 
@@ -38,6 +40,7 @@ async function toggleRewardAction(formData: FormData) {
     method: 'PATCH',
     body: JSON.stringify({ is_active: !isActive }),
   });
+  revalidatePath('/rewards');
   redirect('/rewards');
 }
 
@@ -53,6 +56,7 @@ async function createRewardAction(formData: FormData) {
       cover_emoji: (formData.get('cover_emoji') as string) || '🎁',
     }),
   });
+  revalidatePath('/rewards');
   redirect('/rewards');
 }
 
@@ -64,6 +68,7 @@ async function markRedemptionAction(formData: FormData) {
     method: 'PATCH',
     body: JSON.stringify({ status }),
   });
+  revalidatePath('/rewards');
   redirect('/rewards');
 }
 

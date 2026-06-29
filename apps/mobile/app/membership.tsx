@@ -374,7 +374,7 @@ export default function MembershipScreen() {
 
             <ScrollView style={{ maxHeight: 280 }}>
               {types
-                .filter((t) => t.id !== currentMembership?.type?.name)
+                .filter((t) => t.id !== currentMembership?.type?.id)
                 .map((t) => (
                   <TouchableOpacity
                     key={t.id}

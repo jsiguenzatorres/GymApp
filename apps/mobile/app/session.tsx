@@ -390,13 +390,20 @@ export default function SessionScreen() {
         perceivedEffort: effort,
         notes: finishNotes || undefined,
       });
+      setShowFinishModal(false);
       Alert.alert(
         '¡Sesión completada!',
         `Duración: ${formatDuration(elapsed)}\nEsfuerzo: ${effort}/10`,
         [{ text: 'OK', onPress: () => router.back() }],
       );
     } catch {
-      Alert.alert('Error', 'No se pudo finalizar la sesión.');
+      // Cerramos el modal para que el usuario vea el alert y pueda volver a intentar
+      setShowFinishModal(false);
+      Alert.alert(
+        'Error al guardar',
+        'No se pudo finalizar la sesión. Tu progreso se mantiene; intenta de nuevo.',
+      );
+    } finally {
       setFinishing(false);
     }
   };

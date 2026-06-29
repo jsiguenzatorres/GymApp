@@ -1,5 +1,6 @@
 import { serverFetch } from '@/lib/server-api';
 import { redirect } from 'next/navigation';
+import { revalidatePath } from 'next/cache';
 import { BoxForm } from './box-form';
 
 interface MonthlyBox {
@@ -54,6 +55,7 @@ async function upsertBoxAction(formData: FormData) {
     method: 'POST',
     body: JSON.stringify(payload),
   });
+  revalidatePath('/monthly-boxes');
   redirect('/monthly-boxes');
 }
 
@@ -65,6 +67,7 @@ async function updateRequestStatusAction(formData: FormData) {
     method: 'PUT',
     body: JSON.stringify({ status }),
   });
+  revalidatePath('/monthly-boxes');
   redirect('/monthly-boxes');
 }
 
