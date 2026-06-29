@@ -237,6 +237,8 @@ export const memberApi = {
       { image: imageDataUri },
       token,
     ),
+  getProgressPdfUrl: (month?: string) =>
+    `${API_URL}/api/v1/members/me/progress-pdf${month ? `?month=${month}` : ''}`,
   getPlans: (memberId: string, token: string) =>
     apiClient.get<WorkoutPlan[]>(`/api/v1/members/${memberId}/plans`, token),
   getSessions: (memberId: string, token: string) =>
@@ -484,6 +486,38 @@ export const notifPrefsApi = {
     apiClient.post<NotifPref[]>('/api/v1/me/notification-prefs/seed', {}, token),
   upsert: (token: string, body: { kind: NotifKind; enabled: boolean; time_of_day?: string }) =>
     apiClient.put<NotifPref>('/api/v1/me/notification-prefs', body, token),
+};
+
+// ─── Monthly Box API (D-22) ──────────────────────────────────────────────
+export interface MonthlyBox {
+  id: string;
+  month: string;
+  title: string;
+  description: string | null;
+  contents: Array<{ name: string; brand?: string; quantity: number; qty_unit?: string }>;
+  cover_url: string | null;
+  delivery_date: string | null;
+}
+
+export interface BoxRequest {
+  id: string;
+  status: 'REQUESTED' | 'PREPARING' | 'READY' | 'DELIVERED' | 'CANCELLED';
+  delivery_address: string | null;
+  notes: string | null;
+  requested_at: string;
+  delivered_at: string | null;
+}
+
+export interface MonthlyBoxResponse {
+  box: MonthlyBox | null;
+  my_request: BoxRequest | null;
+  tier: 'BASIC' | 'PRO' | 'ELITE';
+}
+
+export const monthlyBoxApi = {
+  getCurrent: (token: string) => apiClient.get<MonthlyBoxResponse>('/api/v1/me/monthly-box', token),
+  request: (token: string, body: { delivery_address?: string; notes?: string }) =>
+    apiClient.post<BoxRequest>('/api/v1/me/monthly-box/request', body, token),
 };
 
 export interface AdaptiveAnalysisResponse {

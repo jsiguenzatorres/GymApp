@@ -10,7 +10,10 @@ import {
   View,
 } from 'react-native';
 import { router } from 'expo-router';
+import { Alert } from 'react-native';
 import Svg, { Line, Rect, Text as SvgText } from 'react-native-svg';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import { useAuthStore } from '@/store/auth.store';
 import { apiClient, memberApi, VolumeWeeklyResponse } from '@/lib/api-client';
 
@@ -331,6 +334,38 @@ export default function ProgressScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+
+  const downloadProgressPdf = useCallback(async () => {
+    if (!accessToken || downloadingPdf) return;
+    setDownloadingPdf(true);
+    try {
+      const url = memberApi.getProgressPdfUrl();
+      const filename = `progreso-${new Date().toISOString().slice(0, 7)}.pdf`;
+      const target = `${FileSystem.cacheDirectory}${filename}`;
+      const result = await FileSystem.downloadAsync(url, target, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (result.status !== 200) {
+        Alert.alert('Error', `No se pudo generar el PDF (status ${result.status})`);
+        return;
+      }
+      const canShare = await Sharing.isAvailableAsync();
+      if (canShare) {
+        await Sharing.shareAsync(result.uri, {
+          mimeType: 'application/pdf',
+          dialogTitle: 'Tu reporte mensual',
+          UTI: 'com.adobe.pdf',
+        });
+      } else {
+        Alert.alert('Listo', `PDF guardado en ${result.uri}`);
+      }
+    } catch (err) {
+      Alert.alert('Error', err instanceof Error ? err.message : 'No se pudo descargar el PDF');
+    } finally {
+      setDownloadingPdf(false);
+    }
+  }, [accessToken, downloadingPdf]);
 
   const fetchData = useCallback(
     async (isRefresh = false) => {
@@ -529,6 +564,27 @@ export default function ProgressScreen() {
             </Text>
           </View>
           <Text style={styles.photosCtaChevron}>›</Text>
+        </TouchableOpacity>
+
+        {/* PDF mensual CTA */}
+        <TouchableOpacity
+          style={[styles.photosCta, { backgroundColor: '#eef2ff' }]}
+          onPress={downloadProgressPdf}
+          disabled={downloadingPdf}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.photosCtaEmoji}>{downloadingPdf ? '⏳' : '📄'}</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.photosCtaTitle}>
+              {downloadingPdf ? 'Generando PDF…' : 'Reporte mensual PDF'}
+            </Text>
+            <Text style={styles.photosCtaSub}>
+              {downloadingPdf
+                ? 'Esto puede tardar unos segundos'
+                : 'Descarga y comparte tu progreso del mes'}
+            </Text>
+          </View>
+          {!downloadingPdf && <Text style={styles.photosCtaChevron}>↓</Text>}
         </TouchableOpacity>
 
         {/* Attendance chart */}

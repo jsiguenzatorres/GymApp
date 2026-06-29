@@ -182,6 +182,135 @@ export class AnalyticsService {
       .filter((t) => t.count > 0);
   }
 
+  // ─── REVENUE BREAKDOWN POR CATEGORÍA (D-32) ───────────────────────────────
+  async getRevenueBreakdown(gymId: string) {
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const prevMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+
+    const [
+      paymentsThisMonth,
+      paymentsPrevMonth,
+      activeAddons,
+      mkOrdersThisMonth,
+      mkOrdersPrevMonth,
+      topProducts,
+    ] = await Promise.all([
+      this.prisma.payment.findMany({
+        where: {
+          gym_id: gymId,
+          status: 'SUCCEEDED',
+          created_at: { gte: monthStart, lte: monthEnd },
+        },
+        select: { amount: true, membership_id: true },
+      }),
+      this.prisma.payment.aggregate({
+        where: {
+          gym_id: gymId,
+          status: 'SUCCEEDED',
+          created_at: { gte: prevMonthStart, lte: prevMonthEnd },
+        },
+        _sum: { amount: true },
+      }),
+      this.prisma.memberAddon.findMany({
+        where: { status: 'ACTIVE', member: { gym_id: gymId } },
+        select: { tier: true, price_paid: true },
+      }),
+      this.prisma.marketplaceOrder.aggregate({
+        where: {
+          gym_id: gymId,
+          status: 'DELIVERED',
+          created_at: { gte: monthStart, lte: monthEnd },
+        },
+        _sum: { total: true },
+        _count: true,
+      }),
+      this.prisma.marketplaceOrder.aggregate({
+        where: {
+          gym_id: gymId,
+          status: 'DELIVERED',
+          created_at: { gte: prevMonthStart, lte: prevMonthEnd },
+        },
+        _sum: { total: true },
+      }),
+      this.prisma.orderItem.groupBy({
+        by: ['product_id'],
+        where: {
+          order: {
+            gym_id: gymId,
+            status: 'DELIVERED',
+            created_at: { gte: monthStart, lte: monthEnd },
+          },
+        },
+        _sum: { subtotal: true, quantity: true },
+        orderBy: { _sum: { subtotal: 'desc' } },
+        take: 5,
+      }),
+    ]);
+
+    // Categorizar payments (memberships vs otros)
+    let membershipRev = 0;
+    let otherRev = 0;
+    for (const p of paymentsThisMonth) {
+      const amt = Number(p.amount);
+      if (p.membership_id) membershipRev += amt;
+      else otherRev += amt;
+    }
+    const marketplaceRev = Number(mkOrdersThisMonth._sum.total ?? 0);
+
+    // Addons recurrentes (ingreso mensual proyectado)
+    const addonsMonthly = activeAddons.reduce((acc, a) => acc + Number(a.price_paid ?? 0), 0);
+
+    // Top productos con nombres
+    const topProductIds = topProducts.map((p) => p.product_id);
+    const productInfo =
+      topProductIds.length > 0
+        ? await this.prisma.product.findMany({
+            where: { id: { in: topProductIds } },
+            select: { id: true, name: true },
+          })
+        : [];
+    const productMap = new Map(productInfo.map((p) => [p.id, p.name]));
+    const topProductsNamed = topProducts.map((p) => ({
+      id: p.product_id,
+      name: productMap.get(p.product_id) ?? 'Producto',
+      revenue: Number(p._sum.subtotal ?? 0),
+      quantity: Number(p._sum.quantity ?? 0),
+    }));
+
+    const totalThisMonth = membershipRev + marketplaceRev + otherRev + addonsMonthly;
+    const totalPrevMonth =
+      Number(paymentsPrevMonth._sum.amount ?? 0) + Number(mkOrdersPrevMonth._sum.total ?? 0);
+    const momGrowthPct =
+      totalPrevMonth > 0
+        ? Math.round(((totalThisMonth - totalPrevMonth) / totalPrevMonth) * 1000) / 10
+        : null;
+
+    return {
+      period: {
+        month_start: monthStart.toISOString().slice(0, 10),
+        month_end: monthEnd.toISOString().slice(0, 10),
+      },
+      total_this_month: Math.round(totalThisMonth * 100) / 100,
+      total_prev_month: Math.round(totalPrevMonth * 100) / 100,
+      mom_growth_pct: momGrowthPct,
+      breakdown: {
+        memberships: Math.round(membershipRev * 100) / 100,
+        addons_recurring: Math.round(addonsMonthly * 100) / 100,
+        marketplace: Math.round(marketplaceRev * 100) / 100,
+        other: Math.round(otherRev * 100) / 100,
+      },
+      addon_active_count: activeAddons.length,
+      marketplace: {
+        orders_count: mkOrdersThisMonth._count,
+        revenue: marketplaceRev,
+      },
+      top_products: topProductsNamed,
+    };
+  }
+
   // ─── BUSINESS COACH (stub) ────────────────────────────────────────────────────
 
   async coachQuery(_gymId: string, query: string) {

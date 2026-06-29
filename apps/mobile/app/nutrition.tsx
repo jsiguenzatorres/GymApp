@@ -734,6 +734,23 @@ export default function NutritionScreen() {
                     </View>
                     <Text style={[styles.unlockedChevron, { color: '#dc2626' }]}>›</Text>
                   </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.unlockedFeatureCard,
+                      { backgroundColor: '#fef3c7', borderColor: '#fcd34d' },
+                    ]}
+                    onPress={() => router.push('/monthly-box' as never)}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.lockedEmoji}>📦</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.lockedTitle}>Caja del mes incluida</Text>
+                      <Text style={styles.lockedDesc}>
+                        Recibe la caja premium de tu gym (exclusivo NutriElite)
+                      </Text>
+                    </View>
+                    <Text style={[styles.unlockedChevron, { color: '#b45309' }]}>›</Text>
+                  </TouchableOpacity>
                 </>
               )}
             </>

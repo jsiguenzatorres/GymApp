@@ -37,6 +37,22 @@ interface MembershipEntry {
   price: number;
 }
 
+interface RevenueBreakdown {
+  period: { month_start: string; month_end: string };
+  total_this_month: number;
+  total_prev_month: number;
+  mom_growth_pct: number | null;
+  breakdown: {
+    memberships: number;
+    addons_recurring: number;
+    marketplace: number;
+    other: number;
+  };
+  addon_active_count: number;
+  marketplace: { orders_count: number; revenue: number };
+  top_products: { id: string; name: string; revenue: number; quantity: number }[];
+}
+
 function fmtCurrency(n: number) {
   return `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
@@ -77,10 +93,11 @@ function KpiCard({
 }
 
 export default async function AnalyticsPage() {
-  const [dashboard, revenueTrend, membershipBreakdown] = await Promise.all([
+  const [dashboard, revenueTrend, membershipBreakdown, revenueBreakdown] = await Promise.all([
     serverFetch<DashboardResponse>('/api/v1/analytics/dashboard'),
     serverFetch<RevenueTrendEntry[]>('/api/v1/analytics/revenue?months=6'),
     serverFetch<MembershipEntry[]>('/api/v1/analytics/memberships'),
+    serverFetch<RevenueBreakdown>('/api/v1/analytics/revenue-breakdown'),
   ]);
 
   const kpis = dashboard?.kpis;
@@ -142,6 +159,96 @@ export default async function AnalyticsPage() {
         />
         <KpiCard label="Total miembros" value={kpis?.totalMembers ?? '—'} sub="todos los estados" />
       </div>
+
+      {/* Revenue Breakdown — D-32 */}
+      {revenueBreakdown && (
+        <div className="rounded-xl border border-violet-100 bg-white p-6 shadow-sm">
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-gray-900">Desglose de ingresos</h2>
+              <p className="text-xs text-gray-500">
+                {new Date(revenueBreakdown.period.month_start).toLocaleDateString('es-SV', {
+                  month: 'long',
+                  year: 'numeric',
+                })}
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-3xl font-bold text-violet-600">
+                {fmtCurrency(revenueBreakdown.total_this_month)}
+              </p>
+              {revenueBreakdown.mom_growth_pct !== null && (
+                <GrowthBadge value={revenueBreakdown.mom_growth_pct} />
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <div className="rounded-lg bg-blue-50 p-4">
+              <p className="text-xs font-semibold uppercase text-blue-700">Membresías</p>
+              <p className="mt-2 text-xl font-bold text-gray-900">
+                {fmtCurrency(revenueBreakdown.breakdown.memberships)}
+              </p>
+              <p className="text-xs text-gray-500">
+                {revenueBreakdown.total_this_month > 0
+                  ? Math.round(
+                      (revenueBreakdown.breakdown.memberships / revenueBreakdown.total_this_month) *
+                        100,
+                    )
+                  : 0}
+                % del total
+              </p>
+            </div>
+            <div className="rounded-lg bg-emerald-50 p-4">
+              <p className="text-xs font-semibold uppercase text-emerald-700">Add-ons (MRR)</p>
+              <p className="mt-2 text-xl font-bold text-gray-900">
+                {fmtCurrency(revenueBreakdown.breakdown.addons_recurring)}
+              </p>
+              <p className="text-xs text-gray-500">
+                {revenueBreakdown.addon_active_count} suscripciones activas
+              </p>
+            </div>
+            <div className="rounded-lg bg-amber-50 p-4">
+              <p className="text-xs font-semibold uppercase text-amber-700">Marketplace</p>
+              <p className="mt-2 text-xl font-bold text-gray-900">
+                {fmtCurrency(revenueBreakdown.breakdown.marketplace)}
+              </p>
+              <p className="text-xs text-gray-500">
+                {revenueBreakdown.marketplace.orders_count} órdenes
+              </p>
+            </div>
+            <div className="rounded-lg bg-gray-50 p-4">
+              <p className="text-xs font-semibold uppercase text-gray-700">Otros</p>
+              <p className="mt-2 text-xl font-bold text-gray-900">
+                {fmtCurrency(revenueBreakdown.breakdown.other)}
+              </p>
+              <p className="text-xs text-gray-500">Day-passes, recargos, etc.</p>
+            </div>
+          </div>
+
+          {revenueBreakdown.top_products.length > 0 && (
+            <div className="mt-6">
+              <h3 className="mb-3 text-sm font-semibold text-gray-700">Top 5 productos del mes</h3>
+              <div className="divide-y divide-gray-100">
+                {revenueBreakdown.top_products.map((p, i) => (
+                  <div key={p.id} className="flex items-center justify-between py-2">
+                    <div className="flex items-center gap-3">
+                      <span className="flex h-7 w-7 items-center justify-center rounded-full bg-violet-100 text-xs font-bold text-violet-700">
+                        {i + 1}
+                      </span>
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">{p.name}</p>
+                        <p className="text-xs text-gray-500">{p.quantity} unidades</p>
+                      </div>
+                    </div>
+                    <p className="text-sm font-bold text-gray-900">{fmtCurrency(p.revenue)}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Charts */}
       <AnalyticsCharts

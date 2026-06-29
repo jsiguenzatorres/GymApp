@@ -35,6 +35,12 @@ export class AnalyticsController {
     return this.analyticsService.getRevenueTrend(this.gymId(user), months ? parseInt(months) : 6);
   }
 
+  // GET /api/v1/analytics/revenue-breakdown — D-32: ingresos por categoría
+  @Get('revenue-breakdown')
+  getRevenueBreakdown(@CurrentUser() user: JwtPayload) {
+    return this.analyticsService.getRevenueBreakdown(this.gymId(user));
+  }
+
   // GET /api/v1/analytics/memberships
   @Get('memberships')
   getMembershipBreakdown(@CurrentUser() user: JwtPayload) {
