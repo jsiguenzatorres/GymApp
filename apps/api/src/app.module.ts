@@ -1,6 +1,7 @@
 import { Module, MiddlewareConsumer, NestModule, RequestMethod } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { EventEmitterModule } from '@nestjs/event-emitter';
+import { ScheduleModule as NestScheduleModule } from '@nestjs/schedule';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { TenantMiddleware } from './common/middleware/tenant.middleware';
@@ -32,6 +33,8 @@ import { NotificationPrefsModule } from './modules/notification-prefs/notificati
 import { ProgressPdfModule } from './modules/progress-pdf/progress-pdf.module';
 import { MonthlyBoxModule } from './modules/monthly-box/monthly-box.module';
 import { CreditModule } from './modules/credit/credit.module';
+import { ScheduledTasksModule } from './modules/scheduled-tasks/scheduled-tasks.module';
+import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
 
 @Module({
   imports: [
@@ -48,6 +51,8 @@ import { CreditModule } from './modules/credit/credit.module';
       { name: 'short', ttl: 1000, limit: 20 },
       { name: 'medium', ttl: 60000, limit: 200 },
     ]),
+
+    NestScheduleModule.forRoot(),
 
     AiModule,
     DatabaseModule,
@@ -77,6 +82,8 @@ import { CreditModule } from './modules/credit/credit.module';
     ProgressPdfModule,
     MonthlyBoxModule,
     CreditModule,
+    ScheduledTasksModule,
+    SubscriptionsModule,
     // Módulos de negocio se agregan aquí en cada sprint
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

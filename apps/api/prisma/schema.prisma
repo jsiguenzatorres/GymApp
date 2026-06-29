@@ -276,6 +276,7 @@ model Member {
   notification_prefs    NotificationPreference[]
   box_delivery_requests BoxDeliveryRequest[]
   credit_transactions   MemberCreditTransaction[]
+  product_subscriptions ProductSubscription[]
 
   @@index([gym_id, status])
   @@index([gym_id, risk_score])
@@ -748,6 +749,7 @@ model Product {
   gym         Gym              @relation(fields: [gym_id], references: [id], onDelete: Cascade)
   category    ProductCategory? @relation(fields: [category_id], references: [id])
   order_items OrderItem[]
+  subscriptions ProductSubscription[]
 
   @@index([gym_id, is_active])
   @@index([gym_id, category_id])
@@ -1274,4 +1276,31 @@ model MemberCreditTransaction {
   @@index([member_id, created_at(sort: Desc)])
   @@index([gym_id, created_at(sort: Desc)])
   @@map("member_credit_transactions")
+}
+
+// ─── Suscripciones de productos del marketplace (Sprint F) ──────────────────
+// El miembro suscribe un producto con una frecuencia. Cada N días el cron
+// crea automáticamente una orden y reagenda next_delivery_at.
+
+model ProductSubscription {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gym_id          String   @db.Uuid
+  member_id       String   @db.Uuid
+  product_id      String   @db.Uuid
+  quantity        Int      @default(1)
+  frequency_days  Int      // cada cuántos días (7, 14, 30…)
+  status          String   @default("ACTIVE") @db.VarChar(20) // ACTIVE | PAUSED | CANCELLED
+  next_delivery_at DateTime
+  last_delivered_at DateTime?
+  total_deliveries Int     @default(0)
+  notes           String?
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  member  Member  @relation(fields: [member_id], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [product_id], references: [id])
+
+  @@index([gym_id, status, next_delivery_at])
+  @@index([member_id, status])
+  @@map("product_subscriptions")
 }

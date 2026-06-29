@@ -18,10 +18,17 @@ import {
   marketplaceApi,
   ordersApi,
   creditApi,
+  subscriptionsApi,
   Product,
   ProductCategory,
   MarketplaceOrder,
 } from '@/lib/api-client';
+
+const SUB_FREQUENCY_OPTIONS = [
+  { days: 7, label: 'cada semana' },
+  { days: 14, label: 'cada 2 semanas' },
+  { days: 30, label: 'cada mes' },
+];
 
 const ORDER_STATUS_LABEL: Record<string, string> = {
   PENDING: 'Pendiente',
@@ -78,6 +85,38 @@ export default function MarketplaceScreen() {
   useEffect(() => {
     loadCredit();
   }, [loadCredit]);
+
+  const subscribeProduct = useCallback(
+    (product: Product) => {
+      if (!accessToken) return;
+      Alert.alert(
+        `🔁 Suscribirme a ${product.name}`,
+        '¿Con qué frecuencia te lo dejamos automáticamente? Se genera una orden cada vez.',
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          ...SUB_FREQUENCY_OPTIONS.map((opt) => ({
+            text: opt.label,
+            onPress: async () => {
+              try {
+                await subscriptionsApi.create(accessToken, {
+                  product_id: product.id,
+                  quantity: 1,
+                  frequency_days: opt.days,
+                });
+                Alert.alert(
+                  'Listo',
+                  `Te llegará ${opt.label}. Puedes pausar o cancelar desde "Mis suscripciones".`,
+                );
+              } catch (err) {
+                Alert.alert('Error', err instanceof Error ? err.message : 'No se pudo suscribir');
+              }
+            },
+          })),
+        ],
+      );
+    },
+    [accessToken],
+  );
 
   const repeatOrder = useCallback(
     (order: MarketplaceOrder) => {
@@ -334,6 +373,14 @@ export default function MarketplaceScreen() {
       {/* ── ORDERS VIEW ── */}
       {view === 'orders' && (
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          <TouchableOpacity
+            style={styles.subsLink}
+            onPress={() => router.push('/subscriptions' as never)}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.subsLinkText}>🔁 Mis suscripciones</Text>
+            <Text style={styles.subsLinkChevron}>›</Text>
+          </TouchableOpacity>
           {ordersLoading ? (
             <ActivityIndicator size="large" color="#1d4ed8" style={{ marginTop: 40 }} />
           ) : orders.length === 0 ? (
@@ -485,9 +532,17 @@ export default function MarketplaceScreen() {
                         {outOfStock ? (
                           <Text style={styles.outOfStock}>Sin stock</Text>
                         ) : qty === 0 ? (
-                          <TouchableOpacity style={styles.addBtn} onPress={() => addToCart(p.id)}>
-                            <Text style={styles.addBtnText}>+ Añadir</Text>
-                          </TouchableOpacity>
+                          <View style={{ flexDirection: 'row', gap: 6 }}>
+                            <TouchableOpacity
+                              style={styles.subscribeBtn}
+                              onPress={() => subscribeProduct(p)}
+                            >
+                              <Text style={styles.subscribeBtnText}>🔁</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.addBtn} onPress={() => addToCart(p.id)}>
+                              <Text style={styles.addBtnText}>+ Añadir</Text>
+                            </TouchableOpacity>
+                          </View>
                         ) : (
                           <View style={styles.qtyRow}>
                             <TouchableOpacity
@@ -765,4 +820,25 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   repeatBtnText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+
+  // Subscriptions
+  subscribeBtn: {
+    backgroundColor: '#ede9fe',
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#c4b5fd',
+  },
+  subscribeBtnText: { fontSize: 14 },
+  subsLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ede9fe',
+    padding: 14,
+    borderRadius: 12,
+    marginBottom: 8,
+  },
+  subsLinkText: { flex: 1, fontSize: 14, color: '#5b21b6', fontWeight: '700' },
+  subsLinkChevron: { fontSize: 18, color: '#7c3aed', fontWeight: '400' },
 });

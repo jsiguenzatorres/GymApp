@@ -545,6 +545,36 @@ export const creditApi = {
     apiClient.get<LastOrderWithItems[]>(`/api/v1/me/marketplace/last-orders?limit=${limit}`, token),
 };
 
+// ─── Product Subscriptions (Sprint F) ───────────────────────────────────
+export interface ProductSubscription {
+  id: string;
+  product_id: string;
+  quantity: number;
+  frequency_days: number;
+  status: 'ACTIVE' | 'PAUSED' | 'CANCELLED';
+  next_delivery_at: string;
+  last_delivered_at: string | null;
+  total_deliveries: number;
+  product?: { id: string; name: string; price: string | number; image_url: string | null };
+}
+
+export const subscriptionsApi = {
+  list: (token: string) => apiClient.get<ProductSubscription[]>('/api/v1/me/subscriptions', token),
+  create: (token: string, body: { product_id: string; quantity: number; frequency_days: number }) =>
+    apiClient.post<ProductSubscription>('/api/v1/me/subscriptions', body, token),
+  update: (
+    token: string,
+    id: string,
+    body: {
+      status?: 'ACTIVE' | 'PAUSED' | 'CANCELLED';
+      quantity?: number;
+      frequency_days?: number;
+    },
+  ) => apiClient.patch<ProductSubscription>(`/api/v1/me/subscriptions/${id}`, body, token),
+  cancel: (token: string, id: string) =>
+    apiClient.delete<ProductSubscription>(`/api/v1/me/subscriptions/${id}`, undefined, token),
+};
+
 export const membershipApi = {
   requestFreeze: (token: string, body: { duration_days: number; reason?: string }) =>
     apiClient.post<{ message: string; freezeEndsAt: string }>(
