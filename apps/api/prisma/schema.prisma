@@ -268,6 +268,7 @@ model Member {
   feedback              Feedback[]
   conversation_sessions ConversationSession[]
   progress_photos       ProgressPhoto[]
+  addons                MemberAddon[]
 
   @@index([gym_id, status])
   @@index([gym_id, risk_score])
@@ -1127,4 +1128,30 @@ model ProgressPhoto {
 
   @@index([member_id, taken_at(sort: Desc)])
   @@map("progress_photos")
+}
+
+// ─── Add-ons del miembro (suscripciones adicionales: NUTRITION, etc.) ────────
+// Modelo flexible: un miembro puede tener varios tipos de add-ons activos.
+// Solo UNO activo por (member, type) — el último update gana.
+
+model MemberAddon {
+  id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  member_id           String    @db.Uuid
+  type                String    @db.VarChar(20) // NUTRITION | (futuro: COACHING, MENTAL, etc.)
+  tier                String    @db.VarChar(20) // BASIC | PRO | ELITE
+  status              String    @default("ACTIVE") @db.VarChar(20) // ACTIVE | CANCELLED | EXPIRED
+  starts_at           DateTime  @default(now())
+  ends_at             DateTime?
+  price_paid          Decimal?  @db.Decimal(8, 2)
+  currency            String    @default("USD") @db.VarChar(3)
+  assigned_by_staff_id String?  @db.Uuid // staff que activó manualmente (null si fue compra Stripe/MP)
+  cancellation_reason String?
+  notes               String?
+  created_at          DateTime  @default(now())
+  updated_at          DateTime  @updatedAt
+
+  member Member @relation(fields: [member_id], references: [id], onDelete: Cascade)
+
+  @@index([member_id, type, status])
+  @@map("member_addons")
 }

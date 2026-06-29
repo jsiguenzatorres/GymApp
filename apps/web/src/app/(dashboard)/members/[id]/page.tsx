@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 import { serverFetch } from '@/lib/server-api';
 import { MemberStatusBadge } from '@/components/members/member-status-badge';
 import { MembershipActionsClient } from '@/components/members/membership-actions-client';
+import { AddonsSection } from '@/components/members/addons-section';
 import { ArrowLeft, Phone, Mail, Calendar, MapPin, Shield } from 'lucide-react';
 
 export const metadata: Metadata = { title: 'Perfil de Miembro — GymApp' };
@@ -302,6 +303,9 @@ export default async function MemberDetailPage({ params }: PageProps) {
           </table>
         </div>
       )}
+
+      {/* Add-ons del miembro (NutriPro / NutriElite, etc.) */}
+      <AddonsSection memberId={id} />
 
       {member.notes && (
         <div className="rounded-lg border bg-card p-5">

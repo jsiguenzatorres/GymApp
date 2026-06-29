@@ -26,6 +26,7 @@ import { FeedbackModule } from './modules/feedback/feedback.module';
 import { WebhooksModule } from './modules/webhooks/webhooks.module';
 import { AutomationModule } from './modules/automation/automation.module';
 import { FounderModule } from './modules/founder/founder.module';
+import { AddonsModule } from './modules/addons/addons.module';
 
 @Module({
   imports: [
@@ -65,6 +66,7 @@ import { FounderModule } from './modules/founder/founder.module';
     WebhooksModule,
     AutomationModule,
     FounderModule,
+    AddonsModule,
     // Módulos de negocio se agregan aquí en cada sprint
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

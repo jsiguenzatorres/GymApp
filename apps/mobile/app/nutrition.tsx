@@ -9,11 +9,13 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  Alert,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useAuthStore } from '@/store/auth.store';
-import { memberApi, nutritionApi, NutritionPlan, DiaryDay } from '@/lib/api-client';
+import { memberApi, nutritionApi, NutritionPlan, DiaryDay, AddonTier } from '@/lib/api-client';
 
 const GOAL_LABEL: Record<string, string> = {
   WEIGHT_LOSS: '🔥 Pérdida de peso',
@@ -21,15 +23,22 @@ const GOAL_LABEL: Record<string, string> = {
   MAINTENANCE: '⚖️ Mantenimiento',
   PERFORMANCE: '⚡ Rendimiento',
 };
-
 const MEAL_LABEL: Record<string, string> = {
   BREAKFAST: 'Desayuno',
   LUNCH: 'Almuerzo',
   DINNER: 'Cena',
   SNACK: 'Merienda',
 };
-
 const MEAL_ORDER = ['BREAKFAST', 'LUNCH', 'DINNER', 'SNACK'];
+
+const TIER_BADGE: Record<AddonTier, { label: string; emoji: string; color: string; bg: string }> = {
+  BASIC: { label: 'Básico', emoji: '🥗', color: '#6b7280', bg: '#f3f4f6' },
+  PRO: { label: 'NutriPro', emoji: '💪', color: '#15803d', bg: '#dcfce7' },
+  ELITE: { label: 'NutriElite', emoji: '🏆', color: '#b45309', bg: '#fef3c7' },
+};
+
+const BASIC_DAILY_AI_LIMIT = 0;
+const PRO_DAILY_AI_LIMIT = 5;
 
 function todayString() {
   const d = new Date();
@@ -45,27 +54,83 @@ function MacroBar({ value, target, color }: { value: number; target: number; col
   );
 }
 
+function LockedFeature({
+  emoji,
+  title,
+  desc,
+  requiresTier,
+  onUpgrade,
+}: {
+  emoji: string;
+  title: string;
+  desc: string;
+  requiresTier: 'PRO' | 'ELITE';
+  onUpgrade: () => void;
+}) {
+  return (
+    <TouchableOpacity style={styles.lockedCard} onPress={onUpgrade} activeOpacity={0.8}>
+      <View style={styles.lockedLeft}>
+        <Text style={styles.lockedEmoji}>{emoji}</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.lockedTitle}>
+            {title} <Text style={styles.lockIcon}>🔒</Text>
+          </Text>
+          <Text style={styles.lockedDesc}>{desc}</Text>
+        </View>
+      </View>
+      <View style={styles.lockedBadge}>
+        <Text style={styles.lockedBadgeText}>Requiere {requiresTier}</Text>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+function ComingSoonCard({ emoji, title, desc }: { emoji: string; title: string; desc: string }) {
+  return (
+    <View style={styles.soonCard}>
+      <Text style={styles.soonEmoji}>{emoji}</Text>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.soonTitle}>{title}</Text>
+        <Text style={styles.soonDesc}>{desc}</Text>
+      </View>
+      <View style={styles.soonBadge}>
+        <Text style={styles.soonBadgeText}>Próximamente</Text>
+      </View>
+    </View>
+  );
+}
+
 export default function NutritionScreen() {
   const { accessToken } = useAuthStore();
   const [plan, setPlan] = useState<NutritionPlan | null>(null);
   const [memberId, setMemberId] = useState<string | null>(null);
   const [diary, setDiary] = useState<DiaryDay | null>(null);
   const [loading, setLoading] = useState(true);
+  const [tier, setTier] = useState<AddonTier>('BASIC');
   const [aiInput, setAiInput] = useState('');
   const [aiReply, setAiReply] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
+  const [aiUsedToday, setAiUsedToday] = useState(0);
+  const [paywallOpen, setPaywallOpen] = useState<null | 'PRO' | 'ELITE'>(null);
 
   const load = useCallback(async () => {
     if (!accessToken) return;
     try {
       const me = await memberApi.getMe(accessToken);
       setMemberId(me.id);
-      const plans = await nutritionApi.getMyPlans(me.id, accessToken);
-      const active = plans?.find((p) => p.is_active) ?? plans?.[0] ?? null;
+
+      const [plansRes, addonsRes] = await Promise.all([
+        nutritionApi.getMyPlans(me.id, accessToken).catch(() => []),
+        memberApi.getMyAddons(accessToken).catch(() => null),
+      ]);
+
+      const active = plansRes?.find((p) => p.is_active) ?? plansRes?.[0] ?? null;
       setPlan(active);
+      if (addonsRes) setTier(addonsRes.effective.nutrition_tier);
+
       if (active) {
         const today = todayString();
-        const d = await nutritionApi.getDiary(me.id, today, accessToken);
+        const d = await nutritionApi.getDiary(me.id, today, accessToken).catch(() => null);
         setDiary(d);
       }
     } catch {
@@ -79,13 +144,32 @@ export default function NutritionScreen() {
     load();
   }, [load]);
 
+  const dailyAiLimit =
+    tier === 'ELITE' ? Infinity : tier === 'PRO' ? PRO_DAILY_AI_LIMIT : BASIC_DAILY_AI_LIMIT;
+
   const askAi = async () => {
     if (!plan || !memberId || !accessToken || !aiInput.trim()) return;
+
+    if (aiUsedToday >= dailyAiLimit) {
+      if (tier === 'BASIC') {
+        setPaywallOpen('PRO');
+      } else {
+        Alert.alert(
+          'Límite diario alcanzado',
+          tier === 'PRO'
+            ? 'Has usado tus 5 consultas de hoy. Mejora a NutriElite para consultas ilimitadas.'
+            : 'Alcanzaste el límite.',
+        );
+      }
+      return;
+    }
+
     setAiLoading(true);
     setAiReply('');
     try {
       const res = await nutritionApi.aiSuggest(plan.id, memberId, aiInput.trim(), accessToken);
       setAiReply(res.suggestion);
+      setAiUsedToday((n) => n + 1);
     } catch {
       setAiReply('Error al conectar con el Nutricionista IA. Intenta de nuevo.');
     } finally {
@@ -100,6 +184,13 @@ export default function NutritionScreen() {
       return acc;
     }, {}) ?? {};
 
+  // BASIC limita visualmente a las 3 primeras entradas del día — el resto bloqueado
+  const visibleEntries =
+    tier === 'BASIC' ? (diary?.entries ?? []).slice(0, 3) : (diary?.entries ?? []);
+  const hiddenCount = tier === 'BASIC' ? Math.max(0, (diary?.entries.length ?? 0) - 3) : 0;
+
+  const tierConfig = TIER_BADGE[tier];
+
   return (
     <SafeAreaView style={styles.container}>
       {/* Header */}
@@ -108,7 +199,11 @@ export default function NutritionScreen() {
           <Text style={styles.backText}>← Volver</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Mi Nutrición</Text>
-        <View style={{ width: 70 }} />
+        <View style={[styles.tierChip, { backgroundColor: tierConfig.bg }]}>
+          <Text style={[styles.tierChipText, { color: tierConfig.color }]}>
+            {tierConfig.emoji} {tierConfig.label}
+          </Text>
+        </View>
       </View>
 
       <KeyboardAvoidingView
@@ -123,13 +218,24 @@ export default function NutritionScreen() {
           {loading ? (
             <ActivityIndicator size="large" color="#1d4ed8" style={{ marginTop: 60 }} />
           ) : !plan ? (
-            <View style={styles.empty}>
-              <Text style={styles.emptyEmoji}>🥗</Text>
-              <Text style={styles.emptyTitle}>Sin plan nutricional</Text>
-              <Text style={styles.emptySub}>
-                Pídele a tu entrenador o nutricionista que te asigne un plan
-              </Text>
-            </View>
+            <>
+              <View style={styles.empty}>
+                <Text style={styles.emptyEmoji}>🥗</Text>
+                <Text style={styles.emptyTitle}>Sin plan nutricional</Text>
+                <Text style={styles.emptySub}>
+                  Pídele a tu entrenador o nutricionista que te asigne uno
+                </Text>
+              </View>
+              {tier !== 'ELITE' && (
+                <LockedFeature
+                  emoji="🤖"
+                  title="Genera un plan con IA"
+                  desc="Si tu gym aún no te asigna nutri, NutriElite te crea uno personalizado en 1 minuto"
+                  requiresTier="ELITE"
+                  onUpgrade={() => setPaywallOpen('ELITE')}
+                />
+              )}
+            </>
           ) : (
             <>
               {/* Plan card */}
@@ -144,13 +250,29 @@ export default function NutritionScreen() {
                     <Text style={styles.kcalUnit}>kcal</Text>
                   </View>
                 </View>
-
-                {/* Macros */}
                 <View style={styles.macros}>
                   {[
-                    { label: 'Proteína', value: plan.protein_g, unit: 'g', color: '#2563eb' },
-                    { label: 'Carbos', value: plan.carbs_g, unit: 'g', color: '#d97706' },
-                    { label: 'Grasas', value: plan.fat_g, unit: 'g', color: '#dc2626' },
+                    {
+                      label: 'Proteína',
+                      value: plan.protein_g,
+                      unit: 'g',
+                      color: '#2563eb',
+                      key: 'protein_g' as const,
+                    },
+                    {
+                      label: 'Carbos',
+                      value: plan.carbs_g,
+                      unit: 'g',
+                      color: '#d97706',
+                      key: 'carbs_g' as const,
+                    },
+                    {
+                      label: 'Grasas',
+                      value: plan.fat_g,
+                      unit: 'g',
+                      color: '#dc2626',
+                      key: 'fat_g' as const,
+                    },
                   ].map((m) => (
                     <View key={m.label} style={styles.macroItem}>
                       <View style={styles.macroRow}>
@@ -161,28 +283,26 @@ export default function NutritionScreen() {
                         </Text>
                       </View>
                       <MacroBar
-                        value={
-                          diary?.totals?.[
-                            m.label === 'Proteína'
-                              ? 'protein_g'
-                              : m.label === 'Carbos'
-                                ? 'carbs_g'
-                                : 'fat_g'
-                          ] ?? 0
-                        }
+                        value={diary?.totals?.[m.key] ?? 0}
                         target={m.value}
                         color={m.color}
                       />
                     </View>
                   ))}
                 </View>
-
                 {plan.notes && <Text style={styles.planNotes}>📝 {plan.notes}</Text>}
               </View>
 
               {/* Today's diary */}
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Diario de hoy</Text>
+                <View style={styles.sectionHeaderRow}>
+                  <Text style={styles.sectionTitle}>Diario de hoy</Text>
+                  {tier !== 'BASIC' && (
+                    <TouchableOpacity style={styles.addEntryBtn} disabled>
+                      <Text style={styles.addEntryText}>+ Registrar</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
                 {diary && (
                   <View style={styles.totalRow}>
                     <Text style={styles.totalLabel}>Consumido:</Text>
@@ -194,7 +314,9 @@ export default function NutritionScreen() {
                 )}
 
                 {MEAL_ORDER.map((meal) => {
-                  const entries = groupedEntries[meal];
+                  const entries = groupedEntries[meal]?.filter((e) =>
+                    visibleEntries.some((v) => v.id === e.id),
+                  );
                   if (!entries?.length) return null;
                   return (
                     <View key={meal} style={styles.mealGroup}>
@@ -217,87 +339,262 @@ export default function NutritionScreen() {
                   );
                 })}
 
+                {hiddenCount > 0 && (
+                  <TouchableOpacity
+                    style={styles.hiddenEntriesCard}
+                    onPress={() => setPaywallOpen('PRO')}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.hiddenEntriesIcon}>🔒</Text>
+                    <Text style={styles.hiddenEntriesText}>
+                      Hay {hiddenCount} entrada{hiddenCount === 1 ? '' : 's'} más oculta
+                      {hiddenCount === 1 ? '' : 's'}.{' '}
+                      <Text style={styles.hiddenEntriesCta}>
+                        Desbloquea NutriPro para verlas todas →
+                      </Text>
+                    </Text>
+                  </TouchableOpacity>
+                )}
+
                 {!diary?.entries?.length && (
                   <Text style={styles.noEntries}>
-                    Sin registros hoy. Pídele a tu nutricionista que registre tus comidas.
+                    Sin registros hoy.{' '}
+                    {tier === 'BASIC'
+                      ? 'Pídele a tu nutricionista que registre tus comidas.'
+                      : 'Toca "+ Registrar" para añadir.'}
                   </Text>
                 )}
               </View>
 
               {/* AI Nutritionist */}
-              <View style={[styles.card, { backgroundColor: '#f0fdf4' }]}>
-                <Text style={styles.aiTitle}>🌿 Nutricionista IA</Text>
-                <Text style={styles.aiSubtitle}>
-                  Consulta sobre tu dieta, macros o sustituciones
-                </Text>
-
-                {aiReply ? (
-                  <View style={styles.aiReply}>
-                    <Text style={styles.aiReplyText}>{aiReply}</Text>
-                    <TouchableOpacity
-                      onPress={() => {
-                        setAiReply('');
-                        setAiInput('');
-                      }}
-                      style={styles.newQueryBtn}
-                    >
-                      <Text style={styles.newQueryText}>Nueva consulta</Text>
-                    </TouchableOpacity>
+              {tier === 'BASIC' ? (
+                <LockedFeature
+                  emoji="🌿"
+                  title="Nutricionista IA"
+                  desc="Consulta sobre tu dieta, macros y sustituciones desde tu teléfono"
+                  requiresTier="PRO"
+                  onUpgrade={() => setPaywallOpen('PRO')}
+                />
+              ) : (
+                <View style={[styles.card, { backgroundColor: '#f0fdf4' }]}>
+                  <View style={styles.aiHeaderRow}>
+                    <Text style={styles.aiTitle}>🌿 Nutricionista IA</Text>
+                    <Text style={styles.aiLimit}>
+                      {tier === 'ELITE' ? 'Ilimitado' : `${aiUsedToday}/${PRO_DAILY_AI_LIMIT} hoy`}
+                    </Text>
                   </View>
-                ) : (
-                  <View style={styles.aiInputRow}>
-                    <TextInput
-                      value={aiInput}
-                      onChangeText={setAiInput}
-                      placeholder="¿Qué puedo comer en el desayuno?"
-                      placeholderTextColor="#9ca3af"
-                      style={styles.aiInput}
-                      multiline
-                      editable={!aiLoading}
-                    />
-                    <TouchableOpacity
-                      onPress={askAi}
-                      disabled={!aiInput.trim() || aiLoading}
-                      style={[styles.aiSendBtn, (!aiInput.trim() || aiLoading) && { opacity: 0.4 }]}
-                    >
-                      {aiLoading ? (
-                        <ActivityIndicator size="small" color="#fff" />
-                      ) : (
-                        <Text style={styles.aiSendText}>↑</Text>
-                      )}
-                    </TouchableOpacity>
-                  </View>
-                )}
-
-                {/* Quick prompts */}
-                {!aiReply && !aiLoading && (
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    style={{ marginTop: 8 }}
-                  >
-                    <View style={{ flexDirection: 'row', gap: 8 }}>
-                      {[
-                        '¿Cuántas calorías me faltan?',
-                        '¿Qué merendar hoy?',
-                        'Sustituye la proteína de hoy',
-                      ].map((q) => (
-                        <TouchableOpacity
-                          key={q}
-                          onPress={() => setAiInput(q)}
-                          style={styles.quickChip}
-                        >
-                          <Text style={styles.quickChipText}>{q}</Text>
-                        </TouchableOpacity>
-                      ))}
+                  <Text style={styles.aiSubtitle}>
+                    Consulta sobre tu dieta, macros o sustituciones
+                  </Text>
+                  {aiReply ? (
+                    <View style={styles.aiReply}>
+                      <Text style={styles.aiReplyText}>{aiReply}</Text>
+                      <TouchableOpacity
+                        onPress={() => {
+                          setAiReply('');
+                          setAiInput('');
+                        }}
+                        style={styles.newQueryBtn}
+                      >
+                        <Text style={styles.newQueryText}>Nueva consulta</Text>
+                      </TouchableOpacity>
                     </View>
-                  </ScrollView>
-                )}
-              </View>
+                  ) : (
+                    <View style={styles.aiInputRow}>
+                      <TextInput
+                        value={aiInput}
+                        onChangeText={setAiInput}
+                        placeholder="Ej: ¿puedo cambiar el pollo por atún?"
+                        style={styles.aiInput}
+                        multiline
+                        editable={!aiLoading}
+                      />
+                      <TouchableOpacity
+                        style={[styles.aiSendBtn, aiLoading && { opacity: 0.5 }]}
+                        onPress={askAi}
+                        disabled={aiLoading}
+                      >
+                        {aiLoading ? (
+                          <ActivityIndicator color="#fff" />
+                        ) : (
+                          <Text style={styles.aiSendText}>↑</Text>
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
+              )}
+
+              {/* PRO/ELITE features — "Coming soon" para implementar después */}
+              {tier === 'BASIC' ? (
+                <>
+                  <Text style={styles.upgradeSection}>
+                    Desbloquea más con NutriPro / NutriElite
+                  </Text>
+                  <LockedFeature
+                    emoji="🔍"
+                    title="Búsqueda de alimentos"
+                    desc="Base de 20,000+ alimentos USDA + comidas LATAM"
+                    requiresTier="PRO"
+                    onUpgrade={() => setPaywallOpen('PRO')}
+                  />
+                  <LockedFeature
+                    emoji="📷"
+                    title="Escaneo de código de barras"
+                    desc="Apunta a un producto, lo identifica y agrega solo"
+                    requiresTier="PRO"
+                    onUpgrade={() => setPaywallOpen('PRO')}
+                  />
+                  <LockedFeature
+                    emoji="📅"
+                    title="Histórico 30 días"
+                    desc="Calendario para revisar días anteriores + gráfica calórica"
+                    requiresTier="PRO"
+                    onUpgrade={() => setPaywallOpen('PRO')}
+                  />
+                  <LockedFeature
+                    emoji="🤖"
+                    title="Foto del plato → IA"
+                    desc="Toma foto de lo que vas a comer y la IA identifica kcal y macros"
+                    requiresTier="ELITE"
+                    onUpgrade={() => setPaywallOpen('ELITE')}
+                  />
+                </>
+              ) : tier === 'PRO' ? (
+                <>
+                  <ComingSoonCard
+                    emoji="🔍"
+                    title="Búsqueda de alimentos"
+                    desc="Base USDA + LATAM (en desarrollo)"
+                  />
+                  <ComingSoonCard
+                    emoji="📷"
+                    title="Escaneo código barras"
+                    desc="Identifica producto al instante (en desarrollo)"
+                  />
+                  <ComingSoonCard
+                    emoji="📅"
+                    title="Histórico 30 días"
+                    desc="Calendario + gráfica calórica (en desarrollo)"
+                  />
+                  <LockedFeature
+                    emoji="🤖"
+                    title="Foto del plato → IA"
+                    desc="La feature killer: foto y listo. Solo en NutriElite."
+                    requiresTier="ELITE"
+                    onUpgrade={() => setPaywallOpen('ELITE')}
+                  />
+                </>
+              ) : (
+                <>
+                  <Text style={styles.eliteHeader}>🏆 Funciones NutriElite</Text>
+                  <ComingSoonCard
+                    emoji="📷"
+                    title="Foto del plato → IA"
+                    desc="Toma foto, identifica alimentos, calcula kcal y macros (en desarrollo)"
+                  />
+                  <ComingSoonCard
+                    emoji="🧬"
+                    title="Plan adaptativo semanal"
+                    desc="La IA ajusta calorías y macros según tu progreso real (en desarrollo)"
+                  />
+                  <ComingSoonCard
+                    emoji="👨‍🍳"
+                    title="Recetas IA"
+                    desc='"Tengo pollo, arroz y brócoli" → receta paso a paso (en desarrollo)'
+                  />
+                  <ComingSoonCard
+                    emoji="💬"
+                    title="Bot WhatsApp"
+                    desc='Mandas "comí 200g pollo" por WhatsApp y se registra solo (en desarrollo)'
+                  />
+                  <ComingSoonCard
+                    emoji="⌚"
+                    title="Apple Health / Google Fit"
+                    desc="Peso, agua, sueño integrados con tu plan (en desarrollo)"
+                  />
+                </>
+              )}
             </>
           )}
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Paywall modal */}
+      <Modal
+        visible={paywallOpen !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setPaywallOpen(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            {paywallOpen === 'PRO' ? (
+              <>
+                <Text style={styles.modalEmoji}>💪</Text>
+                <Text style={styles.modalTitle}>NutriPro</Text>
+                <Text style={styles.modalPrice}>
+                  $15<Text style={styles.modalPriceUnit}>/mes</Text>
+                </Text>
+                <View style={{ alignSelf: 'stretch', marginTop: 12, gap: 8 }}>
+                  {[
+                    'Diario ilimitado + edición',
+                    'Búsqueda de 20,000+ alimentos',
+                    'Escaneo código de barras',
+                    'Histórico de 30 días + gráfica',
+                    'Nutricionista IA: 5 consultas/día',
+                    'Plan recomendado IA',
+                    'Recordatorios inteligentes',
+                  ].map((f) => (
+                    <Text key={f} style={styles.modalFeature}>
+                      ✓ {f}
+                    </Text>
+                  ))}
+                </View>
+              </>
+            ) : (
+              <>
+                <Text style={styles.modalEmoji}>🏆</Text>
+                <Text style={styles.modalTitle}>NutriElite</Text>
+                <Text style={styles.modalPrice}>
+                  $30<Text style={styles.modalPriceUnit}>/mes</Text>
+                </Text>
+                <View style={{ alignSelf: 'stretch', marginTop: 12, gap: 8 }}>
+                  {[
+                    'Todo lo de NutriPro',
+                    'Foto del plato → IA identifica kcal',
+                    'Plan adaptativo semanal por IA',
+                    'Recetas IA con tus ingredientes',
+                    'Nutricionista IA ilimitado',
+                    'Bot WhatsApp para registrar comidas',
+                    'Apple Health / Google Fit',
+                    'Caja semanal del gym incluida',
+                  ].map((f) => (
+                    <Text key={f} style={styles.modalFeature}>
+                      ✓ {f}
+                    </Text>
+                  ))}
+                </View>
+              </>
+            )}
+            <TouchableOpacity
+              style={styles.modalCta}
+              onPress={() => {
+                setPaywallOpen(null);
+                Alert.alert(
+                  'Contacta a tu gym',
+                  'Pídele a tu gym que active esta suscripción para ti. El precio puede variar según tu gym.',
+                );
+              }}
+            >
+              <Text style={styles.modalCtaText}>Hablar con mi gym</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setPaywallOpen(null)} style={styles.modalClose}>
+              <Text style={styles.modalCloseText}>Cerrar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -312,113 +609,245 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
+    borderBottomColor: '#e5e7eb',
+    gap: 8,
   },
-  backBtn: { padding: 4 },
-  backText: { color: '#1d4ed8', fontWeight: '600', fontSize: 14 },
-  title: { fontSize: 17, fontWeight: '700', color: '#111827' },
-  content: { padding: 16, gap: 16, paddingBottom: 40 },
-  empty: { alignItems: 'center', paddingVertical: 60, gap: 8 },
+  backBtn: { paddingVertical: 4 },
+  backText: { fontSize: 14, color: '#1d4ed8', fontWeight: '600' },
+  title: { fontSize: 16, fontWeight: '700', color: '#111827', flex: 1, textAlign: 'center' },
+  tierChip: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 100 },
+  tierChipText: { fontSize: 11, fontWeight: '700' },
+  content: { padding: 16, gap: 14, paddingBottom: 32 },
+  empty: { alignItems: 'center', paddingVertical: 36, gap: 8 },
   emptyEmoji: { fontSize: 48 },
-  emptyTitle: { fontSize: 17, fontWeight: '700', color: '#374151' },
-  emptySub: { fontSize: 14, color: '#9ca3af', textAlign: 'center', paddingHorizontal: 24 },
+  emptyTitle: { fontSize: 18, fontWeight: '700', color: '#111827' },
+  emptySub: { fontSize: 13, color: '#6b7280', textAlign: 'center', paddingHorizontal: 24 },
+
   card: {
     backgroundColor: '#fff',
-    borderRadius: 16,
+    borderRadius: 14,
     padding: 16,
-    gap: 12,
     shadowColor: '#000',
     shadowOpacity: 0.05,
     shadowRadius: 8,
     elevation: 2,
   },
-  planHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  planGoal: { fontSize: 13, color: '#6b7280', marginBottom: 2 },
-  planName: { fontSize: 17, fontWeight: '700', color: '#111827', maxWidth: 220 },
+  planHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 14,
+  },
+  planGoal: { fontSize: 13, color: '#6b7280', fontWeight: '600' },
+  planName: { fontSize: 17, fontWeight: '700', color: '#111827', marginTop: 2 },
   kcalBadge: {
+    backgroundColor: '#1d4ed8',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 12,
     alignItems: 'center',
-    backgroundColor: '#eff6ff',
-    borderRadius: 12,
-    padding: 10,
-    minWidth: 64,
   },
-  kcalNum: { fontSize: 20, fontWeight: '800', color: '#1d4ed8' },
-  kcalUnit: { fontSize: 11, color: '#6b7280' },
-  macros: { gap: 8 },
-  macroItem: { gap: 4 },
-  macroRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  macroLabel: { fontSize: 12, color: '#6b7280' },
-  macroValue: { fontSize: 12, fontWeight: '700' },
-  macroBarTrack: { height: 5, backgroundColor: '#f3f4f6', borderRadius: 3, overflow: 'hidden' },
-  macroBarFill: { height: '100%', borderRadius: 3 },
-  planNotes: { fontSize: 12, color: '#6b7280', fontStyle: 'italic' },
-  section: { gap: 10 },
-  sectionTitle: { fontSize: 15, fontWeight: '700', color: '#374151' },
-  totalRow: { backgroundColor: '#fff', borderRadius: 12, padding: 12, gap: 2 },
-  totalLabel: { fontSize: 12, color: '#9ca3af' },
-  totalValue: { fontSize: 13, fontWeight: '600', color: '#374151' },
-  mealGroup: {
+  kcalNum: { color: '#fff', fontSize: 20, fontWeight: '800' },
+  kcalUnit: { color: '#dbeafe', fontSize: 10, fontWeight: '600' },
+  macros: { gap: 12 },
+  macroItem: {},
+  macroRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
+  macroLabel: { fontSize: 13, color: '#374151', fontWeight: '600' },
+  macroValue: { fontSize: 13, fontWeight: '700' },
+  macroBarTrack: { height: 6, backgroundColor: '#f3f4f6', borderRadius: 3, overflow: 'hidden' },
+  macroBarFill: { height: 6, borderRadius: 3 },
+  planNotes: { marginTop: 12, fontSize: 13, color: '#374151', lineHeight: 19 },
+
+  section: { gap: 8 },
+  sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  sectionTitle: { fontSize: 15, fontWeight: '700', color: '#111827' },
+  addEntryBtn: {
+    backgroundColor: '#dbeafe',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 100,
+  },
+  addEntryText: { color: '#1d4ed8', fontSize: 12, fontWeight: '700' },
+  totalRow: {
     backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 14,
-    gap: 8,
-    shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    elevation: 1,
+    borderRadius: 10,
+    padding: 10,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
   },
+  totalLabel: { fontSize: 12, color: '#6b7280', fontWeight: '600' },
+  totalValue: { fontSize: 12, color: '#111827', fontWeight: '600' },
+  mealGroup: { backgroundColor: '#fff', borderRadius: 10, padding: 12, gap: 4 },
   mealTitle: {
-    fontSize: 13,
-    fontWeight: '700',
+    fontSize: 12,
     color: '#6b7280',
+    fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+    marginBottom: 4,
   },
   diaryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 2,
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
   },
   diaryLeft: { flex: 1 },
-  diaryFood: { fontSize: 14, color: '#374151' },
-  diarySub: { fontSize: 12, color: '#9ca3af' },
-  diaryRight: { alignItems: 'flex-end', gap: 1 },
-  diaryQty: { fontSize: 12, color: '#9ca3af' },
-  diaryKcal: { fontSize: 13, fontWeight: '600', color: '#374151' },
-  noEntries: { fontSize: 13, color: '#9ca3af', textAlign: 'center', paddingVertical: 12 },
+  diaryFood: { fontSize: 13, color: '#111827', fontWeight: '600' },
+  diarySub: { fontSize: 11, color: '#9ca3af' },
+  diaryRight: { alignItems: 'flex-end' },
+  diaryQty: { fontSize: 12, color: '#6b7280' },
+  diaryKcal: { fontSize: 13, color: '#1d4ed8', fontWeight: '700' },
+  noEntries: { fontSize: 13, color: '#9ca3af', textAlign: 'center', paddingVertical: 20 },
+
+  hiddenEntriesCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fef3c7',
+    borderRadius: 10,
+    padding: 12,
+    gap: 8,
+    marginTop: 4,
+  },
+  hiddenEntriesIcon: { fontSize: 18 },
+  hiddenEntriesText: { flex: 1, fontSize: 12, color: '#78350f' },
+  hiddenEntriesCta: { fontWeight: '700', color: '#b45309' },
+
+  aiHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   aiTitle: { fontSize: 15, fontWeight: '700', color: '#15803d' },
-  aiSubtitle: { fontSize: 12, color: '#6b7280', marginTop: -4 },
-  aiReply: { backgroundColor: '#fff', borderRadius: 12, padding: 14, gap: 10 },
-  aiReplyText: { fontSize: 14, color: '#374151', lineHeight: 22 },
-  newQueryBtn: { alignSelf: 'flex-start' },
-  newQueryText: { fontSize: 13, color: '#1d4ed8', fontWeight: '600' },
+  aiLimit: { fontSize: 11, color: '#15803d', fontWeight: '600' },
+  aiSubtitle: { fontSize: 12, color: '#6b7280', marginTop: 2, marginBottom: 10 },
   aiInputRow: { flexDirection: 'row', gap: 8, alignItems: 'flex-end' },
   aiInput: {
     flex: 1,
     backgroundColor: '#fff',
     borderRadius: 12,
-    padding: 12,
-    fontSize: 14,
-    color: '#374151',
-    maxHeight: 80,
+    padding: 10,
+    fontSize: 13,
+    color: '#111827',
+    minHeight: 40,
+    maxHeight: 100,
     borderWidth: 1,
-    borderColor: '#d1fae5',
+    borderColor: '#d1d5db',
   },
   aiSendBtn: {
+    backgroundColor: '#15803d',
     width: 40,
     height: 40,
-    backgroundColor: '#16a34a',
     borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
   },
   aiSendText: { color: '#fff', fontSize: 18, fontWeight: '700' },
-  quickChip: {
-    backgroundColor: '#dcfce7',
-    borderRadius: 20,
-    paddingHorizontal: 12,
+  aiReply: { gap: 10 },
+  aiReplyText: { fontSize: 13, color: '#111827', lineHeight: 19 },
+  newQueryBtn: {
+    backgroundColor: '#15803d',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 14,
     paddingVertical: 6,
+    borderRadius: 100,
   },
-  quickChipText: { fontSize: 12, color: '#15803d' },
+  newQueryText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+
+  // Locked / Coming soon
+  lockedCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    shadowColor: '#000',
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  lockedLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, gap: 10 },
+  lockedEmoji: { fontSize: 24 },
+  lockedTitle: { fontSize: 13, fontWeight: '700', color: '#111827' },
+  lockedDesc: { fontSize: 11, color: '#6b7280', marginTop: 2 },
+  lockIcon: { fontSize: 12 },
+  lockedBadge: {
+    backgroundColor: '#fef3c7',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 100,
+  },
+  lockedBadgeText: { color: '#b45309', fontSize: 10, fontWeight: '700' },
+
+  soonCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    opacity: 0.85,
+  },
+  soonEmoji: { fontSize: 24 },
+  soonTitle: { fontSize: 13, fontWeight: '700', color: '#111827' },
+  soonDesc: { fontSize: 11, color: '#6b7280', marginTop: 2 },
+  soonBadge: {
+    backgroundColor: '#dbeafe',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 100,
+  },
+  soonBadgeText: { color: '#1d4ed8', fontSize: 10, fontWeight: '700' },
+
+  upgradeSection: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#6b7280',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginTop: 8,
+    marginBottom: 4,
+    paddingHorizontal: 4,
+  },
+  eliteHeader: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#b45309',
+    marginTop: 8,
+    paddingHorizontal: 4,
+  },
+
+  // Modal paywall
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalCard: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    paddingBottom: 36,
+    alignItems: 'center',
+  },
+  modalEmoji: { fontSize: 48 },
+  modalTitle: { fontSize: 24, fontWeight: '800', color: '#111827', marginTop: 4 },
+  modalPrice: { fontSize: 36, fontWeight: '900', color: '#1d4ed8', marginTop: 4 },
+  modalPriceUnit: { fontSize: 14, color: '#6b7280', fontWeight: '600' },
+  modalFeature: { fontSize: 13, color: '#374151' },
+  modalCta: {
+    backgroundColor: '#1d4ed8',
+    paddingHorizontal: 28,
+    paddingVertical: 14,
+    borderRadius: 100,
+    marginTop: 20,
+    alignSelf: 'stretch',
+    alignItems: 'center',
+  },
+  modalCtaText: { color: '#fff', fontWeight: '800', fontSize: 15 },
+  modalClose: { marginTop: 8, padding: 8 },
+  modalCloseText: { color: '#9ca3af', fontSize: 13 },
 });

@@ -190,9 +190,28 @@ export interface ProgressPhoto {
   created_at: string;
 }
 
+export type AddonTier = 'BASIC' | 'PRO' | 'ELITE';
+export interface MemberAddon {
+  id: string;
+  type: 'NUTRITION';
+  tier: AddonTier;
+  status: 'ACTIVE' | 'CANCELLED' | 'EXPIRED';
+  starts_at: string;
+  ends_at: string | null;
+  price_paid: string | number | null;
+  currency: string;
+  notes: string | null;
+}
+export interface MyAddonsResponse {
+  addons: MemberAddon[];
+  effective: { nutrition_tier: AddonTier };
+}
+
 export const memberApi = {
   getMe: (token: string) => apiClient.get<MemberProfile>('/api/v1/members/me', token),
   getMyStats: (token: string) => apiClient.get<MemberHomeStats>('/api/v1/members/me/stats', token),
+  getMyAddons: (token: string) =>
+    apiClient.get<MyAddonsResponse>('/api/v1/members/me/addons', token),
   getMyVolumeWeekly: (token: string, weeks = 8) =>
     apiClient.get<VolumeWeeklyResponse>(`/api/v1/members/me/volume-weekly?weeks=${weeks}`, token),
   listMyProgressPhotos: (token: string) =>
