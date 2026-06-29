@@ -540,16 +540,40 @@ export default function NutritionScreen() {
                 </>
               ) : tier === 'PRO' ? (
                 <>
-                  <ComingSoonCard
-                    emoji="🔍"
-                    title="Búsqueda de alimentos"
-                    desc="Base USDA + LATAM (en desarrollo)"
-                  />
-                  <ComingSoonCard
-                    emoji="📷"
-                    title="Escaneo código barras"
-                    desc="Identifica producto al instante (en desarrollo)"
-                  />
+                  <TouchableOpacity
+                    style={[
+                      styles.unlockedFeatureCard,
+                      { backgroundColor: '#dcfce7', borderColor: '#bbf7d0' },
+                    ]}
+                    onPress={() => router.push('/nutrition-barcode' as never)}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.lockedEmoji}>📷</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.lockedTitle}>Escanear código de barras</Text>
+                      <Text style={styles.lockedDesc}>
+                        Apunta al producto y se registra solo (base mundial OpenFoodFacts)
+                      </Text>
+                    </View>
+                    <Text style={[styles.unlockedChevron, { color: '#15803d' }]}>›</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.unlockedFeatureCard,
+                      { backgroundColor: '#dcfce7', borderColor: '#bbf7d0' },
+                    ]}
+                    onPress={() => router.push('/nutrition-text-log' as never)}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.lockedEmoji}>✏️</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.lockedTitle}>Registrar por texto</Text>
+                      <Text style={styles.lockedDesc}>
+                        Escribe "comí 200g pollo" y la IA lo registra al diario
+                      </Text>
+                    </View>
+                    <Text style={[styles.unlockedChevron, { color: '#15803d' }]}>›</Text>
+                  </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.unlockedFeatureCard}
                     onPress={() => router.push('/nutrition-history' as never)}
@@ -662,11 +686,40 @@ export default function NutritionScreen() {
                     </View>
                     <Text style={[styles.unlockedChevron, { color: '#15803d' }]}>›</Text>
                   </TouchableOpacity>
-                  <ComingSoonCard
-                    emoji="💬"
-                    title="Bot WhatsApp"
-                    desc='Mandas "comí 200g pollo" por WhatsApp y se registra solo (en desarrollo)'
-                  />
+                  <TouchableOpacity
+                    style={[
+                      styles.unlockedFeatureCard,
+                      { backgroundColor: '#dcfce7', borderColor: '#bbf7d0' },
+                    ]}
+                    onPress={() => router.push('/nutrition-barcode' as never)}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.lockedEmoji}>📷</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.lockedTitle}>Escanear código de barras</Text>
+                      <Text style={styles.lockedDesc}>
+                        Apunta al producto y se registra solo (OpenFoodFacts)
+                      </Text>
+                    </View>
+                    <Text style={[styles.unlockedChevron, { color: '#15803d' }]}>›</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.unlockedFeatureCard,
+                      { backgroundColor: '#dcfce7', borderColor: '#bbf7d0' },
+                    ]}
+                    onPress={() => router.push('/nutrition-text-log' as never)}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.lockedEmoji}>✏️</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.lockedTitle}>Registrar por texto (estilo WhatsApp)</Text>
+                      <Text style={styles.lockedDesc}>
+                        Escribe "comí 200g pollo" y la IA lo registra al diario
+                      </Text>
+                    </View>
+                    <Text style={[styles.unlockedChevron, { color: '#15803d' }]}>›</Text>
+                  </TouchableOpacity>
                   <ComingSoonCard
                     emoji="⌚"
                     title="Apple Health / Google Fit"

@@ -159,4 +159,17 @@ export class NutritionController {
   generateShoppingList(@CurrentUser() user: JwtPayload, @Body() body: { memberId: string }) {
     return this.nutritionService.generateShoppingList(this.gymId(user), body.memberId);
   }
+
+  // GET /food-items/by-barcode/:code — lookup local + OpenFoodFacts cache
+  @Get('food-items/by-barcode/:code')
+  findByBarcode(@CurrentUser() user: JwtPayload, @Param('code') code: string) {
+    return this.nutritionService.findByBarcode(this.gymId(user), code);
+  }
+
+  // POST /nutrition/log-from-text — parser NL ("comí 200g pollo") + registro
+  // Body: { memberId: string, text: string }
+  @Post('nutrition/log-from-text')
+  logFromText(@CurrentUser() user: JwtPayload, @Body() body: { memberId: string; text: string }) {
+    return this.nutritionService.logFromText(this.gymId(user), body.memberId, body.text);
+  }
 }

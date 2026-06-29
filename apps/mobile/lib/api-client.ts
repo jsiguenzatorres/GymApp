@@ -333,11 +333,13 @@ export interface FoodItem {
   id: string;
   name: string;
   brand: string | null;
+  barcode?: string | null;
   kcal_per_100g: number;
   protein_per_100g: number;
   carbs_per_100g: number;
   fat_per_100g: number;
   is_verified: boolean;
+  source?: string | null;
 }
 
 export interface DiaryRangeDay {
@@ -410,7 +412,26 @@ export const nutritionApi = {
       { memberId },
       token,
     ),
+  findByBarcode: (token: string, code: string) =>
+    apiClient.get<BarcodeLookupResponse>(`/api/v1/food-items/by-barcode/${code}`, token),
+  logFromText: (token: string, memberId: string, text: string) =>
+    apiClient.post<TextLogResponse>('/api/v1/nutrition/log-from-text', { memberId, text }, token),
 };
+
+export interface BarcodeLookupResponse {
+  found: boolean;
+  source?: 'local' | 'openfoodfacts';
+  item?: FoodItem;
+  error?: string;
+}
+
+export interface TextLogResponse {
+  success: boolean;
+  items: Array<{ name: string; grams: number; meal_type: string }>;
+  registered: Array<{ name: string; grams: number; kcal: number; matched: boolean }>;
+  note?: string;
+  error?: string;
+}
 
 export interface PhotoAnalyzeItem {
   name: string;

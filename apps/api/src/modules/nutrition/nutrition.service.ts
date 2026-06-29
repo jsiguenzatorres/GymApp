@@ -198,6 +198,185 @@ export class NutritionService {
     });
   }
 
+  // ─── BARCODE: lookup en local + fallback a OpenFoodFacts ──────────────────
+  async findByBarcode(gymId: string, barcode: string) {
+    const code = barcode.trim();
+    if (!/^\d{6,20}$/.test(code)) {
+      return { found: false, error: 'Código inválido (debe ser numérico de 6-20 dígitos)' };
+    }
+
+    // 1) buscar en BD local (global o del gym)
+    const local = await this.prisma.foodItem.findFirst({
+      where: { barcode: code, OR: [{ gym_id: gymId }, { gym_id: null }] },
+    });
+    if (local) {
+      return { found: true, source: 'local', item: local };
+    }
+
+    // 2) fallback a OpenFoodFacts (API pública gratuita)
+    try {
+      const off = await fetch(`https://world.openfoodfacts.org/api/v0/product/${code}.json`, {
+        headers: { 'User-Agent': 'GymApp/1.0' },
+      });
+      if (!off.ok) {
+        return { found: false, error: `OpenFoodFacts HTTP ${off.status}` };
+      }
+      const data = (await off.json()) as {
+        status: number;
+        product?: {
+          product_name?: string;
+          product_name_es?: string;
+          brands?: string;
+          nutriments?: {
+            'energy-kcal_100g'?: number;
+            proteins_100g?: number;
+            carbohydrates_100g?: number;
+            fat_100g?: number;
+          };
+        };
+      };
+
+      if (data.status !== 1 || !data.product) {
+        return { found: false, error: 'Producto no encontrado en OpenFoodFacts' };
+      }
+
+      const p = data.product;
+      const n = p.nutriments ?? {};
+      const name = (p.product_name_es ?? p.product_name ?? 'Producto desconocido').slice(0, 200);
+      const kcal = n['energy-kcal_100g'] ?? 0;
+
+      if (kcal === 0) {
+        return { found: false, error: 'Producto encontrado pero sin datos nutricionales' };
+      }
+
+      // Cachear en BD para próximas búsquedas (insertar como global)
+      const created = await this.prisma.foodItem.create({
+        data: {
+          gym_id: null,
+          name,
+          brand: p.brands?.split(',')[0]?.trim().slice(0, 100) ?? null,
+          barcode: code,
+          kcal_per_100g: kcal,
+          protein_per_100g: n.proteins_100g ?? 0,
+          carbs_per_100g: n.carbohydrates_100g ?? 0,
+          fat_per_100g: n.fat_100g ?? 0,
+          is_verified: true,
+          source: 'openfoodfacts',
+        },
+      });
+
+      return { found: true, source: 'openfoodfacts', item: created };
+    } catch (err) {
+      this.logger.error(`Barcode lookup failed: ${(err as Error).message}`);
+      return { found: false, error: 'Error consultando OpenFoodFacts' };
+    }
+  }
+
+  // ─── TEXTO NL: parser de "comí 200g pollo" → log de comida ────────────────
+  async logFromText(gymId: string, memberId: string, text: string) {
+    if (!text?.trim()) return { success: false, error: 'Texto vacío' };
+
+    const prompt = `Eres un asistente que interpreta lo que la persona dice que comió.
+Mensaje del usuario: "${text.trim()}"
+
+Identifica TODOS los alimentos mencionados con su cantidad estimada (en gramos) y tipo de comida.
+Si el usuario no especifica gramos, estima una porción razonable promedio (ej: 1 huevo = 50g, 1 tortilla = 30g, 1 manzana = 180g, una taza de arroz = 200g, un pedazo de pollo = 150g).
+Si no menciona el tipo de comida (desayuno/almuerzo/cena/snack), asume basado en hora actual (es ${new Date().toLocaleTimeString('es-SV', { hour: '2-digit', minute: '2-digit', hour12: false })}).
+
+Responde EXCLUSIVAMENTE con JSON válido:
+{
+  "items": [
+    { "name": "nombre del alimento", "grams": NN, "meal_type": "BREAKFAST"|"LUNCH"|"DINNER"|"SNACK" }
+  ],
+  "note": "comentario breve (max 100 char) si hay ambigüedad"
+}
+
+Si no puedes entender el mensaje, devuelve { "items": [], "note": "explicación" }.`;
+
+    try {
+      const raw = await this.gemini.generate(prompt);
+      const cleaned = raw
+        .replace(/^```json\s*/i, '')
+        .replace(/```\s*$/i, '')
+        .trim();
+      const parsed = JSON.parse(cleaned) as {
+        items: Array<{
+          name: string;
+          grams: number;
+          meal_type: 'BREAKFAST' | 'LUNCH' | 'DINNER' | 'SNACK';
+        }>;
+        note?: string;
+      };
+
+      if (!parsed.items?.length) {
+        return {
+          success: false,
+          items: [],
+          registered: [],
+          note: parsed.note ?? 'No se identificaron alimentos',
+        };
+      }
+
+      // Buscar food_items en BD y registrar lo que matchee
+      const today = new Date().toISOString().slice(0, 10);
+      const registered: Array<{ name: string; grams: number; kcal: number; matched: boolean }> = [];
+
+      for (const item of parsed.items) {
+        const food = await this.prisma.foodItem.findFirst({
+          where: {
+            OR: [{ gym_id: gymId }, { gym_id: null }],
+            name: { contains: item.name, mode: 'insensitive' },
+          },
+          orderBy: { is_verified: 'desc' },
+        });
+
+        if (!food) {
+          registered.push({ name: item.name, grams: item.grams, kcal: 0, matched: false });
+          continue;
+        }
+
+        const factor = item.grams / 100;
+        await this.prisma.foodDiaryEntry.create({
+          data: {
+            gym_id: gymId,
+            member_id: memberId,
+            food_item_id: food.id,
+            date: new Date(today),
+            meal_type: item.meal_type ?? 'LUNCH',
+            quantity_g: item.grams,
+            kcal: food.kcal_per_100g * factor,
+            protein_g: food.protein_per_100g * factor,
+            carbs_g: food.carbs_per_100g * factor,
+            fat_g: food.fat_per_100g * factor,
+            notes: `Vía texto: "${text.slice(0, 100)}"`,
+          },
+        });
+
+        registered.push({
+          name: food.name,
+          grams: item.grams,
+          kcal: Math.round(food.kcal_per_100g * factor),
+          matched: true,
+        });
+      }
+
+      return {
+        success: true,
+        items: parsed.items,
+        registered,
+        note: parsed.note,
+      };
+    } catch (err) {
+      this.logger.error(`Text log failed: ${(err as Error).message}`);
+      return {
+        success: false,
+        items: [],
+        registered: [],
+        error: (err as Error).message.slice(0, 200),
+      };
+    }
+  }
+
   // ─── IA VISION: Foto del plato → identificación ────────────────────────────
   async analyzeMealPhoto(imageDataUri: string) {
     // Parsear data URI

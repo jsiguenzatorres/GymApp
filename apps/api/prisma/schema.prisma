@@ -812,17 +812,20 @@ model FoodItem {
   gym_id          String? @db.Uuid  // null = item global de la biblioteca
   name            String  @db.VarChar(200)
   brand           String? @db.VarChar(100)
+  barcode         String? @unique @db.VarChar(50)  // EAN/UPC para escaneo
   kcal_per_100g   Float
   protein_per_100g Float
   carbs_per_100g  Float
   fat_per_100g    Float
   is_verified     Boolean @default(false)
+  source          String? @db.VarChar(30)  // 'manual' | 'openfoodfacts' | 'usda'
   created_at      DateTime @default(now())
 
   gym               Gym?             @relation(fields: [gym_id], references: [id], onDelete: Cascade)
   food_diary_entries FoodDiaryEntry[]
 
   @@index([gym_id])
+  @@index([barcode])
   @@map("food_items")
 }
 
