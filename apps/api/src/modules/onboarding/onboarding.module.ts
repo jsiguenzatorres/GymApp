@@ -1,4 +1,13 @@
-import { Body, Controller, ForbiddenException, Get, Module, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  ForbiddenException,
+  Get,
+  Module,
+  Param,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { DatabaseModule } from '../database/database.module';
@@ -181,9 +190,30 @@ class OnboardingController {
   }
 }
 
+@Controller('admin/members')
+@UseGuards(JwtAuthGuard)
+class OnboardingAdminController {
+  constructor(
+    private readonly svc: OnboardingService,
+    private readonly prisma: PrismaService,
+  ) {}
+
+  private requireStaff(user: JwtPayload) {
+    if (!['GYM_OWNER', 'GYM_ADMIN', 'TRAINER', 'NUTRITIONIST', 'SUPER_ADMIN'].includes(user.role)) {
+      throw new ForbiddenException('Solo staff');
+    }
+  }
+
+  @Get(':memberId/onboarding')
+  async get(@CurrentUser() user: JwtPayload, @Param('memberId') memberId: string) {
+    this.requireStaff(user);
+    return this.svc.getOrCreate(memberId);
+  }
+}
+
 @Module({
   imports: [DatabaseModule, AuthModule],
   providers: [OnboardingService],
-  controllers: [OnboardingController],
+  controllers: [OnboardingController, OnboardingAdminController],
 })
 export class OnboardingModule {}

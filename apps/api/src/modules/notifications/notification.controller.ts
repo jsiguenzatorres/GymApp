@@ -10,6 +10,7 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  ForbiddenException,
 } from '@nestjs/common';
 import { NotificationService } from './notification.service';
 import { FcmService } from './fcm.service';
@@ -75,5 +76,27 @@ export class NotificationController {
   @HttpCode(HttpStatus.NO_CONTENT)
   async removeToken(@Body() body: { token: string }) {
     await this.fcm.removeToken(body.token);
+  }
+
+  // ─── BROADCAST (admin) ─────────────────────────────────────────────────────
+  @Post('admin/broadcast')
+  async broadcast(
+    @CurrentUser() user: JwtPayload,
+    @Body()
+    body: {
+      title: string;
+      body: string;
+      segment?: 'all' | 'all_active' | 'tier_pro' | 'tier_elite' | 'at_risk';
+      type?: string;
+    },
+  ) {
+    if (!['GYM_OWNER', 'GYM_ADMIN', 'SUPER_ADMIN'].includes(user.role)) {
+      throw new ForbiddenException('Solo staff puede enviar broadcasts');
+    }
+    if (!user.gymId) throw new ForbiddenException('gymId requerido');
+    if (!body.title?.trim() || !body.body?.trim()) {
+      throw new ForbiddenException('title y body son requeridos');
+    }
+    return this.notifService.broadcast(user.gymId, body);
   }
 }

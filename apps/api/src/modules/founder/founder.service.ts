@@ -131,6 +131,30 @@ export class FounderService {
     });
   }
 
+  // Devuelve el status del founder del gym del owner que pregunta + offer pública
+  async getMyGymStatus(gymId?: string) {
+    const offer = await this.getOrCreateOffer();
+    if (!gymId) {
+      return { gym_is_founder: false, offer };
+    }
+    const gym = await this.prisma.gym.findUnique({
+      where: { id: gymId },
+      select: {
+        is_founder: true,
+        founder_plan_type: true,
+        founder_locked_price: true,
+        founder_locked_at: true,
+      },
+    });
+    return {
+      gym_is_founder: gym?.is_founder ?? false,
+      gym_founder_plan_type: gym?.founder_plan_type ?? null,
+      gym_founder_locked_price: gym?.founder_locked_price ? Number(gym.founder_locked_price) : null,
+      gym_founder_locked_at: gym?.founder_locked_at,
+      offer,
+    };
+  }
+
   // Revierte un claim (solo SUPER_ADMIN puede hacer esto — caso de fraude o error).
   async revokeForGym(gymId: string) {
     const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });

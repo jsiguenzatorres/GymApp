@@ -26,6 +26,14 @@ export class FounderController {
     return this.founderService.getPublicStatus();
   }
 
+  // ─── GYM OWNER — ver SU estado founder ─────────────────────────────────────
+  // GET /api/v1/founder-offer/my-status
+  @UseGuards(JwtAuthGuard)
+  @Get('my-status')
+  async myStatus(@CurrentUser() user: JwtPayload) {
+    return this.founderService.getMyGymStatus(user.gymId);
+  }
+
   // ─── ADMIN (SUPER_ADMIN del SaaS) ────────────────────────────────────────────
   // GET /api/v1/founder-offer/admin
   @UseGuards(JwtAuthGuard)

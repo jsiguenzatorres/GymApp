@@ -5,6 +5,10 @@ import { serverFetch } from '@/lib/server-api';
 import { MemberStatusBadge } from '@/components/members/member-status-badge';
 import { MembershipActionsClient } from '@/components/members/membership-actions-client';
 import { AddonsSection } from '@/components/members/addons-section';
+import { CreditSection } from '@/components/members/credit-section';
+import { HealthDataSection } from '@/components/members/health-data-section';
+import { OnboardingStatusSection } from '@/components/members/onboarding-status';
+import { revalidatePath } from 'next/cache';
 import { ArrowLeft, Phone, Mail, Calendar, MapPin, Shield } from 'lucide-react';
 
 export const metadata: Metadata = { title: 'Perfil de Miembro — GymApp' };
@@ -102,11 +106,50 @@ interface PageProps {
   params: Promise<{ id: string }>;
 }
 
+// ─── Credit Server Actions (J2) ────────────────────────────────────────────
+async function fetchCreditAction(memberId: string) {
+  'use server';
+  const [balance, history] = await Promise.all([
+    serverFetch<{ balance_usd: number }>(`/api/v1/admin/members/${memberId}/credit`),
+    serverFetch<
+      Array<{
+        id: string;
+        kind: 'CHARGE' | 'PAYMENT' | 'USE' | 'REFUND';
+        amount_usd: string | number;
+        balance_after: string | number;
+        note: string | null;
+        related_order_id: string | null;
+        created_at: string;
+      }>
+    >(`/api/v1/admin/members/${memberId}/credit/history?limit=30`),
+  ]);
+  return { balance: balance?.balance_usd ?? 0, history: history ?? [] };
+}
+
+async function createCreditAction(memberId: string, formData: FormData) {
+  'use server';
+  const payload = {
+    kind: formData.get('kind') as 'CHARGE' | 'PAYMENT' | 'USE' | 'REFUND',
+    amount_usd: parseFloat(formData.get('amount_usd') as string),
+    note: (formData.get('note') as string) || undefined,
+  };
+  const res = await serverFetch(`/api/v1/admin/members/${memberId}/credit`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  revalidatePath(`/members/${memberId}`);
+  if (!res) return { ok: false, error: 'No se pudo registrar el movimiento' };
+  return { ok: true };
+}
+
 export default async function MemberDetailPage({ params }: PageProps) {
   const { id } = await params;
   const member = await serverFetch<MemberDetail>(`/api/v1/members/${id}`);
 
   if (!member) notFound();
+
+  // Crédito inicial (se refresca client-side al hacer mutación)
+  const credit = await fetchCreditAction(id);
 
   const activeMembership = member.memberships.find((m) =>
     ['ACTIVE', 'TRIAL', 'FROZEN'].includes(m.status),
@@ -304,8 +347,23 @@ export default async function MemberDetailPage({ params }: PageProps) {
         </div>
       )}
 
+      {/* Onboarding status (J5) */}
+      <OnboardingStatusSection memberId={id} />
+
       {/* Add-ons del miembro (NutriPro / NutriElite, etc.) */}
       <AddonsSection memberId={id} />
+
+      {/* Crédito en cuenta (J2) */}
+      <CreditSection
+        memberId={id}
+        initialBalance={credit.balance}
+        initialHistory={credit.history}
+        fetchAction={fetchCreditAction}
+        createAction={createCreditAction}
+      />
+
+      {/* Datos de salud (J3) */}
+      <HealthDataSection memberId={id} />
 
       {member.notes && (
         <div className="rounded-lg border bg-card p-5">

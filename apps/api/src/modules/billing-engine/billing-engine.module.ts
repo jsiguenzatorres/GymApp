@@ -7,6 +7,7 @@ import {
   Module,
   NotFoundException,
   Post,
+  Query,
   UseGuards,
   Logger,
   Param,
@@ -104,6 +105,18 @@ class BillingEngineService {
     });
   }
 
+  /** Admin: lista eventos de webhook recibidos (J4) */
+  async listWebhookEvents(opts: { provider?: string; processed?: boolean; limit?: number }) {
+    return this.prisma.billingWebhookEvent.findMany({
+      where: {
+        ...(opts.provider ? { provider: opts.provider } : {}),
+        ...(opts.processed !== undefined ? { processed: opts.processed } : {}),
+      },
+      orderBy: { received_at: 'desc' },
+      take: Math.min(opts.limit ?? 50, 200),
+    });
+  }
+
   /**
    * Recibe webhook crudo de Stripe/MP. Guarda el evento para idempotencia y
    * deja procesamiento real para Fase 2. Por ahora solo registra.
@@ -171,6 +184,30 @@ class BillingMemberController {
   }
 }
 
+/** Admin: ver eventos de webhook recibidos (J4) */
+@Controller('admin/billing/webhooks')
+@UseGuards(JwtAuthGuard)
+class BillingWebhooksAdminController {
+  constructor(private readonly svc: BillingEngineService) {}
+
+  @Get()
+  async list(
+    @CurrentUser() user: JwtPayload,
+    @Query('provider') provider?: string,
+    @Query('processed') processed?: string,
+    @Query('limit') limit?: string,
+  ) {
+    if (!['GYM_OWNER', 'GYM_ADMIN', 'SUPER_ADMIN'].includes(user.role)) {
+      throw new ForbiddenException('Solo staff puede ver webhooks');
+    }
+    return this.svc.listWebhookEvents({
+      provider,
+      processed: processed === 'true' ? true : processed === 'false' ? false : undefined,
+      limit: limit ? parseInt(limit, 10) : 50,
+    });
+  }
+}
+
 /** Webhook público (sin auth) — recibe de Stripe / MP. La firma se valida en Fase 2. */
 @Controller('webhooks/billing')
 class BillingWebhooksController {
@@ -195,6 +232,6 @@ class BillingWebhooksController {
 @Module({
   imports: [DatabaseModule, AuthModule],
   providers: [BillingEngineService],
-  controllers: [BillingMemberController, BillingWebhooksController],
+  controllers: [BillingMemberController, BillingWebhooksAdminController, BillingWebhooksController],
 })
 export class BillingEngineModule {}

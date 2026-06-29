@@ -68,3 +68,20 @@ export class SubscriptionsController {
     return this.svc.cancel(member.id, id);
   }
 }
+
+import { Controller as Ctrl, Get as GetAdmin, Query } from '@nestjs/common';
+
+@Ctrl('admin/subscriptions')
+@UseGuards(JwtAuthGuard)
+export class SubscriptionsAdminController {
+  constructor(private readonly svc: SubscriptionsService) {}
+
+  @GetAdmin()
+  async list(@CurrentUser() user: JwtPayload, @Query('status') status?: string) {
+    if (!['GYM_OWNER', 'GYM_ADMIN', 'RECEPTIONIST', 'SUPER_ADMIN'].includes(user.role)) {
+      throw new ForbiddenException('Solo staff');
+    }
+    if (!user.gymId) throw new ForbiddenException('gymId requerido');
+    return this.svc.listAllAdmin(user.gymId, status);
+  }
+}

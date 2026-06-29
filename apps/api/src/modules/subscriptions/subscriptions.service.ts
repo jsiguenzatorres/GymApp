@@ -63,4 +63,20 @@ export class SubscriptionsService {
   async cancel(memberId: string, subscriptionId: string) {
     return this.update(memberId, subscriptionId, { status: 'CANCELLED' });
   }
+
+  // ─── ADMIN (J7) ────────────────────────────────────────────────────────
+  async listAllAdmin(gymId: string, status?: string) {
+    return this.prisma.productSubscription.findMany({
+      where: {
+        gym_id: gymId,
+        ...(status ? { status } : { status: { in: ['ACTIVE', 'PAUSED'] } }),
+      },
+      orderBy: [{ status: 'asc' }, { next_delivery_at: 'asc' }],
+      include: {
+        product: { select: { id: true, name: true, price: true, image_url: true } },
+        member: { select: { id: true, first_name: true, last_name: true, phone: true } },
+      },
+      take: 200,
+    });
+  }
 }

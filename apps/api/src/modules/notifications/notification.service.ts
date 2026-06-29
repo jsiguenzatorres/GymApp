@@ -108,6 +108,71 @@ export class NotificationService {
     return notification;
   }
 
+  /**
+   * Envía notificación masiva a miembros del gym con segmentación opcional.
+   * Returns: cuántos miembros recibieron la notif.
+   */
+  async broadcast(
+    gymId: string,
+    dto: {
+      title: string;
+      body: string;
+      segment?: 'all_active' | 'all' | 'tier_pro' | 'tier_elite' | 'at_risk';
+      type?: string;
+    },
+  ): Promise<{ recipients: number }> {
+    let memberWhere: Record<string, unknown> = { gym_id: gymId };
+
+    if (dto.segment === 'all_active' || !dto.segment) {
+      memberWhere = { ...memberWhere, status: { in: ['ACTIVE', 'TRIAL'] } };
+    } else if (dto.segment === 'at_risk') {
+      memberWhere = {
+        ...memberWhere,
+        status: { in: ['ACTIVE', 'TRIAL'] },
+        risk_score: { gte: 70 },
+      };
+    } else if (dto.segment === 'tier_pro' || dto.segment === 'tier_elite') {
+      const tier = dto.segment === 'tier_pro' ? 'PRO' : 'ELITE';
+      memberWhere = {
+        ...memberWhere,
+        status: { in: ['ACTIVE', 'TRIAL'] },
+        addons: { some: { type: 'NUTRITION', tier, status: 'ACTIVE' } },
+      };
+    }
+
+    const members = await this.prisma.member.findMany({
+      where: memberWhere,
+      select: { user_id: true },
+    });
+
+    if (members.length === 0) return { recipients: 0 };
+
+    const type = dto.type ?? 'BROADCAST';
+
+    // 1) Persistir todas las notifs en BD (una query)
+    await this.prisma.notification.createMany({
+      data: members.map((m) => ({
+        gym_id: gymId,
+        user_id: m.user_id,
+        type,
+        title: dto.title,
+        body: dto.body,
+        data: {} as Prisma.InputJsonValue,
+        channel: 'IN_APP',
+      })),
+      skipDuplicates: true,
+    });
+
+    // 2) Disparar push fire-and-forget (no bloquea)
+    for (const m of members) {
+      this.fcm
+        .sendToUser(m.user_id, { title: dto.title, body: dto.body }, { type, gymId })
+        .catch(() => null);
+    }
+
+    return { recipients: members.length };
+  }
+
   private toStringRecord(obj: Record<string, unknown>): Record<string, string> {
     return Object.fromEntries(
       Object.entries(obj)

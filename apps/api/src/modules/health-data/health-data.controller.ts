@@ -1,4 +1,14 @@
-import { Body, Controller, Delete, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  ForbiddenException,
+  Get,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { HealthDataService, HealthKind } from './health-data.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -79,5 +89,35 @@ export class HealthDataController {
       }
     }
     return { imported: ok, total: body.entries.length, source: body.source };
+  }
+}
+
+// ─── ADMIN (J3): staff/trainer ve datos del miembro ──────────────────────
+@Controller('admin/members')
+@UseGuards(JwtAuthGuard)
+export class HealthDataAdminController {
+  constructor(private readonly healthData: HealthDataService) {}
+
+  private requireStaff(user: JwtPayload) {
+    if (!['GYM_OWNER', 'GYM_ADMIN', 'TRAINER', 'NUTRITIONIST', 'SUPER_ADMIN'].includes(user.role)) {
+      throw new ForbiddenException('Solo staff puede ver datos de salud de miembros');
+    }
+  }
+
+  @Get(':memberId/health-data')
+  async listAdmin(
+    @CurrentUser() user: JwtPayload,
+    @Param('memberId') memberId: string,
+    @Query('kind') kind?: HealthKind,
+    @Query('days') days?: string,
+  ) {
+    this.requireStaff(user);
+    return this.healthData.listRecent(memberId, kind, days ? parseInt(days, 10) : 30);
+  }
+
+  @Get(':memberId/health-data/summary')
+  async summaryAdmin(@CurrentUser() user: JwtPayload, @Param('memberId') memberId: string) {
+    this.requireStaff(user);
+    return this.healthData.summary(memberId);
   }
 }

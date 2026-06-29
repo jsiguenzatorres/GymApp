@@ -25,6 +25,9 @@ import {
   Target,
   Gift,
   Package,
+  Megaphone,
+  Repeat,
+  Webhook,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -53,6 +56,9 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/rewards', label: 'Tienda recompensas', icon: Gift },
   { href: '/blog', label: 'Blog', icon: Newspaper },
   { href: '/monthly-boxes', label: 'Caja del mes', icon: Package },
+  { href: '/subscriptions', label: 'Suscripciones', icon: Repeat },
+  { href: '/broadcast', label: 'Mensaje masivo', icon: Megaphone },
+  { href: '/webhooks', label: 'Webhooks', icon: Webhook },
   { href: '/access', label: 'Control de Acceso', icon: ScanLine },
   { href: '/crm', label: 'CRM / ARIA', icon: BrainCircuit },
   { href: '/analytics', label: 'Analytics', icon: BarChart3 },
