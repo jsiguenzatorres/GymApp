@@ -504,6 +504,47 @@ export interface MembershipType {
   max_freeze_days: number;
 }
 
+// ─── Credit en cuenta (E5) ──────────────────────────────────────────────
+export interface CreditTransaction {
+  id: string;
+  kind: 'CHARGE' | 'PAYMENT' | 'USE' | 'REFUND';
+  amount_usd: string | number;
+  balance_after: string | number;
+  note: string | null;
+  related_order_id: string | null;
+  created_at: string;
+}
+
+export interface LastOrderWithItems {
+  id: string;
+  status: string;
+  total: string | number;
+  created_at: string;
+  items: Array<{
+    id: string;
+    quantity: number;
+    unit_price: string | number;
+    subtotal: string | number;
+    product: {
+      id: string;
+      name: string;
+      price: string | number;
+      image_url: string | null;
+      is_active: boolean;
+      stock: number;
+    };
+  }>;
+}
+
+export const creditApi = {
+  getMyBalance: (token: string) =>
+    apiClient.get<{ balance_usd: number }>('/api/v1/me/credit', token),
+  getMyHistory: (token: string, limit = 30) =>
+    apiClient.get<CreditTransaction[]>(`/api/v1/me/credit/history?limit=${limit}`, token),
+  getMyLastOrders: (token: string, limit = 5) =>
+    apiClient.get<LastOrderWithItems[]>(`/api/v1/me/marketplace/last-orders?limit=${limit}`, token),
+};
+
 export const membershipApi = {
   requestFreeze: (token: string, body: { duration_days: number; reason?: string }) =>
     apiClient.post<{ message: string; freezeEndsAt: string }>(
@@ -720,7 +761,7 @@ export interface MarketplaceOrder {
     id: string;
     quantity: number;
     unit_price: string;
-    product: { name: string };
+    product: { id?: string; name: string };
   }>;
 }
 

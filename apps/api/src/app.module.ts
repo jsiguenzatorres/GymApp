@@ -31,6 +31,7 @@ import { HealthDataModule } from './modules/health-data/health-data.module';
 import { NotificationPrefsModule } from './modules/notification-prefs/notification-prefs.module';
 import { ProgressPdfModule } from './modules/progress-pdf/progress-pdf.module';
 import { MonthlyBoxModule } from './modules/monthly-box/monthly-box.module';
+import { CreditModule } from './modules/credit/credit.module';
 
 @Module({
   imports: [
@@ -75,6 +76,7 @@ import { MonthlyBoxModule } from './modules/monthly-box/monthly-box.module';
     NotificationPrefsModule,
     ProgressPdfModule,
     MonthlyBoxModule,
+    CreditModule,
     // Módulos de negocio se agregan aquí en cada sprint
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

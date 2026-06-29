@@ -17,6 +17,7 @@ import { useAuthStore } from '@/store/auth.store';
 import {
   marketplaceApi,
   ordersApi,
+  creditApi,
   Product,
   ProductCategory,
   MarketplaceOrder,
@@ -60,6 +61,48 @@ export default function MarketplaceScreen() {
   // Orders state
   const [orders, setOrders] = useState<MarketplaceOrder[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
+
+  // Credit (E5)
+  const [creditBalance, setCreditBalance] = useState<number | null>(null);
+
+  const loadCredit = useCallback(async () => {
+    if (!accessToken) return;
+    try {
+      const res = await creditApi.getMyBalance(accessToken);
+      setCreditBalance(res.balance_usd);
+    } catch {
+      setCreditBalance(null);
+    }
+  }, [accessToken]);
+
+  useEffect(() => {
+    loadCredit();
+  }, [loadCredit]);
+
+  const repeatOrder = useCallback(
+    (order: MarketplaceOrder) => {
+      // Repuebla el carrito con los items del pedido y cambia a vista tienda
+      const next: Record<string, number> = {};
+      for (const it of order.items ?? []) {
+        // Solo agregar si el producto sigue disponible
+        const matched = products.find((p) => p.id === it.product?.id && p.is_active);
+        if (matched) {
+          next[matched.id] = (next[matched.id] ?? 0) + it.quantity;
+        }
+      }
+      if (Object.keys(next).length === 0) {
+        Alert.alert(
+          'No disponible',
+          'Los productos de este pedido ya no están en el catálogo. Habla con tu gym.',
+        );
+        return;
+      }
+      setCart(next);
+      setView('store');
+      Alert.alert('Listo', 'Tu carrito se llenó con los productos del pedido anterior.');
+    },
+    [products],
+  );
 
   const load = useCallback(async () => {
     if (!accessToken) return;
@@ -328,6 +371,13 @@ export default function MarketplaceScreen() {
                     <Text style={styles.orderTotal}>
                       Total: ${parseFloat(order.total_amount).toFixed(2)}
                     </Text>
+                    <TouchableOpacity
+                      style={styles.repeatBtn}
+                      onPress={() => repeatOrder(order)}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={styles.repeatBtnText}>🔄 Repetir</Text>
+                    </TouchableOpacity>
                   </View>
                 </View>
               );
@@ -352,6 +402,34 @@ export default function MarketplaceScreen() {
             />
           }
         >
+          {/* Credit balance card (E5) */}
+          {creditBalance !== null && (
+            <View
+              style={[
+                styles.creditCard,
+                {
+                  backgroundColor: creditBalance >= 0 ? '#dcfce7' : '#fee2e2',
+                  borderColor: creditBalance >= 0 ? '#bbf7d0' : '#fecaca',
+                },
+              ]}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={styles.creditLabel}>
+                  {creditBalance >= 0 ? 'Saldo de crédito' : 'Adeudo con el gym'}
+                </Text>
+                <Text
+                  style={[
+                    styles.creditValue,
+                    { color: creditBalance >= 0 ? '#15803d' : '#dc2626' },
+                  ]}
+                >
+                  {creditBalance < 0 ? '-' : ''}${Math.abs(creditBalance).toFixed(2)}
+                </Text>
+              </View>
+              <Text style={styles.creditEmoji}>{creditBalance >= 0 ? '💳' : '⚠️'}</Text>
+            </View>
+          )}
+
           {/* Category chips */}
           <ScrollView
             horizontal
@@ -664,4 +742,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   retakeBtnText: { color: '#374151', fontWeight: '600', fontSize: 14 },
+
+  // E5 — Credit card + repeat order
+  creditCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 12,
+    marginHorizontal: 12,
+    marginTop: 4,
+    marginBottom: 8,
+    borderWidth: 1,
+    gap: 12,
+  },
+  creditLabel: { fontSize: 11, color: '#6b7280', fontWeight: '700', letterSpacing: 0.5 },
+  creditValue: { fontSize: 22, fontWeight: '900', marginTop: 2 },
+  creditEmoji: { fontSize: 28 },
+  repeatBtn: {
+    backgroundColor: '#1d4ed8',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  repeatBtnText: { color: '#fff', fontSize: 12, fontWeight: '700' },
 });

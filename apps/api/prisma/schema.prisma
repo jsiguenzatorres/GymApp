@@ -243,6 +243,7 @@ model Member {
   // Gamificación
   points_lifetime       Int       @default(0) // FitCoins acumulados históricamente (nivel)
   points_balance        Int       @default(0) // FitCoins disponibles (gastables)
+  credit_balance_usd    Decimal   @default(0) @db.Decimal(10, 2) // saldo crédito real ($USD; negativo = deuda)
   // Metadata
   referred_by   String?      @db.Uuid
   source        String?      @db.VarChar(50) // walk-in|referral|social_media|web
@@ -274,6 +275,7 @@ model Member {
   health_data           HealthDataEntry[]
   notification_prefs    NotificationPreference[]
   box_delivery_requests BoxDeliveryRequest[]
+  credit_transactions   MemberCreditTransaction[]
 
   @@index([gym_id, status])
   @@index([gym_id, risk_score])
@@ -1249,4 +1251,27 @@ model BoxDeliveryRequest {
   @@unique([member_id, box_id])
   @@index([gym_id, status, requested_at(sort: Desc)])
   @@map("box_delivery_requests")
+}
+
+// ─── Crédito en cuenta del miembro (E5) ─────────────────────────────────────
+// Movimientos del saldo de crédito. El campo Member.credit_balance_usd se
+// mantiene atómicamente por triggers en el service.
+
+model MemberCreditTransaction {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gym_id      String   @db.Uuid
+  member_id   String   @db.Uuid
+  kind        String   @db.VarChar(20) // CHARGE (gym carga deuda) | PAYMENT (miembro paga) | USE (gasta en marketplace) | REFUND
+  amount_usd  Decimal  @db.Decimal(10, 2) // signo: positivo aumenta saldo, negativo lo reduce
+  balance_after Decimal @db.Decimal(10, 2)
+  related_order_id String? @db.Uuid
+  note        String?
+  created_by_staff_id String? @db.Uuid
+  created_at  DateTime @default(now())
+
+  member Member @relation(fields: [member_id], references: [id], onDelete: Cascade)
+
+  @@index([member_id, created_at(sort: Desc)])
+  @@index([gym_id, created_at(sort: Desc)])
+  @@map("member_credit_transactions")
 }
