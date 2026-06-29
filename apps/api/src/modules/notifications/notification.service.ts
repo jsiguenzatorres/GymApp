@@ -23,7 +23,7 @@ export class NotificationService {
   // ─── CREAR ────────────────────────────────────────────────────────────────
 
   async create(dto: CreateNotifDto) {
-    return this.prisma.notification.create({
+    const notification = await this.prisma.notification.create({
       data: {
         gym_id: dto.gymId,
         user_id: dto.userId,
@@ -34,6 +34,19 @@ export class NotificationService {
         channel: dto.channel ?? 'IN_APP',
       },
     });
+
+    // Envío push fire-and-forget (no bloquea la creación de la notif)
+    this.fcm
+      .sendToUser(
+        dto.userId,
+        { title: dto.title, body: dto.body },
+        { type: dto.type, gymId: dto.gymId, ...(dto.data ? this.toStringRecord(dto.data) : {}) },
+      )
+      .catch(() => {
+        // los tokens inválidos los limpia FcmService internamente
+      });
+
+    return notification;
   }
 
   async notifyStaffByRole(

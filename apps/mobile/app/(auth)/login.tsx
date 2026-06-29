@@ -15,7 +15,8 @@ import { router } from 'expo-router';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as SecureStore from 'expo-secure-store';
 import { useAuthStore } from '@/store/auth.store';
-import { authApi, ApiError } from '@/lib/api-client';
+import { authApi, onboardingApi, ApiError } from '@/lib/api-client';
+import { registerPushToken } from '@/lib/push';
 import { THEME_LIGHT, COLORS, RADIUS, SPACING, TYPOGRAPHY } from '@/theme';
 
 const T = THEME_LIGHT.colors;
@@ -62,6 +63,19 @@ export default function LoginScreen() {
       const data = await authApi.login(savedEmail, savedPwd);
       await setTokens(data.accessToken, data.refreshToken);
       setUser(data.user);
+      registerPushToken(data.accessToken).catch(() => null);
+      // Onboarding check (solo miembros)
+      if (data.user.role === 'MEMBER' || data.user.role === 'MEMBER_TRIAL') {
+        try {
+          const ob = await onboardingApi.get(data.accessToken);
+          if (!ob.completed_at) {
+            router.replace('/onboarding' as never);
+            return;
+          }
+        } catch {
+          // si falla, vamos al home igual
+        }
+      }
       router.replace('/(tabs)');
     } catch (err) {
       if (err instanceof ApiError) setError(err.message || 'Error de autenticación');
@@ -80,6 +94,19 @@ export default function LoginScreen() {
       const data = await authApi.login(email.trim().toLowerCase(), password, totp || undefined);
       await setTokens(data.accessToken, data.refreshToken);
       setUser(data.user);
+      registerPushToken(data.accessToken).catch(() => null);
+      // Onboarding check (solo miembros)
+      if (data.user.role === 'MEMBER' || data.user.role === 'MEMBER_TRIAL') {
+        try {
+          const ob = await onboardingApi.get(data.accessToken);
+          if (!ob.completed_at) {
+            router.replace('/onboarding' as never);
+            return;
+          }
+        } catch {
+          // si falla, vamos al home igual
+        }
+      }
       // Save credentials so biometric login can reuse them
       if (biometricAvailable) {
         await SecureStore.setItemAsync(BIOMETRIC_EMAIL_KEY, email.trim().toLowerCase());

@@ -35,6 +35,7 @@ import { MonthlyBoxModule } from './modules/monthly-box/monthly-box.module';
 import { CreditModule } from './modules/credit/credit.module';
 import { ScheduledTasksModule } from './modules/scheduled-tasks/scheduled-tasks.module';
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
+import { OnboardingModule } from './modules/onboarding/onboarding.module';
 
 @Module({
   imports: [
@@ -84,6 +85,7 @@ import { SubscriptionsModule } from './modules/subscriptions/subscriptions.modul
     CreditModule,
     ScheduledTasksModule,
     SubscriptionsModule,
+    OnboardingModule,
     // Módulos de negocio se agregan aquí en cada sprint
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

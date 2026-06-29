@@ -141,6 +141,8 @@ model Gym {
   gym_knowledge         GymKnowledge[]
   monthly_boxes         GymMonthlyBox[]
   box_delivery_requests BoxDeliveryRequest[]
+  challenges            Challenge[]
+  rewards               Reward[]
 
   @@index([saas_plan, is_active])
   @@map("gyms")
@@ -277,6 +279,11 @@ model Member {
   box_delivery_requests BoxDeliveryRequest[]
   credit_transactions   MemberCreditTransaction[]
   product_subscriptions ProductSubscription[]
+  member_challenges     MemberChallenge[]
+  reward_redemptions    RewardRedemption[]
+  referrals_made        Referral[]               @relation("ReferralReferrer")
+  referrals_received    Referral[]               @relation("ReferralReferred")
+  onboarding            MemberOnboarding?
 
   @@index([gym_id, status])
   @@index([gym_id, risk_score])
@@ -1303,4 +1310,135 @@ model ProductSubscription {
   @@index([gym_id, status, next_delivery_at])
   @@index([member_id, status])
   @@map("product_subscriptions")
+}
+
+// ─── GAMIFICACIÓN (Sprint G2) ───────────────────────────────────────────────
+
+model Challenge {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gym_id          String   @db.Uuid
+  name            String   @db.VarChar(150)
+  description     String?
+  goal_type       String   @db.VarChar(30) // CHECKIN_COUNT | SESSION_COUNT | VOLUME_KG | STREAK_DAYS | KCAL_BURNED | CLASS_COUNT
+  goal_value      Int
+  reward_points   Int      @default(100)
+  starts_at       DateTime
+  ends_at         DateTime
+  is_active       Boolean  @default(true)
+  cover_emoji     String?  @default("🏆") @db.VarChar(10)
+  created_at      DateTime @default(now())
+
+  gym              Gym                @relation(fields: [gym_id], references: [id], onDelete: Cascade)
+  member_challenges MemberChallenge[]
+
+  @@index([gym_id, is_active, ends_at])
+  @@map("challenges")
+}
+
+model MemberChallenge {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  member_id    String   @db.Uuid
+  challenge_id String   @db.Uuid
+  progress     Int      @default(0)
+  completed    Boolean  @default(false)
+  completed_at DateTime?
+  joined_at    DateTime @default(now())
+
+  member    Member    @relation(fields: [member_id], references: [id], onDelete: Cascade)
+  challenge Challenge @relation(fields: [challenge_id], references: [id], onDelete: Cascade)
+
+  @@unique([member_id, challenge_id])
+  @@index([member_id, completed])
+  @@map("member_challenges")
+}
+
+model Reward {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gym_id      String   @db.Uuid
+  name        String   @db.VarChar(150)
+  description String?
+  cost_points Int
+  stock       Int      @default(-1) // -1 = ilimitado
+  cover_emoji String?  @default("🎁") @db.VarChar(10)
+  is_active   Boolean  @default(true)
+  created_at  DateTime @default(now())
+
+  gym          Gym             @relation(fields: [gym_id], references: [id], onDelete: Cascade)
+  redemptions  RewardRedemption[]
+
+  @@index([gym_id, is_active])
+  @@map("rewards")
+}
+
+model RewardRedemption {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gym_id       String   @db.Uuid
+  member_id    String   @db.Uuid
+  reward_id    String   @db.Uuid
+  points_spent Int
+  status       String   @default("PENDING") @db.VarChar(20) // PENDING | DELIVERED | CANCELLED
+  redeemed_at  DateTime @default(now())
+  delivered_at DateTime?
+  notes        String?
+
+  member Member @relation(fields: [member_id], references: [id], onDelete: Cascade)
+  reward Reward @relation(fields: [reward_id], references: [id])
+
+  @@index([gym_id, status, redeemed_at(sort: Desc)])
+  @@index([member_id])
+  @@map("reward_redemptions")
+}
+
+model Referral {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gym_id          String   @db.Uuid
+  referrer_id     String   @db.Uuid
+  referred_email  String   @db.VarChar(150)
+  referred_id     String?  @db.Uuid // se llena cuando se registra
+  code            String   @unique @db.VarChar(20)
+  status          String   @default("PENDING") @db.VarChar(20) // PENDING | REGISTERED | REWARDED
+  reward_granted_at DateTime?
+  created_at      DateTime @default(now())
+
+  referrer Member  @relation("ReferralReferrer", fields: [referrer_id], references: [id], onDelete: Cascade)
+  referred Member? @relation("ReferralReferred", fields: [referred_id], references: [id])
+
+  @@index([gym_id, status])
+  @@index([referrer_id])
+  @@map("referrals")
+}
+
+// ─── Onboarding inicial del miembro (Sprint G3) ────────────────────────────
+// Se completa una sola vez al primer login. Determina si la app debe mostrar
+// el wizard o ir directo al home.
+
+model MemberOnboarding {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  member_id           String   @unique @db.Uuid
+  // PAR-Q (cuestionario médico)
+  parq_completed      Boolean  @default(false)
+  parq_has_conditions Boolean? // alguna respuesta SÍ requiere chequeo médico
+  parq_answers        Json?    // {q1:bool, q2:bool, ...}
+  parq_completed_at   DateTime?
+  // Objetivo declarado
+  goal_type           String?  @db.VarChar(30) // WEIGHT_LOSS | MUSCLE_GAIN | MAINTENANCE | PERFORMANCE | REHAB
+  goal_target_value   Decimal? @db.Decimal(10, 2)
+  goal_target_unit    String?  @db.VarChar(10) // kg | %
+  goal_deadline       DateTime? @db.Date
+  goal_completed_at   DateTime?
+  // Foto inicial subida
+  initial_photo_uploaded Boolean @default(false)
+  initial_photo_at    DateTime?
+  // Firma contrato
+  contract_accepted   Boolean  @default(false)
+  contract_accepted_at DateTime?
+  contract_version    String?  @db.VarChar(20)
+
+  completed_at        DateTime?
+  created_at          DateTime @default(now())
+  updated_at          DateTime @updatedAt
+
+  member Member @relation(fields: [member_id], references: [id], onDelete: Cascade)
+
+  @@map("member_onboardings")
 }

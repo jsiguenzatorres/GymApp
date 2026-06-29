@@ -143,6 +143,30 @@ export default function GamificationScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#7c3aed" />
         }
       >
+        {/* CTA Comunidad — retos, leaderboard, recompensas, referidos */}
+        <TouchableOpacity
+          style={{
+            backgroundColor: '#7c3aed',
+            borderRadius: 14,
+            padding: 14,
+            marginBottom: 12,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 12,
+          }}
+          onPress={() => router.push('/community' as never)}
+          activeOpacity={0.85}
+        >
+          <Text style={{ fontSize: 28 }}>🌟</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: '#fff', fontSize: 15, fontWeight: '800' }}>Comunidad</Text>
+            <Text style={{ color: '#ddd6fe', fontSize: 12, marginTop: 2 }}>
+              Retos, ranking, recompensas, referidos
+            </Text>
+          </View>
+          <Text style={{ color: '#fff', fontSize: 22 }}>›</Text>
+        </TouchableOpacity>
+
         {/* Overview tab */}
         {tab === 'overview' && stats && (
           <>

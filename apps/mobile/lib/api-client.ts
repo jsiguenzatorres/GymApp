@@ -558,6 +558,100 @@ export interface ProductSubscription {
   product?: { id: string; name: string; price: string | number; image_url: string | null };
 }
 
+// ─── Gamification extras (Sprint G2) ────────────────────────────────────
+export interface Challenge {
+  id: string;
+  name: string;
+  description: string | null;
+  goal_type: string;
+  goal_value: number;
+  reward_points: number;
+  ends_at: string;
+  cover_emoji: string | null;
+  my: { id: string; progress: number; completed: boolean; completed_at: string | null } | null;
+  participants_count: number;
+}
+
+export interface LeaderboardRow {
+  rank: number;
+  member_id: string;
+  name: string;
+  avatar_url: string | null;
+  score: number;
+  loyalty_level: string;
+}
+
+export interface Reward {
+  id: string;
+  name: string;
+  description: string | null;
+  cost_points: number;
+  stock: number;
+  cover_emoji: string | null;
+}
+
+export interface RewardRedemption {
+  id: string;
+  points_spent: number;
+  status: 'PENDING' | 'DELIVERED' | 'CANCELLED';
+  redeemed_at: string;
+  reward: { id: string; name: string; cover_emoji: string | null };
+}
+
+export interface Referral {
+  id: string;
+  referred_email: string;
+  code: string;
+  status: 'PENDING' | 'REGISTERED' | 'REWARDED';
+  created_at: string;
+}
+
+// ─── Onboarding (Sprint G3) ─────────────────────────────────────────────
+export interface MemberOnboarding {
+  parq_completed: boolean;
+  parq_has_conditions: boolean | null;
+  goal_completed_at: string | null;
+  goal_type: string | null;
+  initial_photo_uploaded: boolean;
+  contract_accepted: boolean;
+  completed_at: string | null;
+}
+
+export const onboardingApi = {
+  get: (token: string) => apiClient.get<MemberOnboarding>('/api/v1/me/onboarding', token),
+  submitParq: (token: string, answers: Record<string, boolean>) =>
+    apiClient.post<MemberOnboarding>('/api/v1/me/onboarding/parq', { answers }, token),
+  submitGoal: (
+    token: string,
+    body: {
+      goal_type: string;
+      goal_target_value?: number;
+      goal_target_unit?: string;
+      goal_deadline?: string;
+    },
+  ) => apiClient.post<MemberOnboarding>('/api/v1/me/onboarding/goal', body, token),
+  markPhoto: (token: string) =>
+    apiClient.post<MemberOnboarding>('/api/v1/me/onboarding/photo', {}, token),
+  acceptContract: (token: string, version = '1.0') =>
+    apiClient.post<MemberOnboarding>('/api/v1/me/onboarding/contract', { version }, token),
+};
+
+export const communityApi = {
+  listChallenges: (token: string) => apiClient.get<Challenge[]>('/api/v1/me/challenges', token),
+  joinChallenge: (token: string, id: string) =>
+    apiClient.post<{ id: string }>(`/api/v1/me/challenges/${id}/join`, {}, token),
+  leaderboard: (token: string, scope: 'week' | 'month' | 'lifetime' = 'week') =>
+    apiClient.get<LeaderboardRow[]>(`/api/v1/me/leaderboard?scope=${scope}`, token),
+  listRewards: (token: string) => apiClient.get<Reward[]>('/api/v1/me/rewards', token),
+  redeemReward: (token: string, id: string) =>
+    apiClient.post<RewardRedemption>(`/api/v1/me/rewards/${id}/redeem`, {}, token),
+  myRedemptions: (token: string) =>
+    apiClient.get<RewardRedemption[]>('/api/v1/me/redemptions', token),
+  listReferrals: (token: string) => apiClient.get<Referral[]>('/api/v1/me/referrals', token),
+  createReferral: (token: string, email: string) =>
+    apiClient.post<Referral>('/api/v1/me/referrals', { email }, token),
+};
+
 export const subscriptionsApi = {
   list: (token: string) => apiClient.get<ProductSubscription[]>('/api/v1/me/subscriptions', token),
   create: (token: string, body: { product_id: string; quantity: number; frequency_days: number }) =>
