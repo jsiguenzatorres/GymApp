@@ -11,7 +11,6 @@ import {
   SafeAreaView,
   RefreshControl,
   Image,
-  Linking,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useAuthStore } from '@/store/auth.store';
@@ -141,7 +140,6 @@ interface ExerciseCardProps {
 }
 
 function ExerciseCard({ exercise }: ExerciseCardProps) {
-  const [expanded, setExpanded] = useState(false);
   const [frameIdx, setFrameIdx] = useState(0);
   const primaryMuscle = exercise.muscle_groups?.[0];
   const muscleKey = getMuscleKey(primaryMuscle);
@@ -168,7 +166,7 @@ function ExerciseCard({ exercise }: ExerciseCardProps) {
   return (
     <TouchableOpacity
       style={styles.card}
-      onPress={() => setExpanded((prev) => !prev)}
+      onPress={() => router.push(`/exercise/${exercise.id}` as never)}
       activeOpacity={0.7}
     >
       <View style={styles.cardRow}>
@@ -183,7 +181,7 @@ function ExerciseCard({ exercise }: ExerciseCardProps) {
         )}
 
         <View style={styles.cardCenter}>
-          <Text style={styles.exerciseName} numberOfLines={expanded ? undefined : 1}>
+          <Text style={styles.exerciseName} numberOfLines={1}>
             {exercise.name}
           </Text>
           {subtitleParts.length > 0 && (
@@ -198,66 +196,9 @@ function ExerciseCard({ exercise }: ExerciseCardProps) {
             <Text style={[styles.diffText, { color: diffConfig.text }]}>{diffConfig.label}</Text>
           </View>
         )}
+
+        <Text style={styles.chevron}>›</Text>
       </View>
-
-      {expanded && (
-        <View style={styles.expandedContent}>
-          {images.length > 0 && (
-            <View style={styles.bigFrameWrap}>
-              <Image
-                source={{ uri: images[frameIdx] }}
-                style={styles.bigFrame}
-                resizeMode="contain"
-              />
-              {images.length > 1 && (
-                <Text style={styles.frameHint}>
-                  Posición {frameIdx + 1} / {images.length}
-                </Text>
-              )}
-            </View>
-          )}
-
-          {exercise.video_url && (
-            <TouchableOpacity
-              style={styles.videoBtn}
-              onPress={() => exercise.video_url && Linking.openURL(exercise.video_url)}
-            >
-              <Text style={styles.videoBtnText}>▶ Ver video técnico</Text>
-            </TouchableOpacity>
-          )}
-
-          {exercise.description ? (
-            <View style={styles.expandedSection}>
-              <Text style={styles.expandedLabel}>Descripción</Text>
-              <Text style={styles.expandedBody} numberOfLines={5}>
-                {exercise.description}
-              </Text>
-            </View>
-          ) : null}
-
-          {exercise.instructions ? (
-            <View style={styles.expandedSection}>
-              <Text style={styles.expandedLabel}>Instrucciones</Text>
-              <Text style={styles.expandedBody} numberOfLines={5}>
-                {exercise.instructions}
-              </Text>
-            </View>
-          ) : null}
-
-          {exercise.secondary_muscles && exercise.secondary_muscles.length > 0 && (
-            <View style={styles.expandedSection}>
-              <Text style={styles.expandedLabel}>Músculos secundarios</Text>
-              <View style={styles.secondaryChips}>
-                {exercise.secondary_muscles.map((mg, idx) => (
-                  <View key={idx} style={styles.secondaryChip}>
-                    <Text style={styles.secondaryChipText}>{getMuscleLabel(mg) || mg}</Text>
-                  </View>
-                ))}
-              </View>
-            </View>
-          )}
-        </View>
-      )}
     </TouchableOpacity>
   );
 }
@@ -566,6 +507,12 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
+  },
+  chevron: {
+    fontSize: 22,
+    color: '#9ca3af',
+    fontWeight: '400',
+    marginLeft: 4,
   },
   bigFrameWrap: {
     alignItems: 'center',

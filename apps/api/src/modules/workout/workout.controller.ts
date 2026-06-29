@@ -49,6 +49,11 @@ export class WorkoutController {
     });
   }
 
+  @Get('exercises/:id')
+  getExercise(@CurrentUser() user: JwtPayload, @Param('id', ParseUUIDPipe) id: string) {
+    return this.workoutService.getExercise(this.gymId(user), id);
+  }
+
   @Post('exercises')
   @HttpCode(HttpStatus.CREATED)
   createExercise(@CurrentUser() user: JwtPayload, @Body() dto: CreateExerciseDto) {

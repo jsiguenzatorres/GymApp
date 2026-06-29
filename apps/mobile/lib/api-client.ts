@@ -488,6 +488,8 @@ export const exercisesApi = {
     const query = qs.toString() ? `?${qs.toString()}` : '';
     return apiClient.get<Exercise[]>(`/api/v1/exercises${query}`, accessToken);
   },
+  getById: (accessToken: string, id: string) =>
+    apiClient.get<Exercise>(`/api/v1/exercises/${id}`, accessToken),
 };
 
 // ─── Schedule / Classes ───────────────────────────────────────────────────────

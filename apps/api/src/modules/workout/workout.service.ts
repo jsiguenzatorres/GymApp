@@ -59,6 +59,14 @@ export class WorkoutService {
     return exercises;
   }
 
+  async getExercise(gymId: string, id: string) {
+    const exercise = await this.prisma.exercise.findFirst({
+      where: { id, is_active: true, OR: [{ gym_id: gymId }, { gym_id: null }] },
+    });
+    if (!exercise) throw new NotFoundException('Ejercicio no encontrado');
+    return exercise;
+  }
+
   async createExercise(gymId: string, dto: CreateExerciseDto) {
     const exercise = await this.prisma.exercise.create({
       data: {
