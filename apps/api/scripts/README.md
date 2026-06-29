@@ -57,3 +57,50 @@ pnpm --filter api exec node scripts/import-exercises.mjs --gym-id=8bcc228c-0a5a-
   > Catálogo de ejercicios basado en free-exercise-db (dominio público) y wger.de (CC-BY-SA).
 
 Ver `Diseño/Ver2/Investigacion_Fuentes_Biblioteca_Ejercicios.md` para el análisis completo y la capa 3 (videos profesionales MuscleWiki, comercial $20-60 único, post-lanzamiento).
+
+---
+
+## `rehost-exercise-media.mjs`
+
+Descarga las imágenes y videos que actualmente están **hot-link a wger.de** y los rehospeda en Supabase Storage, actualizando las URLs en la BD. Útil si en producción wger.de empieza a fallar, ralentizar o si quieres independencia total.
+
+### Antes de correrlo
+
+1. Crear bucket en Supabase Storage:
+   - Dashboard → Storage → New bucket
+   - Name: `exercise-media`
+   - **Public bucket: ✅ ON**
+   - (Opcional) usar otro nombre con la variable `SUPABASE_EXERCISE_BUCKET`
+
+2. Verificar variables en env: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (ya configuradas para avatars).
+
+### Uso
+
+```bash
+# Probar sin escribir nada (cuenta y muestra una muestra)
+pnpm --filter api exec node scripts/rehost-exercise-media.mjs --dry-run
+
+# Probar con los primeros 10 ejercicios (validar antes de procesar todo)
+pnpm --filter api exec node scripts/rehost-exercise-media.mjs --limit=10
+
+# Solo imágenes / solo videos
+pnpm --filter api exec node scripts/rehost-exercise-media.mjs --media=images
+pnpm --filter api exec node scripts/rehost-exercise-media.mjs --media=videos
+
+# Procesar TODO (recomendado después de validar con --dry-run y --limit)
+pnpm --filter api exec node scripts/rehost-exercise-media.mjs
+```
+
+### Cómo es idempotente
+
+Detecta si una URL ya NO contiene `wger.de` — esas las salta sin re-descargar. Puedes re-correrlo cuantas veces quieras.
+
+### Volumen estimado
+
+- ~1,079 imágenes (~80KB c/u) ≈ 85MB
+- ~39 videos (.MOV, ~5MB c/u) ≈ 195MB
+- **Total ≈ 280MB** — cabe en free tier de Supabase Storage (1GB).
+
+### Tiempo
+
+30-60 minutos sin interrupciones (descarga + upload secuencial). Si una descarga falla, la conserva con la URL original y continúa con la siguiente.
