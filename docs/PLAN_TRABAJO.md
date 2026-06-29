@@ -369,6 +369,42 @@
 
 **Entregable Growth (incluye 2.9):** Sistema completo con IA conversacional, marketplace, gamificación, nutrición y herramientas comerciales para vender SaaS B2B (Fundadores, Partners, Customer Success).
 
+### Sprint D — Monetización Nutrición (paralelo, transversal)
+
+> Modelo de monetización por add-on suscripción del miembro. El gym vende el add-on al miembro y se queda con el margen (GymApp cobra 20% de comisión sobre add-ons). 3 tiers: BASIC (incluido) · NutriPro $15/mes · NutriElite $30/mes.
+
+**Fase 1 — Infraestructura + UI tier-aware (HECHO)**
+
+| ID   | Tarea                                                                         | Días |
+| ---- | ----------------------------------------------------------------------------- | ---- |
+| D-01 | Schema `member_addons` (member_id, type, tier, status, starts_at, ends_at)    | 0.5  |
+| D-02 | AddonsService: getMemberNutritionTier + assign/cancel atómicos                | 1    |
+| D-03 | Endpoints member (`/me/addons`) y admin (`/admin/members/:id/addons` CRUD)    | 0.5  |
+| D-04 | Mobile: nutrition.tsx tier-aware con paywall modal y `LockedFeature` reusable | 2    |
+| D-05 | Web admin: `AddonsSection` en ficha de miembro con activar/cancelar manual    | 1    |
+
+**Fase 2 — Features Premium reales (Pendiente, ~3 sprints adicionales)**
+
+| ID   | Tarea                                                                    | Tier  | Días |
+| ---- | ------------------------------------------------------------------------ | ----- | ---- |
+| D-10 | Base USDA + alimentos LATAM (importación inicial)                        | PRO   | 3    |
+| D-11 | UI registro manual de comida con búsqueda                                | PRO   | 2    |
+| D-12 | Escaneo código de barras (`expo-barcode-scanner`) + lookup OpenFoodFacts | PRO   | 2    |
+| D-13 | Histórico 30 días: calendario navegable + gráfica calórica               | PRO   | 2    |
+| D-14 | Recordatorios push inteligentes (notificaciones por hora)                | PRO   | 1.5  |
+| D-15 | Foto del plato → Gemini Vision identifica alimentos + estima macros      | ELITE | 4    |
+| D-16 | Plan adaptativo semanal (IA ajusta calorías según peso/sesiones)         | ELITE | 3    |
+| D-17 | Generador de recetas IA con ingredientes del usuario                     | ELITE | 2    |
+| D-18 | Bot WhatsApp: NL → registro automático ("comí 200g pollo")               | ELITE | 3    |
+| D-19 | Integración Apple Health / Google Fit (peso, agua, sueño)                | ELITE | 4    |
+| D-20 | Reporte mensual PDF para nutricionista humano                            | PRO+  | 1.5  |
+| D-21 | Lista de compras semanal auto-generada                                   | PRO+  | 1    |
+| D-22 | Caja del mes incluida (cross-sell con marketplace del gym)               | ELITE | 1    |
+
+**Billing automático del add-on (futuro)**: integrar con Stripe/MercadoPago para que la suscripción mensual se cobre sola al miembro y el gym reciba el neto.
+
+**Resultado esperado del modelo**: gym de 200 miembros con 25% Pro + 10% Elite → **~$1,080/mes extra netos al gym** sin contratar nutricionista adicional.
+
 ---
 
 ## FASE 3 — SCALE (Meses 8–16)
