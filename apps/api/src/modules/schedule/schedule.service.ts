@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
+import { NotificationService } from '../notifications/notification.service';
 import { ClassEnrollment, ClassSession, ClassType } from '@prisma/client';
 
 export interface CreateClassTypeDto {
@@ -83,7 +84,10 @@ export interface MyEnrollment {
 
 @Injectable()
 export class ScheduleService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notif: NotificationService,
+  ) {}
 
   private async resolveMemberId(gymId: string, userId: string): Promise<string> {
     const member = await this.prisma.member.findFirst({
@@ -157,6 +161,16 @@ export class ScheduleService {
       const my_enrollment = session.enrollments.find((e) => e.member_id === memberId) ?? null;
       const is_full = enrolled_count >= session.capacity;
 
+      // Posición en lista de espera si aplica (1-indexed)
+      let my_waitlist_position: number | null = null;
+      if (my_enrollment?.status === 'WAITLIST') {
+        const ordered = session.enrollments
+          .filter((e) => e.status === 'WAITLIST')
+          .sort((a, b) => a.enrolled_at.getTime() - b.enrolled_at.getTime());
+        const idx = ordered.findIndex((e) => e.member_id === memberId);
+        if (idx >= 0) my_waitlist_position = idx + 1;
+      }
+
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { enrollments: _enr, ...sessionData } = session;
 
@@ -165,6 +179,7 @@ export class ScheduleService {
         enrolled_count,
         waitlist_count,
         my_enrollment,
+        my_waitlist_position,
         is_full,
       };
     });
@@ -249,6 +264,15 @@ export class ScheduleService {
           status: 'WAITLIST',
         },
         orderBy: { enrolled_at: 'asc' },
+        include: {
+          member: { select: { user_id: true, first_name: true } },
+          session: {
+            select: {
+              scheduled_at: true,
+              class_type: { select: { name: true } },
+            },
+          },
+        },
       });
 
       if (firstWaitlist) {
@@ -256,6 +280,29 @@ export class ScheduleService {
           where: { id: firstWaitlist.id },
           data: { status: 'ENROLLED' },
         });
+
+        // Notifica al promovido (E4)
+        const sessionDate = firstWaitlist.session.scheduled_at;
+        const className = firstWaitlist.session.class_type.name;
+        const dateStr = sessionDate.toLocaleDateString('es-SV', {
+          weekday: 'long',
+          day: 'numeric',
+          month: 'short',
+          hour: '2-digit',
+          minute: '2-digit',
+        });
+        await this.notif
+          .create({
+            gymId,
+            userId: firstWaitlist.member.user_id,
+            type: 'CLASS_PROMOTED_FROM_WAITLIST',
+            title: '🎉 ¡Hay lugar para ti!',
+            body: `Subiste de la lista de espera a ${className} (${dateStr}). ¡Nos vemos!`,
+            data: { session_id: sessionId, class_name: className },
+          })
+          .catch(() => {
+            // notifs son fire-and-forget; el cancel no debe fallar
+          });
       }
     }
   }

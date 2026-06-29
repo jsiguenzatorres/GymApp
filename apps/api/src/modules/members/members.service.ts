@@ -708,4 +708,102 @@ export class MembersService {
     if (!membership) throw new NotFoundException('Membresía no encontrada');
     return membership;
   }
+
+  // ─── SELF-SERVICE (E3) ────────────────────────────────────────────────────
+  private async resolveMyActiveMembership(gymId: string, userId: string) {
+    const member = await this.prisma.member.findFirst({
+      where: { user_id: userId, gym_id: gymId },
+      select: { id: true },
+    });
+    if (!member) throw new NotFoundException('Miembro no encontrado');
+
+    const membership = await this.prisma.membership.findFirst({
+      where: { member_id: member.id, gym_id: gymId, status: 'ACTIVE' },
+      orderBy: { end_date: 'desc' },
+    });
+    if (!membership) {
+      throw new BadRequestException('No tienes una membresía activa');
+    }
+    return { memberId: member.id, membership };
+  }
+
+  async requestFreezeMine(
+    gymId: string,
+    userId: string,
+    body: { duration_days: number; reason?: string },
+  ) {
+    const days = Math.max(1, Math.min(60, Math.floor(body.duration_days)));
+    const { memberId, membership } = await this.resolveMyActiveMembership(gymId, userId);
+
+    const freezeEndsAt = new Date();
+    freezeEndsAt.setDate(freezeEndsAt.getDate() + days);
+
+    return this.freezeMembership(gymId, memberId, membership.id, {
+      freezeEndsAt: freezeEndsAt.toISOString(),
+      reason: body.reason,
+    } as FreezeMembershipDto);
+  }
+
+  async requestCancelMine(gymId: string, userId: string, reason: string) {
+    if (!reason?.trim()) throw new BadRequestException('La razón es requerida');
+    const { memberId, membership } = await this.resolveMyActiveMembership(gymId, userId);
+    return this.cancelMembership(gymId, memberId, membership.id, {
+      reason,
+    } as CancelMembershipDto);
+  }
+
+  async listAvailableMembershipTypes(gymId: string) {
+    return this.prisma.membershipType.findMany({
+      where: { gym_id: gymId, is_active: true },
+      orderBy: [{ price: 'asc' }],
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        price: true,
+        currency: true,
+        duration_days: true,
+        billing_frequency: true,
+        max_freezes: true,
+        max_freeze_days: true,
+      },
+    });
+  }
+
+  /**
+   * Marca el cambio de plan como solicitado. La asignación real del nuevo
+   * plan la hace un admin desde el panel web — esto solo deja constancia en
+   * notes y notifica al staff (Fase 2 — auto-charge requiere subscription engine).
+   */
+  async requestChangeMine(gymId: string, userId: string, newTypeId: string, reason?: string) {
+    const { memberId, membership } = await this.resolveMyActiveMembership(gymId, userId);
+
+    const newType = await this.prisma.membershipType.findFirst({
+      where: { id: newTypeId, gym_id: gymId, is_active: true },
+    });
+    if (!newType) throw new NotFoundException('Plan no disponible');
+
+    const currentType = await this.prisma.membershipType.findUnique({
+      where: { id: membership.type_id },
+      select: { name: true },
+    });
+
+    const note = `Solicitud de cambio: ${currentType?.name ?? 'plan actual'} → ${newType.name}${reason ? ` · ${reason}` : ''}`;
+
+    // Marcamos en notas de membresía para que el staff lo vea
+    await this.prisma.member.update({
+      where: { id: memberId },
+      data: {
+        notes: {
+          set: note,
+        },
+      },
+    });
+
+    return {
+      message:
+        'Solicitud de cambio enviada. El gym se pondrá en contacto contigo para coordinar el cobro y activación.',
+      requested_type: { id: newType.id, name: newType.name, price: newType.price },
+    };
+  }
 }

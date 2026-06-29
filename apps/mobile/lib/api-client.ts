@@ -491,6 +491,41 @@ export const workoutApi = {
     apiClient.post<ZeusResponse>('/api/v1/workout/zeus/chat', { message, memberId }, token),
 };
 
+// ─── Membership self-service (E3) ───────────────────────────────────────
+export interface MembershipType {
+  id: string;
+  name: string;
+  description: string | null;
+  price: number | string;
+  currency: string;
+  duration_days: number;
+  billing_frequency: string;
+  max_freezes: number;
+  max_freeze_days: number;
+}
+
+export const membershipApi = {
+  requestFreeze: (token: string, body: { duration_days: number; reason?: string }) =>
+    apiClient.post<{ message: string; freezeEndsAt: string }>(
+      '/api/v1/members/me/membership/request-freeze',
+      body,
+      token,
+    ),
+  requestCancel: (token: string, reason: string) =>
+    apiClient.post<{ message: string }>(
+      '/api/v1/members/me/membership/request-cancel',
+      { reason },
+      token,
+    ),
+  typesAvailable: (token: string) =>
+    apiClient.get<MembershipType[]>('/api/v1/members/me/membership/types-available', token),
+  requestChange: (token: string, body: { new_type_id: string; reason?: string }) =>
+    apiClient.post<{
+      message: string;
+      requested_type: { id: string; name: string; price: number };
+    }>('/api/v1/members/me/membership/request-change', body, token),
+};
+
 export const notifPrefsApi = {
   list: (token: string) => apiClient.get<NotifPref[]>('/api/v1/me/notification-prefs', token),
   seed: (token: string) =>

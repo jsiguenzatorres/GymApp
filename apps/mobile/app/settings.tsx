@@ -206,16 +206,22 @@ export default function SettingsScreen() {
               </View>
             </Section>
           ) : (
-            <Section title="Cuenta">
-              <Row
-                label="Nombre"
-                value={`${user?.firstName ?? ''} ${user?.lastName ?? ''}`.trim() || '—'}
-              />
-              <Divider />
-              <Row label="Email" value={user?.email ?? '—'} />
-              <Divider />
-              <Row label="Editar perfil" onPress={openEdit} />
-            </Section>
+            <>
+              <Section title="Membresía">
+                <Row label="Mi membresía" onPress={() => router.push('/membership' as never)} />
+              </Section>
+
+              <Section title="Cuenta">
+                <Row
+                  label="Nombre"
+                  value={`${user?.firstName ?? ''} ${user?.lastName ?? ''}`.trim() || '—'}
+                />
+                <Divider />
+                <Row label="Email" value={user?.email ?? '—'} />
+                <Divider />
+                <Row label="Editar perfil" onPress={openEdit} />
+              </Section>
+            </>
           )}
 
           {/* ── Security ── */}

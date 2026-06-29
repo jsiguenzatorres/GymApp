@@ -194,4 +194,36 @@ export class MembersController {
   ) {
     return this.membersService.cancelMembership(this.gymId(user), memberId, id, dto);
   }
+
+  // ─── SELF-SERVICE (E3) — el miembro solicita freeze/cancel directo desde la app
+  @Post('members/me/membership/request-freeze')
+  async requestFreezeMine(
+    @CurrentUser() user: JwtPayload,
+    @Body() body: { duration_days: number; reason?: string },
+  ) {
+    return this.membersService.requestFreezeMine(this.gymId(user), user.sub, body);
+  }
+
+  @Post('members/me/membership/request-cancel')
+  async requestCancelMine(@CurrentUser() user: JwtPayload, @Body() body: { reason: string }) {
+    return this.membersService.requestCancelMine(this.gymId(user), user.sub, body.reason);
+  }
+
+  @Get('members/me/membership/types-available')
+  async typesAvailableMine(@CurrentUser() user: JwtPayload) {
+    return this.membersService.listAvailableMembershipTypes(this.gymId(user));
+  }
+
+  @Post('members/me/membership/request-change')
+  async requestChangeMine(
+    @CurrentUser() user: JwtPayload,
+    @Body() body: { new_type_id: string; reason?: string },
+  ) {
+    return this.membersService.requestChangeMine(
+      this.gymId(user),
+      user.sub,
+      body.new_type_id,
+      body.reason,
+    );
+  }
 }

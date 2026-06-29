@@ -35,6 +35,7 @@ interface SessionWithMeta {
   waitlist_count: number;
   is_full: boolean;
   my_enrollment?: { id: string; status: 'ENROLLED' | 'WAITLIST' | 'CANCELLED' } | null;
+  my_waitlist_position?: number | null;
 }
 
 interface MyEnrollment {
@@ -362,7 +363,11 @@ function SessionCard({
       style={[styles.actionBtn, styles.actionBtnWaitlistOutline]}
       onPress={onCancel}
     >
-      <Text style={[styles.actionBtnText, { color: '#f59e0b' }]}>En espera · Cancelar</Text>
+      <Text style={[styles.actionBtnText, { color: '#f59e0b' }]}>
+        {session.my_waitlist_position
+          ? `Espera #${session.my_waitlist_position} · Cancelar`
+          : 'En espera · Cancelar'}
+      </Text>
     </TouchableOpacity>
   ) : session.is_full ? (
     <TouchableOpacity
