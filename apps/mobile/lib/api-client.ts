@@ -55,6 +55,9 @@ export const apiClient = {
   patch: <T>(path: string, body: unknown, token?: string) =>
     request<T>(path, { method: 'PATCH', body: JSON.stringify(body) }, token),
 
+  put: <T>(path: string, body: unknown, token?: string) =>
+    request<T>(path, { method: 'PUT', body: JSON.stringify(body) }, token),
+
   delete: <T>(path: string, body?: unknown, token?: string) =>
     request<T>(path, { method: 'DELETE', ...(body ? { body: JSON.stringify(body) } : {}) }, token),
 };
@@ -416,7 +419,98 @@ export const nutritionApi = {
     apiClient.get<BarcodeLookupResponse>(`/api/v1/food-items/by-barcode/${code}`, token),
   logFromText: (token: string, memberId: string, text: string) =>
     apiClient.post<TextLogResponse>('/api/v1/nutrition/log-from-text', { memberId, text }, token),
+  adaptiveAnalysis: (token: string, memberId: string) =>
+    apiClient.post<AdaptiveAnalysisResponse>(
+      '/api/v1/nutrition/adaptive-analysis',
+      { memberId },
+      token,
+    ),
+  adaptiveApply: (
+    token: string,
+    body: { memberId: string; target_kcal_delta?: number; target_protein_g_delta?: number },
+  ) => apiClient.post('/api/v1/nutrition/adaptive-apply', body, token),
 };
+
+// ─── Health Data API ───────────────────────────────────────────────────────
+export type HealthKind = 'WEIGHT' | 'WATER' | 'SLEEP' | 'STEPS' | 'HEART_RATE' | 'HRV';
+
+export interface HealthEntry {
+  id: string;
+  kind: HealthKind;
+  value: number | string;
+  unit: string;
+  recorded_at: string;
+  notes?: string | null;
+}
+
+export interface HealthSummary {
+  latest: Partial<Record<HealthKind, { value: number; recorded_at: string; unit: string }>>;
+  weight_trend: { latest: number; previous: number; delta_kg: number; days_between: number } | null;
+  water_avg_ml_7d: number;
+  total_entries_30d: number;
+}
+
+export const healthDataApi = {
+  log: (token: string, body: { kind: HealthKind; value: number; unit?: string; notes?: string }) =>
+    apiClient.post<HealthEntry>('/api/v1/me/health-data', body, token),
+  list: (token: string, kind?: HealthKind, days = 30) =>
+    apiClient.get<HealthEntry[]>(
+      `/api/v1/me/health-data?days=${days}${kind ? `&kind=${kind}` : ''}`,
+      token,
+    ),
+  summary: (token: string) => apiClient.get<HealthSummary>('/api/v1/me/health-data/summary', token),
+  delete: (token: string, id: string) => apiClient.delete(`/api/v1/me/health-data/${id}`, token),
+};
+
+// ─── Notification Preferences API ─────────────────────────────────────────
+export type NotifKind =
+  | 'MEAL_REMINDER_BREAKFAST'
+  | 'MEAL_REMINDER_LUNCH'
+  | 'MEAL_REMINDER_DINNER'
+  | 'WATER_HOURLY'
+  | 'WORKOUT_REMINDER'
+  | 'STREAK_AT_RISK';
+
+export interface NotifPref {
+  id: string;
+  kind: NotifKind;
+  enabled: boolean;
+  time_of_day: string | null;
+}
+
+export const notifPrefsApi = {
+  list: (token: string) => apiClient.get<NotifPref[]>('/api/v1/me/notification-prefs', token),
+  seed: (token: string) =>
+    apiClient.post<NotifPref[]>('/api/v1/me/notification-prefs/seed', {}, token),
+  upsert: (token: string, body: { kind: NotifKind; enabled: boolean; time_of_day?: string }) =>
+    apiClient.put<NotifPref>('/api/v1/me/notification-prefs', body, token),
+};
+
+export interface AdaptiveAnalysisResponse {
+  success: boolean;
+  error?: string;
+  plan_id?: string;
+  current_targets?: { kcal: number; protein_g: number; carbs_g: number; fat_g: number };
+  progress?: {
+    weight_change_kg: number | null;
+    sessions_28d: number;
+    adherence_pct: number;
+    avg_kcal: number;
+  };
+  analysis?: {
+    verdict: 'on_track' | 'needs_adjustment' | 'needs_complete_review';
+    headline: string;
+    diagnosis: string;
+    adjustments: {
+      target_kcal_delta: number;
+      target_protein_g_delta: number;
+      rationale: string;
+    };
+    recommendations: string[];
+    next_review_in_days: number;
+  };
+  generated_at?: string;
+}
 
 export interface BarcodeLookupResponse {
   found: boolean;

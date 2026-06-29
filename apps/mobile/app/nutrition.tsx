@@ -92,21 +92,6 @@ function LockedFeature({
   );
 }
 
-function ComingSoonCard({ emoji, title, desc }: { emoji: string; title: string; desc: string }) {
-  return (
-    <View style={styles.soonCard}>
-      <Text style={styles.soonEmoji}>{emoji}</Text>
-      <View style={{ flex: 1 }}>
-        <Text style={styles.soonTitle}>{title}</Text>
-        <Text style={styles.soonDesc}>{desc}</Text>
-      </View>
-      <View style={styles.soonBadge}>
-        <Text style={styles.soonBadgeText}>Próximamente</Text>
-      </View>
-    </View>
-  );
-}
-
 export default function NutritionScreen() {
   const { accessToken } = useAuthStore();
   const [plan, setPlan] = useState<NutritionPlan | null>(null);
@@ -647,11 +632,23 @@ export default function NutritionScreen() {
                     </View>
                     <Text style={[styles.unlockedChevron, { color: '#b45309' }]}>›</Text>
                   </TouchableOpacity>
-                  <ComingSoonCard
-                    emoji="🧬"
-                    title="Plan adaptativo semanal"
-                    desc="La IA ajusta calorías y macros según tu progreso real (en desarrollo)"
-                  />
+                  <TouchableOpacity
+                    style={[
+                      styles.unlockedFeatureCard,
+                      { backgroundColor: '#ede9fe', borderColor: '#c4b5fd' },
+                    ]}
+                    onPress={() => router.push('/nutrition-adaptive' as never)}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.lockedEmoji}>🧬</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.lockedTitle}>Análisis adaptativo IA</Text>
+                      <Text style={styles.lockedDesc}>
+                        La IA revisa tu progreso real y sugiere ajustes al plan
+                      </Text>
+                    </View>
+                    <Text style={[styles.unlockedChevron, { color: '#7c3aed' }]}>›</Text>
+                  </TouchableOpacity>
                   <TouchableOpacity
                     style={[
                       styles.unlockedFeatureCard,
@@ -720,11 +717,23 @@ export default function NutritionScreen() {
                     </View>
                     <Text style={[styles.unlockedChevron, { color: '#15803d' }]}>›</Text>
                   </TouchableOpacity>
-                  <ComingSoonCard
-                    emoji="⌚"
-                    title="Apple Health / Google Fit"
-                    desc="Peso, agua, sueño integrados con tu plan (en desarrollo)"
-                  />
+                  <TouchableOpacity
+                    style={[
+                      styles.unlockedFeatureCard,
+                      { backgroundColor: '#fee2e2', borderColor: '#fecaca' },
+                    ]}
+                    onPress={() => router.push('/health-data' as never)}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.lockedEmoji}>❤️</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.lockedTitle}>Datos de salud</Text>
+                      <Text style={styles.lockedDesc}>
+                        Peso, agua, sueño y pasos (sync nativo Apple Health en breve)
+                      </Text>
+                    </View>
+                    <Text style={[styles.unlockedChevron, { color: '#dc2626' }]}>›</Text>
+                  </TouchableOpacity>
                 </>
               )}
             </>

@@ -234,7 +234,12 @@ export default function SettingsScreen() {
           <Section title="Preferencias">
             <Row label="Idioma" value="Español" />
             <Divider />
-            <Row label="Notificaciones" value="Activadas" />
+            <Row
+              label="Notificaciones"
+              onPress={() => router.push('/notification-prefs' as never)}
+            />
+            <Divider />
+            <Row label="Datos de salud" onPress={() => router.push('/health-data' as never)} />
           </Section>
 
           {/* ── App info ── */}

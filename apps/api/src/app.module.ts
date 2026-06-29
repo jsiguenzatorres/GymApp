@@ -27,6 +27,8 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module';
 import { AutomationModule } from './modules/automation/automation.module';
 import { FounderModule } from './modules/founder/founder.module';
 import { AddonsModule } from './modules/addons/addons.module';
+import { HealthDataModule } from './modules/health-data/health-data.module';
+import { NotificationPrefsModule } from './modules/notification-prefs/notification-prefs.module';
 
 @Module({
   imports: [
@@ -67,6 +69,8 @@ import { AddonsModule } from './modules/addons/addons.module';
     AutomationModule,
     FounderModule,
     AddonsModule,
+    HealthDataModule,
+    NotificationPrefsModule,
     // Módulos de negocio se agregan aquí en cada sprint
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

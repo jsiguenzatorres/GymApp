@@ -269,6 +269,8 @@ model Member {
   conversation_sessions ConversationSession[]
   progress_photos       ProgressPhoto[]
   addons                MemberAddon[]
+  health_data           HealthDataEntry[]
+  notification_prefs    NotificationPreference[]
 
   @@index([gym_id, status])
   @@index([gym_id, risk_score])
@@ -1157,4 +1159,45 @@ model MemberAddon {
 
   @@index([member_id, type, status])
   @@map("member_addons")
+}
+
+// ─── Datos de salud del miembro (peso, agua, sueño, pasos) ─────────────────
+// Diseñado para soportar tanto registro manual del miembro como pull desde
+// HealthKit (iOS) / Health Connect (Android) cuando se haga build nativo.
+
+model HealthDataEntry {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  member_id   String   @db.Uuid
+  kind        String   @db.VarChar(20) // WEIGHT | WATER | SLEEP | STEPS | HEART_RATE | HRV
+  value       Decimal  @db.Decimal(10, 2)
+  unit        String   @db.VarChar(10) // kg | ml | min | count | bpm | ms
+  recorded_at DateTime
+  source      String   @default("manual") @db.VarChar(20) // manual | apple_health | google_fit | wearable
+  notes       String?
+  created_at  DateTime @default(now())
+
+  member Member @relation(fields: [member_id], references: [id], onDelete: Cascade)
+
+  @@index([member_id, kind, recorded_at(sort: Desc)])
+  @@map("health_data_entries")
+}
+
+// ─── Preferencias de notificaciones del miembro ─────────────────────────────
+// Soporta recordatorios de comidas, agua, entreno, etc. La activación real
+// se hace via BullMQ scheduler que corre cada hora (Fase 2 de implementación).
+
+model NotificationPreference {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  member_id   String   @db.Uuid
+  kind        String   @db.VarChar(30) // MEAL_REMINDER_BREAKFAST | ..._LUNCH | ..._DINNER
+                                       // WATER_HOURLY | WORKOUT_REMINDER | STREAK_AT_RISK
+  enabled     Boolean  @default(true)
+  time_of_day String?  @db.VarChar(5)  // "HH:mm" para recordatorios horarios
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  member Member @relation(fields: [member_id], references: [id], onDelete: Cascade)
+
+  @@unique([member_id, kind])
+  @@map("notification_preferences")
 }

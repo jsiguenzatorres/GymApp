@@ -172,4 +172,23 @@ export class NutritionController {
   logFromText(@CurrentUser() user: JwtPayload, @Body() body: { memberId: string; text: string }) {
     return this.nutritionService.logFromText(this.gymId(user), body.memberId, body.text);
   }
+
+  // POST /nutrition/adaptive-analysis — ELITE: IA analiza progreso y sugiere ajustes
+  @Post('nutrition/adaptive-analysis')
+  adaptiveAnalysis(@CurrentUser() user: JwtPayload, @Body() body: { memberId: string }) {
+    return this.nutritionService.adaptivePlanAnalysis(this.gymId(user), body.memberId);
+  }
+
+  // POST /nutrition/adaptive-apply — aplica ajustes sugeridos al plan activo
+  @Post('nutrition/adaptive-apply')
+  adaptiveApply(
+    @CurrentUser() user: JwtPayload,
+    @Body()
+    body: { memberId: string; target_kcal_delta?: number; target_protein_g_delta?: number },
+  ) {
+    return this.nutritionService.applyAdaptiveAdjustment(this.gymId(user), body.memberId, {
+      target_kcal_delta: body.target_kcal_delta,
+      target_protein_g_delta: body.target_protein_g_delta,
+    });
+  }
 }

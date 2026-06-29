@@ -198,6 +198,141 @@ export class NutritionService {
     });
   }
 
+  // ─── ANÁLISIS ADAPTATIVO IA: revisa progreso real vs plan y sugiere ajustes
+  async adaptivePlanAnalysis(gymId: string, memberId: string) {
+    // 1) plan activo
+    const plan = await this.prisma.nutritionPlan.findFirst({
+      where: { gym_id: gymId, member_id: memberId, is_active: true },
+    });
+    if (!plan) {
+      return { success: false, error: 'No tienes un plan nutricional activo' };
+    }
+
+    // 2) Datos de las últimas 4 semanas
+    const since28 = new Date();
+    since28.setDate(since28.getDate() - 28);
+
+    const [weights, sessions, diaryRange, member] = await Promise.all([
+      this.prisma.healthDataEntry.findMany({
+        where: { member_id: memberId, kind: 'WEIGHT', recorded_at: { gte: since28 } },
+        orderBy: { recorded_at: 'asc' },
+        select: { value: true, recorded_at: true },
+      }),
+      this.prisma.workoutSession.count({
+        where: { member_id: memberId, gym_id: gymId, finished_at: { gte: since28, not: null } },
+      }),
+      this.getDiaryRange(gymId, memberId, 28),
+      this.prisma.member.findFirst({
+        where: { id: memberId },
+        select: { first_name: true, birthdate: true, gender: true },
+      }),
+    ]);
+
+    const weightChange =
+      weights.length >= 2
+        ? Number((Number(weights[weights.length - 1].value) - Number(weights[0].value)).toFixed(2))
+        : null;
+    const daysWithLogs = diaryRange.days_with_logs;
+    const avgKcal = diaryRange.avg_kcal;
+    const adherence = Math.round((daysWithLogs / 28) * 100);
+
+    // 3) Prompt a Gemini
+    const goalLabel: Record<string, string> = {
+      WEIGHT_LOSS: 'pérdida de peso',
+      MUSCLE_GAIN: 'ganancia muscular',
+      MAINTENANCE: 'mantenimiento',
+      PERFORMANCE: 'rendimiento deportivo',
+    };
+    const prompt = `Eres un nutricionista experto. Analiza el progreso REAL del miembro y sugiere ajustes específicos al plan.
+
+DATOS DEL MIEMBRO:
+- Nombre: ${member?.first_name ?? 'Miembro'}
+- Género: ${member?.gender ?? 'no especificado'}
+- Objetivo actual: ${goalLabel[plan.goal] ?? plan.goal}
+
+PLAN ACTUAL:
+- Meta calórica: ${plan.kcal_target} kcal/día
+- Proteína: ${plan.protein_g}g
+- Carbohidratos: ${plan.carbs_g}g
+- Grasas: ${plan.fat_g}g
+
+PROGRESO ÚLTIMAS 4 SEMANAS:
+- Sesiones de entrenamiento completadas: ${sessions}
+- Días con registro nutricional: ${daysWithLogs}/28 (adherencia ${adherence}%)
+- Promedio calorías reales: ${avgKcal} kcal (vs meta ${plan.kcal_target})
+- Cambio de peso: ${weightChange !== null ? `${weightChange > 0 ? '+' : ''}${weightChange} kg` : 'sin datos suficientes'}
+
+Responde EXCLUSIVAMENTE con JSON válido:
+{
+  "verdict": "on_track" | "needs_adjustment" | "needs_complete_review",
+  "headline": "frase clara de 1 línea (max 80 char) sobre cómo va",
+  "diagnosis": "análisis honesto de 2-3 frases del progreso vs plan",
+  "adjustments": {
+    "target_kcal_delta": -200 a +200 (delta sugerido, 0 si no cambiar),
+    "target_protein_g_delta": -20 a +30,
+    "rationale": "explicación de 1-2 frases del porqué del ajuste"
+  },
+  "recommendations": [
+    "consejo accionable 1",
+    "consejo accionable 2",
+    "consejo accionable 3"
+  ],
+  "next_review_in_days": 14 a 28
+}`;
+
+    try {
+      const raw = await this.gemini.generate(prompt);
+      const cleaned = raw
+        .replace(/^```json\s*/i, '')
+        .replace(/```\s*$/i, '')
+        .trim();
+      const parsed = JSON.parse(cleaned);
+      return {
+        success: true,
+        plan_id: plan.id,
+        current_targets: {
+          kcal: plan.kcal_target,
+          protein_g: plan.protein_g,
+          carbs_g: plan.carbs_g,
+          fat_g: plan.fat_g,
+        },
+        progress: {
+          weight_change_kg: weightChange,
+          sessions_28d: sessions,
+          adherence_pct: adherence,
+          avg_kcal: avgKcal,
+        },
+        analysis: parsed,
+        generated_at: new Date().toISOString(),
+      };
+    } catch (err) {
+      this.logger.error(`Adaptive analysis failed: ${(err as Error).message}`);
+      return {
+        success: false,
+        error: 'No se pudo generar el análisis. Intenta de nuevo en unos minutos.',
+      };
+    }
+  }
+
+  async applyAdaptiveAdjustment(
+    gymId: string,
+    memberId: string,
+    deltas: { target_kcal_delta?: number; target_protein_g_delta?: number },
+  ) {
+    const plan = await this.prisma.nutritionPlan.findFirst({
+      where: { gym_id: gymId, member_id: memberId, is_active: true },
+    });
+    if (!plan) throw new NotFoundException('No tienes un plan activo');
+
+    const newKcal = Math.max(800, plan.kcal_target + (deltas.target_kcal_delta ?? 0));
+    const newProtein = Math.max(20, plan.protein_g + (deltas.target_protein_g_delta ?? 0));
+
+    return this.prisma.nutritionPlan.update({
+      where: { id: plan.id },
+      data: { kcal_target: newKcal, protein_g: newProtein },
+    });
+  }
+
   // ─── BARCODE: lookup en local + fallback a OpenFoodFacts ──────────────────
   async findByBarcode(gymId: string, barcode: string) {
     const code = barcode.trim();
