@@ -12,7 +12,7 @@ import {
 import { router } from 'expo-router';
 import Svg, { Line, Rect, Text as SvgText } from 'react-native-svg';
 import { useAuthStore } from '@/store/auth.store';
-import { apiClient, memberApi } from '@/lib/api-client';
+import { apiClient, memberApi, VolumeWeeklyResponse } from '@/lib/api-client';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -140,6 +140,72 @@ function formatDate(iso: string): string {
   return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
+// ─── Volume Chart (8 weeks) ──────────────────────────────────────────────────
+
+function VolumeChart({
+  weekly,
+}: {
+  weekly: Array<{ week_start: string; volume_kg: number; sessions: number }>;
+}) {
+  const maxVol = Math.max(...weekly.map((w) => w.volume_kg), 1);
+  const barW = 24;
+  const gap = 10;
+  const left = 12;
+  const right = 12;
+  const maxH = 110;
+  const totalW = left + right + weekly.length * barW + (weekly.length - 1) * gap;
+  const totalH = maxH + 36;
+
+  return (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 6 }}>
+      <Svg width={totalW} height={totalH}>
+        {weekly.map((w, i) => {
+          const h = w.volume_kg === 0 ? 2 : (w.volume_kg / maxVol) * maxH;
+          const x = left + i * (barW + gap);
+          const y = 8 + (maxH - h);
+          const isLast = i === weekly.length - 1;
+          const d = new Date(w.week_start);
+          const label = `${d.getDate()}/${d.getMonth() + 1}`;
+          return (
+            <React.Fragment key={w.week_start}>
+              <Rect
+                x={x}
+                y={y}
+                width={barW}
+                height={h}
+                rx={3}
+                fill={isLast ? '#1d4ed8' : '#93c5fd'}
+                opacity={w.volume_kg === 0 ? 0.25 : 1}
+              />
+              <SvgText
+                x={x + barW / 2}
+                y={8 + maxH + 16}
+                fontSize="9"
+                fill="#6b7280"
+                textAnchor="middle"
+              >
+                {label}
+              </SvgText>
+              {w.volume_kg > 0 && isLast && (
+                <SvgText
+                  x={x + barW / 2}
+                  y={y - 4}
+                  fontSize="9"
+                  fill="#1d4ed8"
+                  textAnchor="middle"
+                  fontWeight="700"
+                >
+                  {Math.round(w.volume_kg / 100) / 10}k
+                </SvgText>
+              )}
+            </React.Fragment>
+          );
+        })}
+      </Svg>
+    </ScrollView>
+  );
+}
+
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 interface StatCardProps {
@@ -261,6 +327,7 @@ export default function ProgressScreen() {
   const [memberId, setMemberId] = useState<string | null>(null);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [records, setRecords] = useState<PersonalRecord[]>([]);
+  const [volume, setVolume] = useState<VolumeWeeklyResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -280,13 +347,15 @@ export default function ProgressScreen() {
           setMemberId(id);
         }
 
-        const [sessionsRes, recordsRes] = await Promise.all([
+        const [sessionsRes, recordsRes, volumeRes] = await Promise.all([
           apiClient.get(`/api/v1/members/${id}/workout-sessions?limit=100`, accessToken),
           apiClient.get(`/api/v1/members/${id}/personal-records`, accessToken),
+          memberApi.getMyVolumeWeekly(accessToken, 8).catch(() => null),
         ]);
 
         setSessions((sessionsRes as { data: SessionSummary[] }).data ?? []);
         setRecords(recordsRes as PersonalRecord[]);
+        setVolume(volumeRes);
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : 'Error cargando datos';
         setError(msg);
@@ -371,6 +440,97 @@ export default function ProgressScreen() {
           />
         </View>
 
+        {/* Volumen semanal */}
+        {volume && volume.weekly.length > 0 && (
+          <View style={styles.card}>
+            <View style={styles.cardHeaderRow}>
+              <Text style={styles.cardTitle}>Volumen semanal (kg)</Text>
+              {volume.trend_pct !== null && (
+                <View
+                  style={[
+                    styles.trendBadge,
+                    {
+                      backgroundColor:
+                        volume.trend_pct > 0
+                          ? '#dcfce7'
+                          : volume.trend_pct < 0
+                            ? '#fee2e2'
+                            : '#f3f4f6',
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.trendText,
+                      {
+                        color:
+                          volume.trend_pct > 0
+                            ? '#15803d'
+                            : volume.trend_pct < 0
+                              ? '#b91c1c'
+                              : '#6b7280',
+                      },
+                    ]}
+                  >
+                    {volume.trend_pct > 0 ? '↑' : volume.trend_pct < 0 ? '↓' : '—'}{' '}
+                    {Math.abs(volume.trend_pct)}%
+                  </Text>
+                </View>
+              )}
+            </View>
+            <Text style={styles.cardSubtitle}>
+              Esta semana:{' '}
+              <Text style={styles.bigInline}>{volume.this_week_volume_kg.toLocaleString()} kg</Text>
+              {' · '}Promedio 8 semanas: {volume.avg_volume_kg.toLocaleString()} kg
+            </Text>
+            <VolumeChart weekly={volume.weekly} />
+          </View>
+        )}
+
+        {/* Top 5 ejercicios por volumen */}
+        {volume && volume.top_exercises.length > 0 && (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Top ejercicios (volumen últimas 8 semanas)</Text>
+            {volume.top_exercises.map((ex, idx) => {
+              const maxVol = volume.top_exercises[0]?.volume_kg ?? 1;
+              const pct = (ex.volume_kg / maxVol) * 100;
+              return (
+                <View key={ex.id} style={styles.topExRow}>
+                  <Text style={styles.topExRank}>#{idx + 1}</Text>
+                  <View style={{ flex: 1 }}>
+                    <View style={styles.topExHeader}>
+                      <Text style={styles.topExName} numberOfLines={1}>
+                        {ex.name}
+                      </Text>
+                      <Text style={styles.topExValue}>{ex.volume_kg.toLocaleString()} kg</Text>
+                    </View>
+                    <View style={styles.topExBarBg}>
+                      <View style={[styles.topExBarFill, { width: `${pct}%` }]} />
+                    </View>
+                    <Text style={styles.topExSets}>{ex.sets} series</Text>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        )}
+
+        {/* Fotos de progreso CTA */}
+        <TouchableOpacity
+          style={styles.photosCta}
+          onPress={() => router.push('/progress/photos' as never)}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.photosCtaEmoji}>📸</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.photosCtaTitle}>Fotos de progreso</Text>
+            <Text style={styles.photosCtaSub}>
+              Sube tu foto antes / después y compara tu evolución
+            </Text>
+          </View>
+          <Text style={styles.photosCtaChevron}>›</Text>
+        </TouchableOpacity>
+
         {/* Attendance chart */}
         <AttendanceChart counts={monthlyCounts} labels={last6Months.map((m) => m.label)} />
 
@@ -453,6 +613,57 @@ const styles = StyleSheet.create({
   bottomPad: {
     height: 40,
   },
+
+  // ─── Sprint C — volumen y top ejercicios ─────────────────────────────────
+  cardHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 2,
+  },
+  cardSubtitle: { fontSize: 12, color: '#6b7280', marginBottom: 4 },
+  bigInline: { color: '#111827', fontWeight: '800' },
+  trendBadge: { borderRadius: 100, paddingHorizontal: 10, paddingVertical: 3 },
+  trendText: { fontSize: 12, fontWeight: '700' },
+
+  topExRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8 },
+  topExRank: { fontSize: 13, fontWeight: '800', color: '#9ca3af', width: 22, textAlign: 'right' },
+  topExHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+  },
+  topExName: { fontSize: 13, fontWeight: '600', color: '#111827', flex: 1, marginRight: 8 },
+  topExValue: { fontSize: 13, fontWeight: '700', color: '#1d4ed8' },
+  topExBarBg: {
+    height: 5,
+    backgroundColor: '#e5e7eb',
+    borderRadius: 3,
+    marginTop: 4,
+    overflow: 'hidden',
+  },
+  topExBarFill: { height: '100%', backgroundColor: '#1d4ed8', borderRadius: 3 },
+  topExSets: { fontSize: 10, color: '#9ca3af', marginTop: 2 },
+
+  photosCta: {
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+    borderLeftWidth: 3,
+    borderLeftColor: '#1d4ed8',
+  },
+  photosCtaEmoji: { fontSize: 30 },
+  photosCtaTitle: { fontSize: 15, fontWeight: '700', color: '#111827' },
+  photosCtaSub: { fontSize: 12, color: '#6b7280', marginTop: 2 },
+  photosCtaChevron: { fontSize: 24, color: '#9ca3af' },
 
   // Error
   errorBox: {

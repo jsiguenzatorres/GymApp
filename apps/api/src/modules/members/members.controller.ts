@@ -84,6 +84,44 @@ export class MembersController {
     return this.membersService.findMyHomeStats(user.sub, this.gymId(user));
   }
 
+  // GET /api/v1/members/me/volume-weekly — volumen agregado últimas 8 semanas + top ejercicios
+  @Get('members/me/volume-weekly')
+  getMyVolumeWeekly(@CurrentUser() user: JwtPayload, @Query('weeks') weeks?: string) {
+    return this.membersService.getMyVolumeWeekly(
+      user.sub,
+      this.gymId(user),
+      weeks ? parseInt(weeks) : 8,
+    );
+  }
+
+  // GET /api/v1/members/me/progress-photos — listado de fotos del miembro
+  @Get('members/me/progress-photos')
+  listMyProgressPhotos(@CurrentUser() user: JwtPayload) {
+    return this.membersService.listMyProgressPhotos(user.sub, this.gymId(user));
+  }
+
+  // POST /api/v1/members/me/progress-photos — subir foto (base64) + metadata opcional
+  @Post('members/me/progress-photos')
+  uploadMyProgressPhoto(
+    @CurrentUser() user: JwtPayload,
+    @Body()
+    body: {
+      image: string;
+      category?: 'FRONT' | 'SIDE' | 'BACK' | 'CUSTOM';
+      weight_kg?: number;
+      note?: string;
+      taken_at?: string;
+    },
+  ) {
+    return this.membersService.uploadMyProgressPhoto(user.sub, this.gymId(user), body);
+  }
+
+  // DELETE /api/v1/members/me/progress-photos/:id
+  @Delete('members/me/progress-photos/:id')
+  deleteMyProgressPhoto(@CurrentUser() user: JwtPayload, @Param('id', ParseUUIDPipe) id: string) {
+    return this.membersService.deleteMyProgressPhoto(user.sub, this.gymId(user), id);
+  }
+
   @Get('members')
   listMembers(@CurrentUser() user: JwtPayload, @Query() query: ListMembersDto) {
     return this.membersService.listMembers(this.gymId(user), query);

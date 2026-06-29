@@ -45,10 +45,11 @@ export class StorageService {
     return { buffer, mimeType };
   }
 
-  // Sube un avatar a Supabase Storage y retorna la URL pública.
-  // Sobrescribe si ya existía (upsert) — siempre 1 avatar por miembro.
-  async uploadAvatar(
-    memberId: string,
+  // Genérico — sube una imagen a un bucket de Supabase Storage.
+  // Se usa internamente por uploadAvatar y uploadProgressPhoto.
+  async uploadImage(
+    bucket: string,
+    pathPrefix: string,
     dataUri: string,
   ): Promise<{ url: string; sizeBytes: number; mimeType: string }> {
     if (!this.supabaseUrl || !this.serviceRoleKey) {
@@ -63,11 +64,10 @@ export class StorageService {
     }
 
     const ext = mimeType === 'image/jpeg' ? 'jpg' : mimeType.split('/')[1];
-    // Cache-busting: incluir timestamp epoch para que el cliente refresque tras upload
     const stamp = process.hrtime.bigint().toString(36);
-    const path = `${memberId}/${stamp}.${ext}`;
+    const path = `${pathPrefix}/${stamp}.${ext}`;
 
-    const uploadUrl = `${this.supabaseUrl}/storage/v1/object/${this.avatarsBucket}/${path}`;
+    const uploadUrl = `${this.supabaseUrl}/storage/v1/object/${bucket}/${path}`;
     const res = await fetch(uploadUrl, {
       method: 'POST',
       headers: {
@@ -85,7 +85,18 @@ export class StorageService {
       throw new InternalServerErrorException(`Storage upload failed (${res.status})`);
     }
 
-    const publicUrl = `${this.supabaseUrl}/storage/v1/object/public/${this.avatarsBucket}/${path}`;
+    const publicUrl = `${this.supabaseUrl}/storage/v1/object/public/${bucket}/${path}`;
     return { url: publicUrl, sizeBytes: buffer.length, mimeType };
+  }
+
+  // Sube un avatar — sobrescribe (1 avatar por miembro).
+  uploadAvatar(memberId: string, dataUri: string) {
+    return this.uploadImage(this.avatarsBucket, memberId, dataUri);
+  }
+
+  // Sube una foto de progreso al bucket 'progress-photos' (configurable).
+  uploadProgressPhoto(memberId: string, dataUri: string) {
+    const bucket = this.config.get<string>('SUPABASE_PROGRESS_BUCKET') ?? 'progress-photos';
+    return this.uploadImage(bucket, memberId, dataUri);
   }
 }

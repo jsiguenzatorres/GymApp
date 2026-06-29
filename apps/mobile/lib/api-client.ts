@@ -170,9 +170,45 @@ export interface MemberHomeStats {
   } | null;
 }
 
+export interface VolumeWeeklyResponse {
+  weekly: Array<{ week_start: string; sessions: number; volume_kg: number; sets: number }>;
+  this_week_volume_kg: number;
+  last_week_volume_kg: number;
+  trend_pct: number | null;
+  avg_volume_kg: number;
+  top_exercises: Array<{ id: string; name: string; volume_kg: number; sets: number }>;
+}
+
+export interface ProgressPhoto {
+  id: string;
+  member_id: string;
+  url: string;
+  category: 'FRONT' | 'SIDE' | 'BACK' | 'CUSTOM';
+  weight_kg: string | number | null;
+  note: string | null;
+  taken_at: string;
+  created_at: string;
+}
+
 export const memberApi = {
   getMe: (token: string) => apiClient.get<MemberProfile>('/api/v1/members/me', token),
   getMyStats: (token: string) => apiClient.get<MemberHomeStats>('/api/v1/members/me/stats', token),
+  getMyVolumeWeekly: (token: string, weeks = 8) =>
+    apiClient.get<VolumeWeeklyResponse>(`/api/v1/members/me/volume-weekly?weeks=${weeks}`, token),
+  listMyProgressPhotos: (token: string) =>
+    apiClient.get<ProgressPhoto[]>('/api/v1/members/me/progress-photos', token),
+  uploadMyProgressPhoto: (
+    token: string,
+    body: {
+      image: string;
+      category?: 'FRONT' | 'SIDE' | 'BACK' | 'CUSTOM';
+      weight_kg?: number;
+      note?: string;
+      taken_at?: string;
+    },
+  ) => apiClient.post<ProgressPhoto>('/api/v1/members/me/progress-photos', body, token),
+  deleteMyProgressPhoto: (token: string, id: string) =>
+    apiClient.delete<void>(`/api/v1/members/me/progress-photos/${id}`, undefined, token),
   uploadAvatar: (token: string, imageDataUri: string) =>
     apiClient.post<{ id: string; avatar_url: string }>(
       '/api/v1/members/me/avatar',

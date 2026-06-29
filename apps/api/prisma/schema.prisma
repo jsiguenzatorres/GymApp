@@ -267,6 +267,7 @@ model Member {
   member_badges         MemberBadge[]
   feedback              Feedback[]
   conversation_sessions ConversationSession[]
+  progress_photos       ProgressPhoto[]
 
   @@index([gym_id, status])
   @@index([gym_id, risk_score])
@@ -1108,4 +1109,22 @@ model FounderOffer {
   updated_at            DateTime @updatedAt
 
   @@map("founder_offers")
+}
+
+// ─── Fotos de progreso del miembro (antes/después) ───────────────────────────
+
+model ProgressPhoto {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  member_id  String   @db.Uuid
+  url        String
+  category   String   @default("FRONT") @db.VarChar(20) // FRONT | SIDE | BACK | CUSTOM
+  weight_kg  Decimal? @db.Decimal(5, 2)
+  note       String?
+  taken_at   DateTime @default(now())
+  created_at DateTime @default(now())
+
+  member Member @relation(fields: [member_id], references: [id], onDelete: Cascade)
+
+  @@index([member_id, taken_at(sort: Desc)])
+  @@map("progress_photos")
 }

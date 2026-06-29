@@ -309,6 +309,171 @@ export class MembersService {
     };
   }
 
+  // ─── VOLUMEN SEMANAL (8 semanas) — para gráfica de progreso ────────────────
+  async getMyVolumeWeekly(userId: string, gymId: string, weeks = 8) {
+    const member = await this.prisma.member.findFirst({
+      where: { user_id: userId, gym_id: gymId },
+      select: { id: true },
+    });
+    if (!member) throw new NotFoundException('Perfil de miembro no encontrado');
+
+    const now = new Date();
+    const startOfThisWeek = new Date(now);
+    const dayOfWeek = (startOfThisWeek.getDay() + 6) % 7; // lunes = 0
+    startOfThisWeek.setDate(startOfThisWeek.getDate() - dayOfWeek);
+    startOfThisWeek.setHours(0, 0, 0, 0);
+
+    const startCutoff = new Date(startOfThisWeek);
+    startCutoff.setDate(startCutoff.getDate() - (weeks - 1) * 7);
+
+    // Trae todas las sesiones del miembro en el rango y sus sets
+    const sessions = await this.prisma.workoutSession.findMany({
+      where: {
+        member_id: member.id,
+        started_at: { gte: startCutoff },
+      },
+      select: {
+        started_at: true,
+        sets: { select: { weight_kg: true, reps: true } },
+      },
+    });
+
+    // Agrupar por inicio de semana (lunes 00:00)
+    const buckets = new Map<string, { sessions: number; volume_kg: number; sets: number }>();
+    for (let i = 0; i < weeks; i++) {
+      const wkStart = new Date(startCutoff);
+      wkStart.setDate(wkStart.getDate() + i * 7);
+      buckets.set(wkStart.toISOString().slice(0, 10), { sessions: 0, volume_kg: 0, sets: 0 });
+    }
+
+    for (const s of sessions) {
+      const wkStart = new Date(s.started_at);
+      const dow = (wkStart.getDay() + 6) % 7;
+      wkStart.setDate(wkStart.getDate() - dow);
+      wkStart.setHours(0, 0, 0, 0);
+      const key = wkStart.toISOString().slice(0, 10);
+      const b = buckets.get(key);
+      if (!b) continue;
+      b.sessions += 1;
+      for (const st of s.sets) {
+        b.sets += 1;
+        if (st.weight_kg && st.reps) {
+          b.volume_kg += Number(st.weight_kg) * st.reps;
+        }
+      }
+    }
+
+    const weekly = Array.from(buckets.entries()).map(([week_start, v]) => ({
+      week_start, // YYYY-MM-DD del lunes
+      sessions: v.sessions,
+      volume_kg: Math.round(v.volume_kg),
+      sets: v.sets,
+    }));
+
+    // Resumen comparativo
+    const thisWeek = weekly[weekly.length - 1];
+    const lastWeek = weekly[weekly.length - 2];
+    const trendPct =
+      lastWeek && lastWeek.volume_kg > 0
+        ? Math.round(((thisWeek.volume_kg - lastWeek.volume_kg) / lastWeek.volume_kg) * 100)
+        : null;
+    const avgVolume = Math.round(
+      weekly.reduce((acc, w) => acc + w.volume_kg, 0) / Math.max(1, weekly.length),
+    );
+
+    // Top 5 ejercicios por volumen total en el periodo
+    const allSets = await this.prisma.workoutSet.findMany({
+      where: {
+        session: { member_id: member.id, started_at: { gte: startCutoff } },
+        weight_kg: { not: null },
+      },
+      select: {
+        weight_kg: true,
+        reps: true,
+        exercise: { select: { id: true, name: true } },
+      },
+    });
+    const exVol = new Map<string, { id: string; name: string; volume_kg: number; sets: number }>();
+    for (const s of allSets) {
+      if (!s.weight_kg || !s.reps) continue;
+      const key = s.exercise.id;
+      const prev = exVol.get(key) ?? { id: key, name: s.exercise.name, volume_kg: 0, sets: 0 };
+      prev.volume_kg += Number(s.weight_kg) * s.reps;
+      prev.sets += 1;
+      exVol.set(key, prev);
+    }
+    const topExercises = Array.from(exVol.values())
+      .sort((a, b) => b.volume_kg - a.volume_kg)
+      .slice(0, 5)
+      .map((e) => ({ ...e, volume_kg: Math.round(e.volume_kg) }));
+
+    return {
+      weekly,
+      this_week_volume_kg: thisWeek?.volume_kg ?? 0,
+      last_week_volume_kg: lastWeek?.volume_kg ?? 0,
+      trend_pct: trendPct,
+      avg_volume_kg: avgVolume,
+      top_exercises: topExercises,
+    };
+  }
+
+  // ─── FOTOS DE PROGRESO ─────────────────────────────────────────────────────
+  async listMyProgressPhotos(userId: string, gymId: string) {
+    const member = await this.prisma.member.findFirst({
+      where: { user_id: userId, gym_id: gymId },
+      select: { id: true },
+    });
+    if (!member) throw new NotFoundException('Perfil de miembro no encontrado');
+    return this.prisma.progressPhoto.findMany({
+      where: { member_id: member.id },
+      orderBy: { taken_at: 'desc' },
+    });
+  }
+
+  async uploadMyProgressPhoto(
+    userId: string,
+    gymId: string,
+    body: {
+      image: string;
+      category?: 'FRONT' | 'SIDE' | 'BACK' | 'CUSTOM';
+      weight_kg?: number;
+      note?: string;
+      taken_at?: string;
+    },
+  ) {
+    const member = await this.prisma.member.findFirst({
+      where: { user_id: userId, gym_id: gymId },
+      select: { id: true },
+    });
+    if (!member) throw new NotFoundException('Perfil de miembro no encontrado');
+
+    const { url } = await this.storage.uploadProgressPhoto(member.id, body.image);
+
+    return this.prisma.progressPhoto.create({
+      data: {
+        member_id: member.id,
+        url,
+        category: body.category ?? 'FRONT',
+        weight_kg: body.weight_kg ?? null,
+        note: body.note ?? null,
+        taken_at: body.taken_at ? new Date(body.taken_at) : new Date(),
+      },
+    });
+  }
+
+  async deleteMyProgressPhoto(userId: string, gymId: string, photoId: string) {
+    const member = await this.prisma.member.findFirst({
+      where: { user_id: userId, gym_id: gymId },
+      select: { id: true },
+    });
+    if (!member) throw new NotFoundException('Perfil de miembro no encontrado');
+    const photo = await this.prisma.progressPhoto.findFirst({
+      where: { id: photoId, member_id: member.id },
+    });
+    if (!photo) throw new NotFoundException('Foto no encontrada');
+    return this.prisma.progressPhoto.delete({ where: { id: photoId } });
+  }
+
   async updateMyAvatar(userId: string, gymId: string, imageDataUri: string) {
     const member = await this.prisma.member.findFirst({
       where: { user_id: userId, gym_id: gymId },
