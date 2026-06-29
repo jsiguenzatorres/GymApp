@@ -106,6 +106,72 @@ export class NutritionService {
     return { entries, totals };
   }
 
+  /** Devuelve totales calóricos por día en un rango (default últimos 30 días). */
+  async getDiaryRange(gymId: string, memberId: string, days = 30) {
+    const end = new Date();
+    end.setHours(23, 59, 59, 999);
+    const start = new Date(end);
+    start.setDate(start.getDate() - (days - 1));
+    start.setHours(0, 0, 0, 0);
+
+    const entries = await this.prisma.foodDiaryEntry.findMany({
+      where: { gym_id: gymId, member_id: memberId, date: { gte: start, lte: end } },
+      select: { date: true, kcal: true, protein_g: true, carbs_g: true, fat_g: true },
+      orderBy: { date: 'asc' },
+    });
+
+    // Agrupar por día (YYYY-MM-DD)
+    const buckets = new Map<
+      string,
+      {
+        date: string;
+        kcal: number;
+        protein_g: number;
+        carbs_g: number;
+        fat_g: number;
+        entries: number;
+      }
+    >();
+    for (let i = 0; i < days; i++) {
+      const d = new Date(start);
+      d.setDate(d.getDate() + i);
+      const key = d.toISOString().slice(0, 10);
+      buckets.set(key, { date: key, kcal: 0, protein_g: 0, carbs_g: 0, fat_g: 0, entries: 0 });
+    }
+    for (const e of entries) {
+      const key = e.date.toISOString().slice(0, 10);
+      const b = buckets.get(key);
+      if (!b) continue;
+      b.kcal += e.kcal;
+      b.protein_g += e.protein_g;
+      b.carbs_g += e.carbs_g;
+      b.fat_g += e.fat_g;
+      b.entries += 1;
+    }
+
+    const daily = Array.from(buckets.values()).map((b) => ({
+      ...b,
+      kcal: Math.round(b.kcal),
+      protein_g: Math.round(b.protein_g),
+      carbs_g: Math.round(b.carbs_g),
+      fat_g: Math.round(b.fat_g),
+    }));
+
+    const daysWithLogs = daily.filter((d) => d.entries > 0);
+    const avgKcal =
+      daysWithLogs.length > 0
+        ? Math.round(daysWithLogs.reduce((acc, d) => acc + d.kcal, 0) / daysWithLogs.length)
+        : 0;
+
+    return {
+      daily,
+      days_with_logs: daysWithLogs.length,
+      avg_kcal: avgKcal,
+      range_start: start.toISOString().slice(0, 10),
+      range_end: end.toISOString().slice(0, 10),
+    };
+  }
+
   async logFood(gymId: string, memberId: string, dto: LogFoodDto) {
     const foodItem = await this.prisma.foodItem.findFirst({
       where: { id: dto.food_item_id, OR: [{ gym_id: gymId }, { gym_id: null }] },

@@ -329,11 +329,63 @@ export const marketplaceApi = {
     }>('/api/v1/products/by-photo', { image, mimeType }, token),
 };
 
+export interface FoodItem {
+  id: string;
+  name: string;
+  brand: string | null;
+  kcal_per_100g: number;
+  protein_per_100g: number;
+  carbs_per_100g: number;
+  fat_per_100g: number;
+  is_verified: boolean;
+}
+
+export interface DiaryRangeDay {
+  date: string;
+  kcal: number;
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+  entries: number;
+}
+export interface DiaryRange {
+  daily: DiaryRangeDay[];
+  days_with_logs: number;
+  avg_kcal: number;
+  range_start: string;
+  range_end: string;
+}
+
 export const nutritionApi = {
   getMyPlans: (memberId: string, token: string) =>
     apiClient.get<NutritionPlan[]>(`/api/v1/nutrition-plans?memberId=${memberId}`, token),
   getDiary: (memberId: string, date: string, token: string) =>
     apiClient.get<DiaryDay>(`/api/v1/members/${memberId}/food-diary?date=${date}`, token),
+  getDiaryRange: (memberId: string, token: string, days = 30) =>
+    apiClient.get<DiaryRange>(`/api/v1/members/${memberId}/food-diary/range?days=${days}`, token),
+  searchFoodItems: (token: string, search?: string) => {
+    const q = search ? `?search=${encodeURIComponent(search)}` : '';
+    return apiClient.get<FoodItem[]>(`/api/v1/food-items${q}`, token);
+  },
+  logFood: (
+    token: string,
+    memberId: string,
+    body: {
+      food_item_id: string;
+      plan_id?: string;
+      date: string; // YYYY-MM-DD
+      meal_type: 'BREAKFAST' | 'LUNCH' | 'DINNER' | 'SNACK';
+      quantity_g: number;
+      notes?: string;
+    },
+  ) =>
+    apiClient.post<DiaryDay['entries'][number]>(
+      `/api/v1/members/${memberId}/food-diary`,
+      body,
+      token,
+    ),
+  deleteDiaryEntry: (token: string, entryId: string) =>
+    apiClient.delete<void>(`/api/v1/food-diary/${entryId}`, undefined, token),
   aiSuggest: (planId: string, memberId: string, context: string, token: string) =>
     apiClient.post<{ suggestion: string }>(
       '/api/v1/nutrition/ai-suggest',

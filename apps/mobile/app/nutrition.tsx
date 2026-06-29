@@ -15,7 +15,14 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useAuthStore } from '@/store/auth.store';
-import { memberApi, nutritionApi, NutritionPlan, DiaryDay, AddonTier } from '@/lib/api-client';
+import {
+  memberApi,
+  nutritionApi,
+  NutritionPlan,
+  DiaryDay,
+  AddonTier,
+  FoodItem,
+} from '@/lib/api-client';
 
 const GOAL_LABEL: Record<string, string> = {
   WEIGHT_LOSS: '🔥 Pérdida de peso',
@@ -113,6 +120,16 @@ export default function NutritionScreen() {
   const [aiUsedToday, setAiUsedToday] = useState(0);
   const [paywallOpen, setPaywallOpen] = useState<null | 'PRO' | 'ELITE'>(null);
 
+  // ─── Estado del modal "Registrar comida" ─────────────────────────────────
+  const [logOpen, setLogOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<FoodItem[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [selectedFood, setSelectedFood] = useState<FoodItem | null>(null);
+  const [quantityG, setQuantityG] = useState('100');
+  const [mealType, setMealType] = useState<'BREAKFAST' | 'LUNCH' | 'DINNER' | 'SNACK'>('LUNCH');
+  const [logging, setLogging] = useState(false);
+
   const load = useCallback(async () => {
     if (!accessToken) return;
     try {
@@ -143,6 +160,67 @@ export default function NutritionScreen() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Búsqueda con debounce — busca alimentos al escribir
+  useEffect(() => {
+    if (!logOpen || !accessToken) return;
+    const q = searchQuery.trim();
+    setSearching(true);
+    const t = setTimeout(async () => {
+      try {
+        const results = await nutritionApi.searchFoodItems(accessToken, q || undefined);
+        setSearchResults(results.slice(0, 25));
+      } catch {
+        setSearchResults([]);
+      } finally {
+        setSearching(false);
+      }
+    }, 280);
+    return () => clearTimeout(t);
+  }, [searchQuery, logOpen, accessToken]);
+
+  const openLogModal = () => {
+    if (tier === 'BASIC') {
+      setPaywallOpen('PRO');
+      return;
+    }
+    setSelectedFood(null);
+    setQuantityG('100');
+    setSearchQuery('');
+    setSearchResults([]);
+    // Detecta meal_type según hora actual
+    const h = new Date().getHours();
+    setMealType(h < 11 ? 'BREAKFAST' : h < 16 ? 'LUNCH' : h < 20 ? 'DINNER' : 'SNACK');
+    setLogOpen(true);
+  };
+
+  const submitLog = async () => {
+    if (!accessToken || !memberId || !selectedFood) return;
+    const qty = parseFloat(quantityG);
+    if (!Number.isFinite(qty) || qty <= 0) {
+      Alert.alert('Cantidad inválida', 'Indica una cantidad mayor a 0 gramos.');
+      return;
+    }
+    setLogging(true);
+    try {
+      await nutritionApi.logFood(accessToken, memberId, {
+        food_item_id: selectedFood.id,
+        plan_id: plan?.id,
+        date: todayString(),
+        meal_type: mealType,
+        quantity_g: qty,
+      });
+      setLogOpen(false);
+      // refrescar el diario del día
+      const d = await nutritionApi.getDiary(memberId, todayString(), accessToken).catch(() => null);
+      setDiary(d);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'No se pudo registrar';
+      Alert.alert('Error', msg);
+    } finally {
+      setLogging(false);
+    }
+  };
 
   const dailyAiLimit =
     tier === 'ELITE' ? Infinity : tier === 'PRO' ? PRO_DAILY_AI_LIMIT : BASIC_DAILY_AI_LIMIT;
@@ -298,7 +376,7 @@ export default function NutritionScreen() {
                 <View style={styles.sectionHeaderRow}>
                   <Text style={styles.sectionTitle}>Diario de hoy</Text>
                   {tier !== 'BASIC' && (
-                    <TouchableOpacity style={styles.addEntryBtn} disabled>
+                    <TouchableOpacity style={styles.addEntryBtn} onPress={openLogModal}>
                       <Text style={styles.addEntryText}>+ Registrar</Text>
                     </TouchableOpacity>
                   )}
@@ -472,11 +550,20 @@ export default function NutritionScreen() {
                     title="Escaneo código barras"
                     desc="Identifica producto al instante (en desarrollo)"
                   />
-                  <ComingSoonCard
-                    emoji="📅"
-                    title="Histórico 30 días"
-                    desc="Calendario + gráfica calórica (en desarrollo)"
-                  />
+                  <TouchableOpacity
+                    style={styles.unlockedFeatureCard}
+                    onPress={() => router.push('/nutrition-history' as never)}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.lockedEmoji}>📅</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.lockedTitle}>Histórico 30 días</Text>
+                      <Text style={styles.lockedDesc}>
+                        Calendario navegable + gráfica calórica de tus últimos 30 días
+                      </Text>
+                    </View>
+                    <Text style={styles.unlockedChevron}>›</Text>
+                  </TouchableOpacity>
                   <LockedFeature
                     emoji="🤖"
                     title="Foto del plato → IA"
@@ -487,6 +574,20 @@ export default function NutritionScreen() {
                 </>
               ) : (
                 <>
+                  <TouchableOpacity
+                    style={styles.unlockedFeatureCard}
+                    onPress={() => router.push('/nutrition-history' as never)}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.lockedEmoji}>📅</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.lockedTitle}>Histórico 30 días</Text>
+                      <Text style={styles.lockedDesc}>
+                        Calendario navegable + gráfica calórica de tus últimos 30 días
+                      </Text>
+                    </View>
+                    <Text style={styles.unlockedChevron}>›</Text>
+                  </TouchableOpacity>
                   <Text style={styles.eliteHeader}>🏆 Funciones NutriElite</Text>
                   <ComingSoonCard
                     emoji="📷"
@@ -519,6 +620,147 @@ export default function NutritionScreen() {
           )}
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Modal "Registrar comida" */}
+      <Modal
+        visible={logOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setLogOpen(false)}
+      >
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <View style={styles.logModalCard}>
+            <View style={styles.logModalHeader}>
+              <Text style={styles.logModalTitle}>Registrar comida</Text>
+              <TouchableOpacity onPress={() => setLogOpen(false)}>
+                <Text style={styles.logModalClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {!selectedFood ? (
+              <>
+                <TextInput
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  placeholder="Buscar alimento (ej: pupusa, pollo, arroz)…"
+                  style={styles.logSearchInput}
+                  autoFocus
+                  autoCorrect={false}
+                />
+                {searching && <ActivityIndicator color="#15803d" style={{ marginTop: 8 }} />}
+                <ScrollView style={styles.logResults} keyboardShouldPersistTaps="handled">
+                  {searchResults.length === 0 && !searching && (
+                    <Text style={styles.logEmpty}>
+                      {searchQuery
+                        ? 'Sin resultados. Intenta otro término.'
+                        : 'Empieza a escribir para buscar.'}
+                    </Text>
+                  )}
+                  {searchResults.map((f) => (
+                    <TouchableOpacity
+                      key={f.id}
+                      style={styles.logResultRow}
+                      onPress={() => setSelectedFood(f)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.logResultName} numberOfLines={1}>
+                          {f.name}
+                          {f.brand && <Text style={styles.logResultBrand}> · {f.brand}</Text>}
+                        </Text>
+                        <Text style={styles.logResultMacro}>
+                          {Math.round(f.kcal_per_100g)} kcal · P{f.protein_per_100g.toFixed(1)} · C
+                          {f.carbs_per_100g.toFixed(1)} · G{f.fat_per_100g.toFixed(1)} (por 100g)
+                        </Text>
+                      </View>
+                      <Text style={styles.logResultArrow}>›</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </>
+            ) : (
+              <>
+                <View style={styles.logSelectedCard}>
+                  <Text style={styles.logSelectedName}>{selectedFood.name}</Text>
+                  {selectedFood.brand && (
+                    <Text style={styles.logResultBrand}>{selectedFood.brand}</Text>
+                  )}
+                  <Text style={styles.logSelectedMacro}>
+                    Por 100g: {Math.round(selectedFood.kcal_per_100g)} kcal · P
+                    {selectedFood.protein_per_100g.toFixed(1)} · C
+                    {selectedFood.carbs_per_100g.toFixed(1)} · G
+                    {selectedFood.fat_per_100g.toFixed(1)}
+                  </Text>
+                  <TouchableOpacity onPress={() => setSelectedFood(null)} style={{ marginTop: 6 }}>
+                    <Text style={styles.logChangeFood}>‹ Cambiar alimento</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <Text style={styles.logFieldLabel}>Cantidad (g)</Text>
+                <TextInput
+                  value={quantityG}
+                  onChangeText={setQuantityG}
+                  keyboardType="numeric"
+                  style={styles.logQuantityInput}
+                />
+
+                {(() => {
+                  const qty = parseFloat(quantityG) || 0;
+                  const factor = qty / 100;
+                  return (
+                    <View style={styles.logPreview}>
+                      <Text style={styles.logPreviewText}>
+                        Esta porción aporta:{' '}
+                        <Text style={styles.logPreviewBig}>
+                          {Math.round(selectedFood.kcal_per_100g * factor)} kcal
+                        </Text>
+                        {'\n'}P{(selectedFood.protein_per_100g * factor).toFixed(1)}g · C
+                        {(selectedFood.carbs_per_100g * factor).toFixed(1)}g · G
+                        {(selectedFood.fat_per_100g * factor).toFixed(1)}g
+                      </Text>
+                    </View>
+                  );
+                })()}
+
+                <Text style={styles.logFieldLabel}>Comida</Text>
+                <View style={styles.mealPicker}>
+                  {(['BREAKFAST', 'LUNCH', 'DINNER', 'SNACK'] as const).map((m) => (
+                    <TouchableOpacity
+                      key={m}
+                      style={[styles.mealPickerBtn, mealType === m && styles.mealPickerBtnActive]}
+                      onPress={() => setMealType(m)}
+                    >
+                      <Text
+                        style={[
+                          styles.mealPickerText,
+                          mealType === m && styles.mealPickerTextActive,
+                        ]}
+                      >
+                        {MEAL_LABEL[m]}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                <TouchableOpacity
+                  style={[styles.logSubmitBtn, logging && { opacity: 0.5 }]}
+                  onPress={submitLog}
+                  disabled={logging}
+                >
+                  {logging ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.logSubmitText}>Registrar comida</Text>
+                  )}
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
 
       {/* Paywall modal */}
       <Modal
@@ -780,6 +1022,17 @@ const styles = StyleSheet.create({
     borderRadius: 100,
   },
   lockedBadgeText: { color: '#b45309', fontSize: 10, fontWeight: '700' },
+  unlockedFeatureCard: {
+    backgroundColor: '#f0fdf4',
+    borderRadius: 12,
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
+  },
+  unlockedChevron: { fontSize: 22, color: '#15803d', fontWeight: '700' },
 
   soonCard: {
     backgroundColor: '#fff',
@@ -850,4 +1103,102 @@ const styles = StyleSheet.create({
   modalCtaText: { color: '#fff', fontWeight: '800', fontSize: 15 },
   modalClose: { marginTop: 8, padding: 8 },
   modalCloseText: { color: '#9ca3af', fontSize: 13 },
+
+  // ─── Modal "Registrar comida" ──────────────────────────────────────────────
+  logModalCard: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 18,
+    paddingBottom: 24,
+    maxHeight: '90%',
+  },
+  logModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  logModalTitle: { fontSize: 18, fontWeight: '800', color: '#111827' },
+  logModalClose: { fontSize: 22, color: '#9ca3af', paddingHorizontal: 8 },
+  logSearchInput: {
+    backgroundColor: '#f3f4f6',
+    borderRadius: 12,
+    padding: 12,
+    fontSize: 14,
+    color: '#111827',
+  },
+  logResults: { marginTop: 8, maxHeight: 360 },
+  logEmpty: { fontSize: 13, color: '#9ca3af', textAlign: 'center', paddingVertical: 24 },
+  logResultRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+    gap: 8,
+  },
+  logResultName: { fontSize: 14, fontWeight: '600', color: '#111827' },
+  logResultBrand: { fontSize: 12, color: '#9ca3af', fontWeight: '400' },
+  logResultMacro: { fontSize: 11, color: '#6b7280', marginTop: 2 },
+  logResultArrow: { fontSize: 18, color: '#9ca3af' },
+
+  logSelectedCard: {
+    backgroundColor: '#f0fdf4',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 8,
+  },
+  logSelectedName: { fontSize: 15, fontWeight: '700', color: '#111827' },
+  logSelectedMacro: { fontSize: 11, color: '#6b7280', marginTop: 4 },
+  logChangeFood: { fontSize: 12, color: '#15803d', fontWeight: '600' },
+
+  logFieldLabel: {
+    fontSize: 11,
+    color: '#6b7280',
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  logQuantityInput: {
+    backgroundColor: '#f3f4f6',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 16,
+    color: '#111827',
+    fontWeight: '600',
+  },
+
+  logPreview: {
+    backgroundColor: '#fef3c7',
+    borderRadius: 10,
+    padding: 10,
+    marginTop: 8,
+  },
+  logPreviewText: { fontSize: 12, color: '#78350f', lineHeight: 18 },
+  logPreviewBig: { fontSize: 14, fontWeight: '800', color: '#b45309' },
+
+  mealPicker: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
+  mealPickerBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 100,
+    backgroundColor: '#f3f4f6',
+  },
+  mealPickerBtnActive: { backgroundColor: '#15803d' },
+  mealPickerText: { fontSize: 12, color: '#6b7280', fontWeight: '600' },
+  mealPickerTextActive: { color: '#fff', fontWeight: '700' },
+
+  logSubmitBtn: {
+    backgroundColor: '#1d4ed8',
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  logSubmitText: { color: '#fff', fontWeight: '800', fontSize: 15 },
 });

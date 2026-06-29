@@ -96,6 +96,19 @@ export class NutritionController {
     return this.nutritionService.getDiary(this.gymId(user), memberId, d);
   }
 
+  @Get('members/:memberId/food-diary/range')
+  getDiaryRange(
+    @CurrentUser() user: JwtPayload,
+    @Param('memberId', ParseUUIDPipe) memberId: string,
+    @Query('days') days?: string,
+  ) {
+    return this.nutritionService.getDiaryRange(
+      this.gymId(user),
+      memberId,
+      days ? parseInt(days) : 30,
+    );
+  }
+
   @Post('members/:memberId/food-diary')
   @HttpCode(HttpStatus.CREATED)
   logFood(
