@@ -1,0 +1,11 @@
+# Vercel solo despliega apps/web — ignora todo lo demás para acelerar el build
+apps/mobile
+apps/api/dist
+apps/api/node_modules
+**/.next
+**/node_modules
+**/.expo
+**/.git
+
+# Mantener apps/api source porque shared-types/schemas pueden depender de Prisma generated.
+# Si no lo necesitan, también ignorar: apps/api
