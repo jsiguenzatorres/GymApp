@@ -422,6 +422,7 @@ model Exercise {
   difficulty        String   @default("INTERMEDIATE") @db.VarChar(20)
   instructions      String?
   video_url         String?
+  image_urls        String[] @default([]) // múltiples fotos (free-exercise-db da 2: pose inicial y final)
   is_active         Boolean  @default(true)
   created_at        DateTime @default(now())
   updated_at        DateTime @updatedAt

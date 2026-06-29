@@ -32,7 +32,10 @@ const GYM_ID = args['gym-id'] ?? null;
 
 const FREE_EXERCISE_DB_URL =
   'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/dist/exercises.json';
+const FREE_IMAGE_BASE =
+  'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/';
 const WGER_BASE = 'https://wger.de/api/v2';
+const WGER_MEDIA_BASE = 'https://wger.de';
 
 const prisma = new PrismaClient();
 
@@ -132,6 +135,7 @@ async function fetchFreeExerciseDb() {
       const muscles = (e.primaryMuscles ?? []).map(mapMuscle).filter(Boolean);
       const secondary = (e.secondaryMuscles ?? []).map(mapMuscle).filter(Boolean);
       if (muscles.length === 0) return null; // descartar sin músculo primario
+      const image_urls = (e.images ?? []).map((img) => `${FREE_IMAGE_BASE}${img}`);
       return {
         source: 'free-exercise-db',
         external_id: e.id,
@@ -143,6 +147,8 @@ async function fetchFreeExerciseDb() {
         category: FREE_CATEGORY_MAP[e.category] ?? 'STRENGTH',
         difficulty: FREE_DIFF_MAP[e.level] ?? 'INTERMEDIATE',
         instructions: (e.instructions ?? []).join('\n\n') || null,
+        image_urls,
+        video_url: null,
       };
     })
     .filter(Boolean);
@@ -238,6 +244,18 @@ async function fetchWger() {
         ? t.description.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
         : null;
 
+      // imágenes y videos del ejercicio (cuando existan en wger)
+      const image_urls = (ex.images ?? [])
+        .map((img) => img.image)
+        .filter(Boolean)
+        .map((url) => (url.startsWith('http') ? url : `${WGER_MEDIA_BASE}${url}`));
+      const videoObj = (ex.videos ?? []).find((v) => v.video);
+      const video_url = videoObj
+        ? videoObj.video.startsWith('http')
+          ? videoObj.video
+          : `${WGER_MEDIA_BASE}${videoObj.video}`
+        : null;
+
       return {
         source: 'wger',
         external_id: String(ex.id),
@@ -249,6 +267,8 @@ async function fetchWger() {
         category: 'STRENGTH', // wger no expone difficulty/category compatibles
         difficulty: 'INTERMEDIATE',
         instructions: cleanDesc,
+        image_urls,
+        video_url,
       };
     })
     .filter(Boolean);
@@ -275,26 +295,47 @@ function dedup(records) {
 }
 
 async function insertBatch(records) {
-  // Filtra los que ya existen por nombre normalizado (global o del gym)
+  // Trae los existentes con sus arrays para decidir si hay que UPDATE (añadir fotos/video)
   const existing = await prisma.exercise.findMany({
     where: GYM_ID ? { gym_id: GYM_ID } : { gym_id: null },
-    select: { name: true },
+    select: { id: true, name: true, image_urls: true, video_url: true },
   });
-  const existingKeys = new Set(existing.map((e) => normalizeName(e.name)));
-  const toInsert = records.filter((r) => !existingKeys.has(normalizeName(r.name)));
+  const existingByKey = new Map(existing.map((e) => [normalizeName(e.name), e]));
+
+  const toInsert = [];
+  const toUpdate = []; // { id, image_urls?, video_url? }
+
+  for (const r of records) {
+    const key = normalizeName(r.name);
+    const prev = existingByKey.get(key);
+    if (!prev) {
+      toInsert.push(r);
+      continue;
+    }
+    // Existe: UPDATE solo si llega data nueva y prev no la tiene
+    const patch = {};
+    if (r.image_urls?.length && (prev.image_urls?.length ?? 0) === 0) {
+      patch.image_urls = r.image_urls;
+    }
+    if (r.video_url && !prev.video_url) {
+      patch.video_url = r.video_url;
+    }
+    if (Object.keys(patch).length > 0) toUpdate.push({ id: prev.id, patch });
+  }
 
   console.log(
-    `\n📊 ${records.length} candidatos · ${records.length - toInsert.length} ya existen · ${toInsert.length} a insertar`,
+    `\n📊 ${records.length} candidatos · ${toInsert.length} a insertar · ${toUpdate.length} a actualizar (fotos/video)`,
   );
 
   if (DRY_RUN) {
-    console.log('🟡 DRY RUN — no se inserta nada. Muestra de 3:');
-    toInsert.slice(0, 3).forEach((r) => console.log('  ·', r.name, '→', r.muscle_groups.join(',')));
-    return { inserted: 0, skipped: records.length - toInsert.length };
+    console.log('🟡 DRY RUN — no se escribe nada.');
+    if (toInsert[0]) console.log('  Muestra insert:', toInsert[0].name, '→ fotos:', toInsert[0].image_urls?.length ?? 0);
+    if (toUpdate[0]) console.log('  Muestra update:', toUpdate[0].id, '→', toUpdate[0].patch);
+    return { inserted: 0, updated: 0 };
   }
 
-  // truncar nombres a 200 chars del schema
-  const data = toInsert.map((r) => ({
+  // INSERT en lotes de 500
+  const insertData = toInsert.map((r) => ({
     gym_id: GYM_ID,
     name: r.name.slice(0, 200),
     description: r.description,
@@ -304,19 +345,28 @@ async function insertBatch(records) {
     category: r.category,
     difficulty: r.difficulty,
     instructions: r.instructions,
+    image_urls: r.image_urls ?? [],
+    video_url: r.video_url ?? null,
   }));
-
-  // Prisma createMany skip duplicates por nombre (insertar en lotes de 500)
   let inserted = 0;
-  for (let i = 0; i < data.length; i += 500) {
-    const chunk = data.slice(i, i + 500);
+  for (let i = 0; i < insertData.length; i += 500) {
+    const chunk = insertData.slice(i, i + 500);
     const res = await prisma.exercise.createMany({ data: chunk, skipDuplicates: true });
     inserted += res.count;
-    process.stdout.write(`   insertados ${inserted}/${data.length}\r`);
+    process.stdout.write(`   insertados ${inserted}/${insertData.length}\r`);
   }
-  console.log('');
+  if (insertData.length) console.log('');
 
-  return { inserted, skipped: records.length - toInsert.length };
+  // UPDATE individual (no hay updateMany con whereIn dinámico simple en Prisma — pero son pocos al re-correr)
+  let updated = 0;
+  for (const u of toUpdate) {
+    await prisma.exercise.update({ where: { id: u.id }, data: u.patch });
+    updated++;
+    if (updated % 100 === 0) process.stdout.write(`   actualizados ${updated}/${toUpdate.length}\r`);
+  }
+  if (toUpdate.length) console.log(`   actualizados ${updated}/${toUpdate.length}`);
+
+  return { inserted, updated };
 }
 
 // ─── Main ────────────────────────────────────────────────────────────────────
@@ -341,7 +391,7 @@ async function main() {
   console.log(`\n🧹 Dedup: ${batches.length} → ${deduped.length}`);
 
   const result = await insertBatch(deduped);
-  console.log(`\n✅ Listo. Insertados: ${result.inserted} · Ya existían: ${result.skipped}`);
+  console.log(`\n✅ Listo. Insertados: ${result.inserted} · Actualizados: ${result.updated}`);
 }
 
 main()

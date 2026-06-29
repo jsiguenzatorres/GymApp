@@ -476,7 +476,8 @@ export interface Exercise {
   equipment?: string[];
   difficulty?: 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED';
   instructions?: string;
-  video_url?: string;
+  video_url?: string | null;
+  image_urls?: string[];
 }
 
 export const exercisesApi = {

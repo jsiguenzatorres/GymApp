@@ -10,6 +10,8 @@ import {
   StyleSheet,
   SafeAreaView,
   RefreshControl,
+  Image,
+  Linking,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useAuthStore } from '@/store/auth.store';
@@ -140,6 +142,7 @@ interface ExerciseCardProps {
 
 function ExerciseCard({ exercise }: ExerciseCardProps) {
   const [expanded, setExpanded] = useState(false);
+  const [frameIdx, setFrameIdx] = useState(0);
   const primaryMuscle = exercise.muscle_groups?.[0];
   const muscleKey = getMuscleKey(primaryMuscle);
   const muscleLabel = getMuscleLabel(primaryMuscle);
@@ -154,6 +157,14 @@ function ExerciseCard({ exercise }: ExerciseCardProps) {
 
   const subtitleParts = [muscleLabel, equipmentText].filter(Boolean);
 
+  // Animación 2-frame: si hay 2+ imágenes, alternar cada 800ms simula el movimiento
+  const images = exercise.image_urls ?? [];
+  useEffect(() => {
+    if (images.length < 2) return;
+    const t = setInterval(() => setFrameIdx((i) => (i + 1) % images.length), 800);
+    return () => clearInterval(t);
+  }, [images.length]);
+
   return (
     <TouchableOpacity
       style={styles.card}
@@ -161,9 +172,15 @@ function ExerciseCard({ exercise }: ExerciseCardProps) {
       activeOpacity={0.7}
     >
       <View style={styles.cardRow}>
-        <View style={[styles.muscleCircle, { backgroundColor: circleColor }]}>
-          <Text style={styles.muscleAbbrev}>{abbrev}</Text>
-        </View>
+        {images.length > 0 ? (
+          <View style={[styles.muscleCircle, styles.thumbWrap]}>
+            <Image source={{ uri: images[frameIdx] }} style={styles.thumb} resizeMode="cover" />
+          </View>
+        ) : (
+          <View style={[styles.muscleCircle, { backgroundColor: circleColor }]}>
+            <Text style={styles.muscleAbbrev}>{abbrev}</Text>
+          </View>
+        )}
 
         <View style={styles.cardCenter}>
           <Text style={styles.exerciseName} numberOfLines={expanded ? undefined : 1}>
@@ -185,6 +202,30 @@ function ExerciseCard({ exercise }: ExerciseCardProps) {
 
       {expanded && (
         <View style={styles.expandedContent}>
+          {images.length > 0 && (
+            <View style={styles.bigFrameWrap}>
+              <Image
+                source={{ uri: images[frameIdx] }}
+                style={styles.bigFrame}
+                resizeMode="contain"
+              />
+              {images.length > 1 && (
+                <Text style={styles.frameHint}>
+                  Posición {frameIdx + 1} / {images.length}
+                </Text>
+              )}
+            </View>
+          )}
+
+          {exercise.video_url && (
+            <TouchableOpacity
+              style={styles.videoBtn}
+              onPress={() => exercise.video_url && Linking.openURL(exercise.video_url)}
+            >
+              <Text style={styles.videoBtnText}>▶ Ver video técnico</Text>
+            </TouchableOpacity>
+          )}
+
           {exercise.description ? (
             <View style={styles.expandedSection}>
               <Text style={styles.expandedLabel}>Descripción</Text>
@@ -516,6 +557,43 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 12,
     flexShrink: 0,
+  },
+  thumbWrap: {
+    backgroundColor: '#f3f4f6',
+    overflow: 'hidden',
+  },
+  thumb: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+  },
+  bigFrameWrap: {
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  bigFrame: {
+    width: '100%',
+    height: 220,
+    borderRadius: 8,
+    backgroundColor: '#f3f4f6',
+  },
+  frameHint: {
+    fontSize: 11,
+    color: '#9ca3af',
+    marginTop: 4,
+  },
+  videoBtn: {
+    backgroundColor: '#1d4ed8',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  videoBtnText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 14,
   },
   muscleAbbrev: {
     fontSize: 12,
