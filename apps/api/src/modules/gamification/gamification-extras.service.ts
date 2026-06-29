@@ -182,6 +182,160 @@ export class GamificationExtrasService {
   }
 
   // ─── REFERRALS ───────────────────────────────────────────────────────────
+  // ─── ADMIN: Challenges CRUD ──────────────────────────────────────────────
+  async listChallengesAdmin(gymId: string) {
+    return this.prisma.challenge.findMany({
+      where: { gym_id: gymId },
+      orderBy: [{ is_active: 'desc' }, { ends_at: 'desc' }],
+      include: { _count: { select: { member_challenges: true } } },
+    });
+  }
+
+  async createChallengeAdmin(
+    gymId: string,
+    dto: {
+      name: string;
+      description?: string;
+      goal_type: string;
+      goal_value: number;
+      reward_points?: number;
+      starts_at: string;
+      ends_at: string;
+      cover_emoji?: string;
+    },
+  ) {
+    return this.prisma.challenge.create({
+      data: {
+        gym_id: gymId,
+        name: dto.name,
+        description: dto.description,
+        goal_type: dto.goal_type,
+        goal_value: dto.goal_value,
+        reward_points: dto.reward_points ?? 100,
+        starts_at: new Date(dto.starts_at),
+        ends_at: new Date(dto.ends_at),
+        cover_emoji: dto.cover_emoji ?? '🏆',
+        is_active: true,
+      },
+    });
+  }
+
+  async updateChallengeAdmin(
+    gymId: string,
+    id: string,
+    dto: Partial<{
+      name: string;
+      description: string;
+      goal_value: number;
+      reward_points: number;
+      starts_at: string;
+      ends_at: string;
+      cover_emoji: string;
+      is_active: boolean;
+    }>,
+  ) {
+    const c = await this.prisma.challenge.findFirst({ where: { id, gym_id: gymId } });
+    if (!c) throw new NotFoundException('Reto no encontrado');
+    return this.prisma.challenge.update({
+      where: { id },
+      data: {
+        ...dto,
+        starts_at: dto.starts_at ? new Date(dto.starts_at) : undefined,
+        ends_at: dto.ends_at ? new Date(dto.ends_at) : undefined,
+      },
+    });
+  }
+
+  async deleteChallengeAdmin(gymId: string, id: string) {
+    const c = await this.prisma.challenge.findFirst({ where: { id, gym_id: gymId } });
+    if (!c) throw new NotFoundException('Reto no encontrado');
+    return this.prisma.challenge.delete({ where: { id } });
+  }
+
+  // ─── ADMIN: Rewards CRUD ─────────────────────────────────────────────────
+  async listRewardsAdmin(gymId: string) {
+    return this.prisma.reward.findMany({
+      where: { gym_id: gymId },
+      orderBy: [{ is_active: 'desc' }, { cost_points: 'asc' }],
+      include: { _count: { select: { redemptions: true } } },
+    });
+  }
+
+  async createRewardAdmin(
+    gymId: string,
+    dto: {
+      name: string;
+      description?: string;
+      cost_points: number;
+      stock?: number;
+      cover_emoji?: string;
+    },
+  ) {
+    return this.prisma.reward.create({
+      data: {
+        gym_id: gymId,
+        name: dto.name,
+        description: dto.description,
+        cost_points: dto.cost_points,
+        stock: dto.stock ?? -1,
+        cover_emoji: dto.cover_emoji ?? '🎁',
+        is_active: true,
+      },
+    });
+  }
+
+  async updateRewardAdmin(
+    gymId: string,
+    id: string,
+    dto: Partial<{
+      name: string;
+      description: string;
+      cost_points: number;
+      stock: number;
+      cover_emoji: string;
+      is_active: boolean;
+    }>,
+  ) {
+    const r = await this.prisma.reward.findFirst({ where: { id, gym_id: gymId } });
+    if (!r) throw new NotFoundException('Recompensa no encontrada');
+    return this.prisma.reward.update({ where: { id }, data: dto });
+  }
+
+  async deleteRewardAdmin(gymId: string, id: string) {
+    const r = await this.prisma.reward.findFirst({ where: { id, gym_id: gymId } });
+    if (!r) throw new NotFoundException('Recompensa no encontrada');
+    return this.prisma.reward.delete({ where: { id } });
+  }
+
+  async listRedemptionsAdmin(gymId: string, status?: string) {
+    return this.prisma.rewardRedemption.findMany({
+      where: { gym_id: gymId, ...(status ? { status } : {}) },
+      orderBy: { redeemed_at: 'desc' },
+      include: {
+        reward: { select: { name: true, cover_emoji: true } },
+        member: { select: { first_name: true, last_name: true } },
+      },
+      take: 100,
+    });
+  }
+
+  async updateRedemptionStatusAdmin(gymId: string, id: string, status: string) {
+    if (!['PENDING', 'DELIVERED', 'CANCELLED'].includes(status)) {
+      throw new BadRequestException('Status inválido');
+    }
+    const red = await this.prisma.rewardRedemption.findFirst({
+      where: { id, gym_id: gymId },
+    });
+    if (!red) throw new NotFoundException('Canje no encontrado');
+    return this.prisma.rewardRedemption.update({
+      where: { id },
+      data: {
+        status,
+        ...(status === 'DELIVERED' ? { delivered_at: new Date() } : {}),
+      },
+    });
+  }
+
   async listMyReferrals(memberId: string) {
     return this.prisma.referral.findMany({
       where: { referrer_id: memberId },

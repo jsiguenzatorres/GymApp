@@ -21,6 +21,10 @@ import {
   Trophy,
   UserPlus,
   MessageSquare,
+  Newspaper,
+  Target,
+  Gift,
+  Package,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -45,6 +49,10 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/feedback', label: 'Feedback & NPS', icon: MessageSquare },
   { href: '/classes', label: 'Clases & Horarios', icon: Calendar },
   { href: '/gamification', label: 'Gamificación', icon: Trophy },
+  { href: '/challenges', label: 'Retos del gym', icon: Target },
+  { href: '/rewards', label: 'Tienda recompensas', icon: Gift },
+  { href: '/blog', label: 'Blog', icon: Newspaper },
+  { href: '/monthly-boxes', label: 'Caja del mes', icon: Package },
   { href: '/access', label: 'Control de Acceso', icon: ScanLine },
   { href: '/crm', label: 'CRM / ARIA', icon: BrainCircuit },
   { href: '/analytics', label: 'Analytics', icon: BarChart3 },
