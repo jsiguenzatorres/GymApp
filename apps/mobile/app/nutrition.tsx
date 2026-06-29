@@ -564,6 +564,23 @@ export default function NutritionScreen() {
                     </View>
                     <Text style={styles.unlockedChevron}>›</Text>
                   </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.unlockedFeatureCard,
+                      { backgroundColor: '#dcfce7', borderColor: '#bbf7d0' },
+                    ]}
+                    onPress={() => router.push('/nutrition-shopping' as never)}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.lockedEmoji}>🛒</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.lockedTitle}>Lista de compras semanal</Text>
+                      <Text style={styles.lockedDesc}>
+                        Generada por IA según tu plan, con checkboxes
+                      </Text>
+                    </View>
+                    <Text style={[styles.unlockedChevron, { color: '#15803d' }]}>›</Text>
+                  </TouchableOpacity>
                   <LockedFeature
                     emoji="🤖"
                     title="Foto del plato → IA"
@@ -589,21 +606,62 @@ export default function NutritionScreen() {
                     <Text style={styles.unlockedChevron}>›</Text>
                   </TouchableOpacity>
                   <Text style={styles.eliteHeader}>🏆 Funciones NutriElite</Text>
-                  <ComingSoonCard
-                    emoji="📷"
-                    title="Foto del plato → IA"
-                    desc="Toma foto, identifica alimentos, calcula kcal y macros (en desarrollo)"
-                  />
+                  <TouchableOpacity
+                    style={[
+                      styles.unlockedFeatureCard,
+                      { backgroundColor: '#fef3c7', borderColor: '#fde68a' },
+                    ]}
+                    onPress={() => router.push('/nutrition-photo' as never)}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.lockedEmoji}>📷</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.lockedTitle}>Foto del plato → IA</Text>
+                      <Text style={styles.lockedDesc}>
+                        Toma foto, identifica alimentos y registra al diario sin teclear
+                      </Text>
+                    </View>
+                    <Text style={[styles.unlockedChevron, { color: '#b45309' }]}>›</Text>
+                  </TouchableOpacity>
                   <ComingSoonCard
                     emoji="🧬"
                     title="Plan adaptativo semanal"
                     desc="La IA ajusta calorías y macros según tu progreso real (en desarrollo)"
                   />
-                  <ComingSoonCard
-                    emoji="👨‍🍳"
-                    title="Recetas IA"
-                    desc='"Tengo pollo, arroz y brócoli" → receta paso a paso (en desarrollo)'
-                  />
+                  <TouchableOpacity
+                    style={[
+                      styles.unlockedFeatureCard,
+                      { backgroundColor: '#fef3c7', borderColor: '#fde68a' },
+                    ]}
+                    onPress={() => router.push('/nutrition-recipes' as never)}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.lockedEmoji}>👨‍🍳</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.lockedTitle}>Recetas IA</Text>
+                      <Text style={styles.lockedDesc}>
+                        Dime qué ingredientes tienes y te genero la receta + macros
+                      </Text>
+                    </View>
+                    <Text style={[styles.unlockedChevron, { color: '#b45309' }]}>›</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.unlockedFeatureCard,
+                      { backgroundColor: '#dcfce7', borderColor: '#bbf7d0' },
+                    ]}
+                    onPress={() => router.push('/nutrition-shopping' as never)}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.lockedEmoji}>🛒</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.lockedTitle}>Lista de compras semanal</Text>
+                      <Text style={styles.lockedDesc}>
+                        Generada por IA basada en tu plan, categorizada y checkable
+                      </Text>
+                    </View>
+                    <Text style={[styles.unlockedChevron, { color: '#15803d' }]}>›</Text>
+                  </TouchableOpacity>
                   <ComingSoonCard
                     emoji="💬"
                     title="Bot WhatsApp"

@@ -138,4 +138,25 @@ export class NutritionController {
       dto.context,
     );
   }
+
+  // POST /nutrition/photo-analyze — ELITE: foto del plato → identificación IA
+  // Body: { image: "data:image/jpeg;base64,..." }
+  @Post('nutrition/photo-analyze')
+  analyzePhoto(@Body() body: { image: string }) {
+    return this.nutritionService.analyzeMealPhoto(body.image);
+  }
+
+  // POST /nutrition/recipes/generate — ELITE: generador de recetas IA
+  // Body: { ingredients: ["pollo","arroz"], preferences?: "sin lactosa" }
+  @Post('nutrition/recipes/generate')
+  generateRecipe(@Body() body: { ingredients: string[]; preferences?: string }) {
+    return this.nutritionService.generateRecipe(body.ingredients, body.preferences);
+  }
+
+  // POST /nutrition/shopping-list/generate — PRO+: lista de compras semanal
+  // Body: { memberId: string }
+  @Post('nutrition/shopping-list/generate')
+  generateShoppingList(@CurrentUser() user: JwtPayload, @Body() body: { memberId: string }) {
+    return this.nutritionService.generateShoppingList(this.gymId(user), body.memberId);
+  }
 }

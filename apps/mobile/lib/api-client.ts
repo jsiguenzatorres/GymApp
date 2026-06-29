@@ -392,7 +392,70 @@ export const nutritionApi = {
       { planId, memberId, context },
       token,
     ),
+  analyzePhoto: (token: string, imageDataUri: string) =>
+    apiClient.post<PhotoAnalyzeResponse>(
+      '/api/v1/nutrition/photo-analyze',
+      { image: imageDataUri },
+      token,
+    ),
+  generateRecipe: (token: string, ingredients: string[], preferences?: string) =>
+    apiClient.post<RecipeGenResponse>(
+      '/api/v1/nutrition/recipes/generate',
+      { ingredients, preferences },
+      token,
+    ),
+  generateShoppingList: (token: string, memberId: string) =>
+    apiClient.post<ShoppingListResponse>(
+      '/api/v1/nutrition/shopping-list/generate',
+      { memberId },
+      token,
+    ),
 };
+
+export interface PhotoAnalyzeItem {
+  name: string;
+  grams: number;
+  kcal: number;
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+}
+export interface PhotoAnalyzeResponse {
+  success: boolean;
+  items: PhotoAnalyzeItem[];
+  totals: { kcal: number; protein_g: number; carbs_g: number; fat_g: number };
+  confidence: 'low' | 'medium' | 'high';
+  note: string;
+  error?: string;
+}
+
+export interface Recipe {
+  title: string;
+  description: string;
+  servings: number;
+  prep_time_min: number;
+  cook_time_min: number;
+  ingredients: Array<{ name: string; quantity: string; notes?: string }>;
+  steps: string[];
+  macros_per_serving: { kcal: number; protein_g: number; carbs_g: number; fat_g: number };
+  tips: string[];
+}
+export interface RecipeGenResponse {
+  success: boolean;
+  recipe: Recipe | null;
+  error?: string;
+}
+
+export interface ShoppingListResponse {
+  success: boolean;
+  estimated_cost_usd?: number;
+  categories: Array<{
+    name: string;
+    items: Array<{ name: string; quantity: string; purpose?: string }>;
+  }>;
+  tips: string[];
+  error?: string;
+}
 
 export const sessionApi = {
   getDetail: (token: string, sessionId: string) =>

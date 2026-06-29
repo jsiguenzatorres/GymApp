@@ -198,6 +198,163 @@ export class NutritionService {
     });
   }
 
+  // ─── IA VISION: Foto del plato → identificación ────────────────────────────
+  async analyzeMealPhoto(imageDataUri: string) {
+    // Parsear data URI
+    const m = /^data:(image\/(?:jpeg|png|webp));base64,(.+)$/i.exec(imageDataUri.trim());
+    if (!m) {
+      throw new NotFoundException('Imagen inválida (usa data:image/jpeg;base64,...)');
+    }
+    const mimeType = m[1].toLowerCase();
+    const base64 = m[2];
+
+    const prompt = `Eres un nutricionista experto en analizar fotos de comida.
+Mira esta foto y identifica los alimentos que ves. Para cada uno estima:
+- nombre común (en español, ej "Pechuga de pollo a la plancha")
+- porción en gramos (estimación visual)
+- kcal aproximadas
+- proteína (g), carbos (g), grasas (g)
+
+Responde EXCLUSIVAMENTE con JSON válido en este formato exacto, sin texto extra:
+{
+  "items": [
+    { "name": "...", "grams": NN, "kcal": NN, "protein_g": NN, "carbs_g": NN, "fat_g": NN }
+  ],
+  "totals": { "kcal": NN, "protein_g": NN, "carbs_g": NN, "fat_g": NN },
+  "confidence": "low" | "medium" | "high",
+  "note": "comentario breve sobre la foto (max 150 caracteres)"
+}
+
+Si no puedes identificar comida en la foto, devuelve { "items": [], "totals": { "kcal":0,"protein_g":0,"carbs_g":0,"fat_g":0 }, "confidence":"low", "note":"..." }.`;
+
+    try {
+      const raw = await this.gemini.generateWithImage(base64, mimeType, prompt);
+      // Limpiar markdown si Gemini lo agrega
+      const cleaned = raw
+        .replace(/^```json\s*/i, '')
+        .replace(/```\s*$/i, '')
+        .trim();
+      const parsed = JSON.parse(cleaned) as {
+        items: Array<{
+          name: string;
+          grams: number;
+          kcal: number;
+          protein_g: number;
+          carbs_g: number;
+          fat_g: number;
+        }>;
+        totals: { kcal: number; protein_g: number; carbs_g: number; fat_g: number };
+        confidence: 'low' | 'medium' | 'high';
+        note: string;
+      };
+      return { success: true, ...parsed };
+    } catch (err) {
+      this.logger.error(`Photo analyze failed: ${(err as Error).message}`);
+      return {
+        success: false,
+        items: [],
+        totals: { kcal: 0, protein_g: 0, carbs_g: 0, fat_g: 0 },
+        confidence: 'low' as const,
+        note: 'No se pudo analizar la foto. Intenta con mejor iluminación.',
+        error: (err as Error).message.slice(0, 200),
+      };
+    }
+  }
+
+  // ─── IA: Generador de recetas ──────────────────────────────────────────────
+  async generateRecipe(ingredients: string[], preferences?: string) {
+    if (!ingredients?.length) {
+      throw new NotFoundException('Proporciona al menos un ingrediente');
+    }
+
+    const prompt = `Eres un chef especializado en cocina LATAM saludable.
+Genera UNA receta usando principalmente estos ingredientes: ${ingredients.join(', ')}.
+${preferences ? `Preferencias del usuario: ${preferences}` : ''}
+
+Responde EXCLUSIVAMENTE con JSON válido en este formato exacto:
+{
+  "title": "Nombre de la receta",
+  "description": "1-2 frases sobre el plato",
+  "servings": NN,
+  "prep_time_min": NN,
+  "cook_time_min": NN,
+  "ingredients": [
+    { "name": "...", "quantity": "200g" | "1 unidad" | "2 cucharadas", "notes": "opcional" }
+  ],
+  "steps": ["paso 1", "paso 2", "..."],
+  "macros_per_serving": { "kcal": NN, "protein_g": NN, "carbs_g": NN, "fat_g": NN },
+  "tips": ["tip 1", "tip 2"]
+}`;
+
+    try {
+      const raw = await this.gemini.generate(prompt);
+      const cleaned = raw
+        .replace(/^```json\s*/i, '')
+        .replace(/```\s*$/i, '')
+        .trim();
+      return { success: true, recipe: JSON.parse(cleaned) };
+    } catch (err) {
+      this.logger.error(`Recipe gen failed: ${(err as Error).message}`);
+      return {
+        success: false,
+        recipe: null,
+        error: (err as Error).message.slice(0, 200),
+      };
+    }
+  }
+
+  // ─── IA: Lista de compras semanal ──────────────────────────────────────────
+  async generateShoppingList(gymId: string, memberId: string) {
+    const plan = await this.prisma.nutritionPlan.findFirst({
+      where: { gym_id: gymId, member_id: memberId, is_active: true },
+    });
+
+    const prompt = `Eres un nutricionista que arma listas de compras semanales para personas activas.
+${
+  plan
+    ? `Plan del usuario: ${plan.name}, objetivo ${plan.goal}, target ${plan.kcal_target} kcal/día (P${plan.protein_g}g C${plan.carbs_g}g G${plan.fat_g}g).`
+    : 'El usuario no tiene plan asignado. Asume objetivo balanceado de 2000 kcal/día.'
+}
+Foco: alimentos típicos de El Salvador / Centroamérica (frijoles, plátano, tortilla, pollo, etc.) + esenciales.
+
+Genera una lista de compras para 1 semana de 1 persona. Categoriza por tipo de alimento.
+Responde EXCLUSIVAMENTE con JSON válido:
+{
+  "estimated_cost_usd": NN,
+  "categories": [
+    {
+      "name": "Proteínas",
+      "items": [
+        { "name": "Pechuga de pollo", "quantity": "1 kg", "purpose": "Almuerzos M-V" }
+      ]
+    },
+    { "name": "Carbohidratos", "items": [...] },
+    { "name": "Vegetales", "items": [...] },
+    { "name": "Frutas", "items": [...] },
+    { "name": "Lácteos", "items": [...] },
+    { "name": "Otros", "items": [...] }
+  ],
+  "tips": ["consejo 1", "consejo 2"]
+}`;
+
+    try {
+      const raw = await this.gemini.generate(prompt);
+      const cleaned = raw
+        .replace(/^```json\s*/i, '')
+        .replace(/```\s*$/i, '')
+        .trim();
+      return { success: true, ...JSON.parse(cleaned) };
+    } catch (err) {
+      this.logger.error(`Shopping list failed: ${(err as Error).message}`);
+      return {
+        success: false,
+        categories: [],
+        tips: [],
+        error: (err as Error).message.slice(0, 200),
+      };
+    }
+  }
+
   async deleteDiaryEntry(gymId: string, entryId: string) {
     const e = await this.prisma.foodDiaryEntry.findFirst({ where: { id: entryId, gym_id: gymId } });
     if (!e) throw new NotFoundException('Entrada no encontrada');
