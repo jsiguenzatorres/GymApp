@@ -149,8 +149,30 @@ export interface QrCodePayload {
   expiresAt: string;
 }
 
+export interface MemberHomeStats {
+  member_id: string;
+  streak_days: number;
+  sessions_this_week: number;
+  sessions_week_goal: number;
+  points_lifetime: number;
+  points_balance: number;
+  last_session_at: string | null;
+  last_pr: {
+    value: string | number;
+    unit: string;
+    achieved_at: string;
+    exercise: { name: string };
+  } | null;
+  next_planned_workout: {
+    plan_name: string;
+    day_name: string | null;
+    day_number: number | null;
+  } | null;
+}
+
 export const memberApi = {
   getMe: (token: string) => apiClient.get<MemberProfile>('/api/v1/members/me', token),
+  getMyStats: (token: string) => apiClient.get<MemberHomeStats>('/api/v1/members/me/stats', token),
   uploadAvatar: (token: string, imageDataUri: string) =>
     apiClient.post<{ id: string; avatar_url: string }>(
       '/api/v1/members/me/avatar',

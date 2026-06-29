@@ -78,6 +78,12 @@ export class MembersController {
     return this.membersService.updateMyAvatar(user.sub, this.gymId(user), body.image);
   }
 
+  // GET /api/v1/members/me/stats — agregador para el Home: racha, semana, próximo entreno
+  @Get('members/me/stats')
+  getMyHomeStats(@CurrentUser() user: JwtPayload) {
+    return this.membersService.findMyHomeStats(user.sub, this.gymId(user));
+  }
+
   @Get('members')
   listMembers(@CurrentUser() user: JwtPayload, @Query() query: ListMembersDto) {
     return this.membersService.listMembers(this.gymId(user), query);

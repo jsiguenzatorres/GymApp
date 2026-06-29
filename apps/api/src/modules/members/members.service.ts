@@ -219,6 +219,96 @@ export class MembersService {
     return member;
   }
 
+  // Agregador para el Home: racha + sesiones de la semana + próximo entreno
+  async findMyHomeStats(userId: string, gymId: string) {
+    const member = await this.prisma.member.findFirst({
+      where: { user_id: userId, gym_id: gymId },
+      select: { id: true, points_lifetime: true, points_balance: true },
+    });
+    if (!member) throw new NotFoundException('Perfil de miembro no encontrado');
+
+    const now = new Date();
+
+    // 1) Sesiones de los últimos 60 días (para racha + semana en una sola query)
+    const sixtyDaysAgo = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
+    const recentSessions = await this.prisma.workoutSession.findMany({
+      where: {
+        member_id: member.id,
+        started_at: { gte: sixtyDaysAgo },
+      },
+      select: { started_at: true, finished_at: true },
+      orderBy: { started_at: 'desc' },
+    });
+
+    // 2) Sesiones esta semana (lunes 00:00 → ahora)
+    const startOfWeek = new Date(now);
+    const dayOfWeek = (startOfWeek.getDay() + 6) % 7; // lunes=0
+    startOfWeek.setDate(startOfWeek.getDate() - dayOfWeek);
+    startOfWeek.setHours(0, 0, 0, 0);
+    const sessionsThisWeek = recentSessions.filter((s) => s.started_at >= startOfWeek).length;
+    const sessionsWeekGoal = 5; // objetivo por defecto — futuro: configurable por miembro
+
+    // 3) Racha: días consecutivos hacia atrás con al menos 1 sesión
+    const dayKey = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const sessionDays = new Set(recentSessions.map((s) => dayKey(s.started_at)));
+    let streak = 0;
+    const cursor = new Date(now);
+    cursor.setHours(0, 0, 0, 0);
+    // Tolerancia: si hoy aún no entrenó, no rompe la racha — empezar a contar desde ayer
+    const todayHas = sessionDays.has(dayKey(cursor));
+    if (!todayHas) cursor.setDate(cursor.getDate() - 1);
+    while (sessionDays.has(dayKey(cursor))) {
+      streak++;
+      cursor.setDate(cursor.getDate() - 1);
+    }
+
+    // 4) Última sesión + último PR (para "estás progresando")
+    const lastSession = recentSessions[0]?.started_at ?? null;
+    const lastPr = await this.prisma.personalRecord.findFirst({
+      where: { member_id: member.id },
+      orderBy: { achieved_at: 'desc' },
+      select: { value: true, unit: true, achieved_at: true, exercise: { select: { name: true } } },
+    });
+
+    // 5) Próximo entreno del plan asignado (si tiene plan_id en la próxima sesión planificada)
+    // Simplificación: tomar el plan activo del miembro (MemberPlan) y devolver el primer día.
+    const memberPlan = await this.prisma.memberPlan.findFirst({
+      where: { member_id: member.id, is_active: true },
+      include: {
+        plan: {
+          select: {
+            name: true,
+            days: {
+              orderBy: { day_number: 'asc' },
+              take: 1,
+              select: { day_number: true, name: true },
+            },
+          },
+        },
+      },
+    });
+    const nextPlannedWorkout = memberPlan?.plan
+      ? {
+          plan_name: memberPlan.plan.name,
+          day_name: memberPlan.plan.days?.[0]?.name ?? null,
+          day_number: memberPlan.plan.days?.[0]?.day_number ?? null,
+        }
+      : null;
+
+    return {
+      member_id: member.id,
+      streak_days: streak,
+      sessions_this_week: sessionsThisWeek,
+      sessions_week_goal: sessionsWeekGoal,
+      points_lifetime: member.points_lifetime,
+      points_balance: member.points_balance,
+      last_session_at: lastSession,
+      last_pr: lastPr,
+      next_planned_workout: nextPlannedWorkout,
+    };
+  }
+
   async updateMyAvatar(userId: string, gymId: string, imageDataUri: string) {
     const member = await this.prisma.member.findFirst({
       where: { user_id: userId, gym_id: gymId },

@@ -93,6 +93,14 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="achievements"
+        options={{
+          title: 'Logros',
+          tabBarLabel: 'Logros',
+          tabBarIcon: ({ color }) => <TabIcon name="trophy-outline" color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="qr"
         options={{
           title: 'Acceso QR',
@@ -104,7 +112,7 @@ export default function TabsLayout() {
         name="profile"
         options={{
           title: 'Mi Perfil',
-          tabBarLabel: 'Perfil',
+          tabBarLabel: 'Yo',
           tabBarIcon: ({ color }) => <TabIcon name="person-outline" color={color} />,
         }}
       />
