@@ -99,4 +99,11 @@ export class StorageService {
     const bucket = this.config.get<string>('SUPABASE_PROGRESS_BUCKET') ?? 'progress-photos';
     return this.uploadImage(bucket, memberId, dataUri);
   }
+
+  // Sube imagen de producto del marketplace al bucket 'product-images'.
+  // Path lleva gym_id para aislamiento multi-tenant.
+  uploadProductImage(gymId: string, dataUri: string) {
+    const bucket = this.config.get<string>('SUPABASE_PRODUCTS_BUCKET') ?? 'product-images';
+    return this.uploadImage(bucket, gymId, dataUri);
+  }
 }

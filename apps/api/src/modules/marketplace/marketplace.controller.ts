@@ -19,6 +19,7 @@ import { RequiresPlan } from '../../common/decorators/requires-plan.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { MarketplaceService } from './marketplace.service';
+import { StorageService } from '../storage/storage.service';
 import {
   CreateProductDto,
   CreateCategoryDto,
@@ -30,7 +31,10 @@ import {
 @UseGuards(JwtAuthGuard, PlanGuard)
 @Controller()
 export class MarketplaceController {
-  constructor(private readonly marketplaceService: MarketplaceService) {}
+  constructor(
+    private readonly marketplaceService: MarketplaceService,
+    private readonly storageService: StorageService,
+  ) {}
 
   private gymId(user: JwtPayload): string {
     if (!user.gymId) throw new ForbiddenException('Sin contexto de gym');
@@ -111,6 +115,15 @@ export class MarketplaceController {
   @Delete('products/:id')
   deleteProduct(@CurrentUser() user: JwtPayload, @Param('id', ParseUUIDPipe) id: string) {
     return this.marketplaceService.deleteProduct(this.gymId(user), id);
+  }
+
+  // POST /products/upload-image — sube imagen a Supabase Storage y retorna URL pública.
+  // Body: { image: "data:image/png;base64,..." }
+  @Post('products/upload-image')
+  @HttpCode(HttpStatus.CREATED)
+  async uploadProductImage(@CurrentUser() user: JwtPayload, @Body('image') imageDataUri: string) {
+    const result = await this.storageService.uploadProductImage(this.gymId(user), imageDataUri);
+    return { url: result.url };
   }
 
   @Patch('products/:id/stock')

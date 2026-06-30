@@ -750,6 +750,15 @@ model Product {
   sku         String?  @db.VarChar(50)
   image_url   String?
   is_active   Boolean  @default(true)
+  // Información nutricional opcional (por serving)
+  serving_size  String?  @db.VarChar(50)
+  calories_kcal Decimal? @db.Decimal(8, 2)
+  protein_g     Decimal? @db.Decimal(8, 2)
+  carbs_g       Decimal? @db.Decimal(8, 2)
+  fat_g         Decimal? @db.Decimal(8, 2)
+  fiber_g       Decimal? @db.Decimal(8, 2)
+  sugar_g       Decimal? @db.Decimal(8, 2)
+  sodium_mg     Decimal? @db.Decimal(8, 2)
   created_at  DateTime @default(now())
   updated_at  DateTime @updatedAt
 

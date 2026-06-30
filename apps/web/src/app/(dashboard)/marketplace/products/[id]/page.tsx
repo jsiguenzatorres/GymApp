@@ -3,7 +3,8 @@
 import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Package, Trash2, Plus, Minus } from 'lucide-react';
+import { ArrowLeft, Package, Trash2, Plus, Minus, Apple } from 'lucide-react';
+import { ImageUploader } from '@/components/ui/image-uploader';
 
 interface Category {
   id: string;
@@ -20,10 +21,23 @@ interface Product {
   is_active: boolean;
   category_id: string | null;
   category: { id: string; name: string } | null;
+  serving_size: string | null;
+  calories_kcal: string | number | null;
+  protein_g: string | number | null;
+  carbs_g: string | number | null;
+  fat_g: string | number | null;
+  fiber_g: string | number | null;
+  sugar_g: string | number | null;
+  sodium_mg: string | number | null;
 }
 
 function inputCls(extra = '') {
   return `w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 ${extra}`;
+}
+
+function numOrEmpty(v: unknown): string {
+  if (v === null || v === undefined || v === '') return '';
+  return String(v);
 }
 
 export default function EditProductPage({ params }: { params: Promise<{ id: string }> }) {
@@ -34,15 +48,24 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
   const [loadingProduct, setLoadingProduct] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [stockDelta, setStockDelta] = useState('');
+  const [showNutrition, setShowNutrition] = useState(false);
   const [form, setForm] = useState({
     name: '',
     description: '',
     price: '',
     stock: 0,
     sku: '',
-    image_url: '',
+    image_url: '' as string | null,
     category_id: '',
     is_active: true,
+    serving_size: '',
+    calories_kcal: '',
+    protein_g: '',
+    carbs_g: '',
+    fat_g: '',
+    fiber_g: '',
+    sugar_g: '',
+    sodium_mg: '',
   });
 
   useEffect(() => {
@@ -57,17 +80,29 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
           price: String(product.price),
           stock: product.stock,
           sku: product.sku ?? '',
-          image_url: product.image_url ?? '',
+          image_url: product.image_url,
           category_id: product.category_id ?? '',
           is_active: product.is_active,
+          serving_size: product.serving_size ?? '',
+          calories_kcal: numOrEmpty(product.calories_kcal),
+          protein_g: numOrEmpty(product.protein_g),
+          carbs_g: numOrEmpty(product.carbs_g),
+          fat_g: numOrEmpty(product.fat_g),
+          fiber_g: numOrEmpty(product.fiber_g),
+          sugar_g: numOrEmpty(product.sugar_g),
+          sodium_mg: numOrEmpty(product.sodium_mg),
         });
+        // Expandir nutrición si ya tiene datos
+        if (product.serving_size || product.calories_kcal !== null || product.protein_g !== null) {
+          setShowNutrition(true);
+        }
         setCategories(Array.isArray(cats) ? cats : []);
       })
       .catch(() => setError('Error cargando producto'))
       .finally(() => setLoadingProduct(false));
   }, [id]);
 
-  function set(field: string, value: string | boolean | number) {
+  function set(field: string, value: string | boolean | number | null) {
     setForm((p) => ({ ...p, [field]: value }));
     setError(null);
   }
@@ -85,10 +120,26 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
       price: parseFloat(form.price),
       is_active: form.is_active,
     };
-    if (form.description) body.description = form.description;
-    if (form.sku) body.sku = form.sku;
-    if (form.image_url) body.image_url = form.image_url;
-    if (form.category_id) body.category_id = form.category_id;
+    body.description = form.description || null;
+    body.sku = form.sku || null;
+    body.image_url = form.image_url || null;
+    body.category_id = form.category_id || null;
+
+    // Nutrición — siempre enviar (incluso null para limpiar)
+    body.serving_size = form.serving_size || null;
+    const nutriNums = [
+      'calories_kcal',
+      'protein_g',
+      'carbs_g',
+      'fat_g',
+      'fiber_g',
+      'sugar_g',
+      'sodium_mg',
+    ] as const;
+    for (const k of nutriNums) {
+      const v = form[k];
+      body[k] = v === '' ? null : parseFloat(v);
+    }
 
     try {
       const res = await fetch(`/api/proxy/products/${id}`, {
@@ -147,7 +198,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
     return <div className="animate-pulse text-sm text-gray-400 p-8">Cargando producto...</div>;
 
   return (
-    <div className="max-w-xl space-y-6">
+    <div className="max-w-2xl space-y-6">
       <div>
         <Link
           href="/marketplace"
@@ -267,14 +318,132 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
           </select>
         </div>
 
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-gray-600">URL de imagen</label>
-          <input
-            value={form.image_url}
-            onChange={(e) => set('image_url', e.target.value)}
-            className={inputCls()}
-          />
+        {/* Image uploader drag&drop (reemplaza el input URL) */}
+        <ImageUploader
+          value={form.image_url}
+          onChange={(url) => set('image_url', url)}
+          uploadUrl="/api/proxy/products/upload-image"
+          label="Imagen del producto"
+          disabled={loading}
+        />
+
+        {/* Sección colapsable de nutrición */}
+        <div className="pt-2">
+          <button
+            type="button"
+            onClick={() => setShowNutrition(!showNutrition)}
+            className="flex items-center gap-2 text-sm font-semibold text-gray-700 hover:text-gray-900"
+          >
+            <Apple className="h-4 w-4 text-emerald-600" />
+            Información nutricional
+            <span className="text-xs font-normal text-gray-500">(opcional)</span>
+            <span className="text-xs text-violet-600 ml-1">
+              {showNutrition ? 'Ocultar' : 'Mostrar'}
+            </span>
+          </button>
         </div>
+
+        {showNutrition && (
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-4 space-y-3">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-gray-600">
+                Tamaño de porción <span className="text-gray-400">(ej: 100g, 1 unidad, 30g)</span>
+              </label>
+              <input
+                value={form.serving_size}
+                onChange={(e) => set('serving_size', e.target.value)}
+                placeholder="100g"
+                className={inputCls('bg-white')}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-gray-600">Calorías (kcal)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  value={form.calories_kcal}
+                  onChange={(e) => set('calories_kcal', e.target.value)}
+                  className={inputCls('bg-white')}
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-gray-600">Proteína (g)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  value={form.protein_g}
+                  onChange={(e) => set('protein_g', e.target.value)}
+                  className={inputCls('bg-white')}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-gray-600">Carbohidratos (g)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  value={form.carbs_g}
+                  onChange={(e) => set('carbs_g', e.target.value)}
+                  className={inputCls('bg-white')}
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-gray-600">Grasas (g)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  value={form.fat_g}
+                  onChange={(e) => set('fat_g', e.target.value)}
+                  className={inputCls('bg-white')}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-gray-600">Fibra (g)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  value={form.fiber_g}
+                  onChange={(e) => set('fiber_g', e.target.value)}
+                  className={inputCls('bg-white')}
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-gray-600">Azúcar (g)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  value={form.sugar_g}
+                  onChange={(e) => set('sugar_g', e.target.value)}
+                  className={inputCls('bg-white')}
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-gray-600">Sodio (mg)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  value={form.sodium_mg}
+                  onChange={(e) => set('sodium_mg', e.target.value)}
+                  className={inputCls('bg-white')}
+                />
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="flex items-center gap-3 pt-1">
           <div

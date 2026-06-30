@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Package } from 'lucide-react';
+import { ArrowLeft, Package, Apple } from 'lucide-react';
+import { ImageUploader } from '@/components/ui/image-uploader';
 
 interface Category {
   id: string;
@@ -19,15 +20,25 @@ export default function NewProductPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showNutrition, setShowNutrition] = useState(false);
   const [form, setForm] = useState({
     name: '',
     description: '',
     price: '',
     stock: '0',
     sku: '',
-    image_url: '',
+    image_url: '' as string | null | '',
     category_id: '',
     is_active: true,
+    // Nutrición (opcionales)
+    serving_size: '',
+    calories_kcal: '',
+    protein_g: '',
+    carbs_g: '',
+    fat_g: '',
+    fiber_g: '',
+    sugar_g: '',
+    sodium_mg: '',
   });
 
   useEffect(() => {
@@ -37,7 +48,7 @@ export default function NewProductPage() {
       .catch(() => {});
   }, []);
 
-  function set(field: string, value: string | boolean) {
+  function set(field: string, value: string | boolean | null) {
     setForm((p) => ({ ...p, [field]: value }));
     setError(null);
   }
@@ -67,6 +78,24 @@ export default function NewProductPage() {
     if (form.image_url) body.image_url = form.image_url;
     if (form.category_id) body.category_id = form.category_id;
 
+    // Nutrición — solo si tiene valor
+    const nutriFields = [
+      'serving_size',
+      'calories_kcal',
+      'protein_g',
+      'carbs_g',
+      'fat_g',
+      'fiber_g',
+      'sugar_g',
+      'sodium_mg',
+    ] as const;
+    for (const k of nutriFields) {
+      const v = form[k];
+      if (v !== '' && v !== null && v !== undefined) {
+        body[k] = k === 'serving_size' ? v : parseFloat(v);
+      }
+    }
+
     try {
       const res = await fetch('/api/proxy/products', {
         method: 'POST',
@@ -93,7 +122,7 @@ export default function NewProductPage() {
   }
 
   return (
-    <div className="max-w-xl space-y-6">
+    <div className="max-w-2xl space-y-6">
       <div>
         <Link
           href="/marketplace"
@@ -187,15 +216,139 @@ export default function NewProductPage() {
           </div>
         </div>
 
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-gray-600">URL de imagen</label>
-          <input
-            value={form.image_url}
-            onChange={(e) => set('image_url', e.target.value)}
-            placeholder="https://..."
-            className={inputCls()}
-          />
+        {/* Image uploader drag&drop */}
+        <ImageUploader
+          value={form.image_url || null}
+          onChange={(url) => set('image_url', url)}
+          uploadUrl="/api/proxy/products/upload-image"
+          label="Imagen del producto"
+          disabled={loading}
+        />
+
+        {/* Nutrición — sección colapsable */}
+        <div className="pt-2">
+          <button
+            type="button"
+            onClick={() => setShowNutrition(!showNutrition)}
+            className="flex items-center gap-2 text-sm font-semibold text-gray-700 hover:text-gray-900"
+          >
+            <Apple className="h-4 w-4 text-emerald-600" />
+            Información nutricional
+            <span className="text-xs font-normal text-gray-500">(opcional)</span>
+            <span className="text-xs text-violet-600 ml-1">
+              {showNutrition ? 'Ocultar' : 'Agregar'}
+            </span>
+          </button>
         </div>
+
+        {showNutrition && (
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-4 space-y-3">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-gray-600">
+                Tamaño de porción <span className="text-gray-400">(ej: 100g, 1 unidad, 30g)</span>
+              </label>
+              <input
+                value={form.serving_size}
+                onChange={(e) => set('serving_size', e.target.value)}
+                placeholder="100g"
+                className={inputCls('bg-white')}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-gray-600">Calorías (kcal)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  value={form.calories_kcal}
+                  onChange={(e) => set('calories_kcal', e.target.value)}
+                  className={inputCls('bg-white')}
+                  placeholder="120"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-gray-600">Proteína (g)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  value={form.protein_g}
+                  onChange={(e) => set('protein_g', e.target.value)}
+                  className={inputCls('bg-white')}
+                  placeholder="25"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-gray-600">Carbohidratos (g)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  value={form.carbs_g}
+                  onChange={(e) => set('carbs_g', e.target.value)}
+                  className={inputCls('bg-white')}
+                  placeholder="5"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-gray-600">Grasas (g)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  value={form.fat_g}
+                  onChange={(e) => set('fat_g', e.target.value)}
+                  className={inputCls('bg-white')}
+                  placeholder="2"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-gray-600">Fibra (g)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  value={form.fiber_g}
+                  onChange={(e) => set('fiber_g', e.target.value)}
+                  className={inputCls('bg-white')}
+                  placeholder="0"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-gray-600">Azúcar (g)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  value={form.sugar_g}
+                  onChange={(e) => set('sugar_g', e.target.value)}
+                  className={inputCls('bg-white')}
+                  placeholder="2"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-gray-600">Sodio (mg)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  value={form.sodium_mg}
+                  onChange={(e) => set('sodium_mg', e.target.value)}
+                  className={inputCls('bg-white')}
+                  placeholder="50"
+                />
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="flex items-center gap-3 pt-1">
           <div

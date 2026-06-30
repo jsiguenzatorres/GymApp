@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ArrowLeft, Activity, Dumbbell, Tag } from 'lucide-react';
+import { ArrowLeft, Activity, Dumbbell, Tag, Pencil } from 'lucide-react';
 import { serverFetch } from '@/lib/server-api';
 import {
   ExerciseImageCarousel,
@@ -129,6 +129,13 @@ export default async function ExerciseDetailPage({ params }: { params: Promise<{
             )}
           </div>
         </div>
+        <Link
+          href={`/workouts/exercises/${exercise.id}/edit`}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors shrink-0"
+        >
+          <Pencil className="h-3.5 w-3.5" />
+          Editar
+        </Link>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

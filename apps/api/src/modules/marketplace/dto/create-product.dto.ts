@@ -9,6 +9,16 @@ export class CreateProductDto {
   @IsOptional() @IsString() image_url?: string;
   @IsOptional() @IsUUID() category_id?: string;
   @IsOptional() @IsBoolean() is_active?: boolean;
+
+  // Información nutricional (opcional, todos pueden ser null)
+  @IsOptional() @IsString() @MaxLength(50) serving_size?: string;
+  @IsOptional() @IsNumber() @Min(0) calories_kcal?: number;
+  @IsOptional() @IsNumber() @Min(0) protein_g?: number;
+  @IsOptional() @IsNumber() @Min(0) carbs_g?: number;
+  @IsOptional() @IsNumber() @Min(0) fat_g?: number;
+  @IsOptional() @IsNumber() @Min(0) fiber_g?: number;
+  @IsOptional() @IsNumber() @Min(0) sugar_g?: number;
+  @IsOptional() @IsNumber() @Min(0) sodium_mg?: number;
 }
 
 export class CreateCategoryDto {
