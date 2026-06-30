@@ -2,7 +2,6 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { serverFetch } from '@/lib/server-api';
 import { MembersTable } from '@/components/members/members-table';
-import { MemberStatusBadge } from '@/components/members/member-status-badge';
 import { UserPlus } from 'lucide-react';
 import type { MemberStatus } from '@gymapp/shared-types';
 
@@ -212,6 +211,3 @@ function Pagination({
     </div>
   );
 }
-
-// Re-exportar para usarlo en este archivo
-export { MemberStatusBadge };
