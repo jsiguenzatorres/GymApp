@@ -1,9 +1,9 @@
 import type { Metadata } from 'next';
-import { Suspense } from 'react';
 import { LoginForm } from '@/components/auth/login-form';
 import { ThemeToggle } from '@/components/layout/theme-toggle';
 
 export const metadata: Metadata = { title: 'Iniciar Sesión' };
+export const dynamic = 'force-dynamic';
 
 export default function LoginPage() {
   return (
@@ -53,9 +53,7 @@ export default function LoginPage() {
       </div>
 
       {/* Form */}
-      <Suspense>
-        <LoginForm />
-      </Suspense>
+      <LoginForm />
     </div>
   );
 }
