@@ -1,8 +1,7 @@
 import type { Metadata } from 'next';
 import { GeistSans } from 'geist/font/sans';
 import { GeistMono } from 'geist/font/mono';
-import { ThemeProvider } from 'next-themes';
-import { Toaster } from 'sonner';
+import { Providers } from '@/components/providers';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -19,23 +18,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       suppressHydrationWarning
     >
       <body className="font-sans">
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="light"
-          enableSystem={false}
-          disableTransitionOnChange
-        >
-          {children}
-          <Toaster
-            richColors
-            position="top-right"
-            toastOptions={{
-              classNames: {
-                toast: 'font-sans',
-              },
-            }}
-          />
-        </ThemeProvider>
+        <Providers>{children}</Providers>
       </body>
     </html>
   );
