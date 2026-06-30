@@ -87,12 +87,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async jwt({ token, user }) {
       // Primera vez — login
       if (user) {
-        token.id = user.id;
-        token.role = (user as { role: string }).role;
-        token.gymId = (user as { gymId?: string }).gymId;
-        token.accessToken = (user as { accessToken: string }).accessToken;
-        token.refreshToken = (user as { refreshToken: string }).refreshToken;
-        token.accessTokenExpiry = (user as { accessTokenExpiry: number }).accessTokenExpiry;
+        const u = user as unknown as {
+          id: string;
+          role: string;
+          gymId?: string;
+          accessToken: string;
+          refreshToken: string;
+          accessTokenExpiry: number;
+        };
+        token.id = u.id;
+        token.role = u.role;
+        token.gymId = u.gymId;
+        token.accessToken = u.accessToken;
+        token.refreshToken = u.refreshToken;
+        token.accessTokenExpiry = u.accessTokenExpiry;
         return token;
       }
 
