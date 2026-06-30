@@ -4,7 +4,16 @@
     "build": {
       "dependsOn": ["^build"],
       "inputs": ["$TURBO_DEFAULT$", ".env*"],
-      "outputs": ["dist/**", ".next/**", "!.next/cache/**", "expo-cache/**"]
+      "outputs": ["dist/**", ".next/**", "!.next/cache/**", "expo-cache/**"],
+      "env": [
+        "API_URL",
+        "NEXT_PUBLIC_API_URL",
+        "AUTH_SECRET",
+        "NEXTAUTH_URL",
+        "DATABASE_URL",
+        "JWT_SECRET",
+        "NODE_ENV"
+      ]
     },
     "dev": {
       "cache": false,
