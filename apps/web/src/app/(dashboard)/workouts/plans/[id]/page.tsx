@@ -10,6 +10,7 @@ import {
   ChevronRight,
   CheckCircle2,
 } from 'lucide-react';
+import { PlanActions } from '@/components/workout/plan-actions';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -108,19 +109,14 @@ export default async function PlanDetailPage({ params }: { params: Promise<{ id:
           Volver a planes
         </Link>
 
-        <div className="flex items-start justify-between">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">{plan.name}</h1>
             {plan.description && (
               <p className="mt-1 text-gray-500 text-sm max-w-xl">{plan.description}</p>
             )}
           </div>
-          <Link
-            href={`/workouts/plans/new?clone=${plan.id}`}
-            className="hidden sm:inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-          >
-            Duplicar plan
-          </Link>
+          <PlanActions planId={plan.id} />
         </div>
       </div>
 

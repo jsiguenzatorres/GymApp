@@ -69,23 +69,76 @@ const inputClass = cn(
   'outline-none focus:border-primary focus:ring-2 focus:ring-ring/30 disabled:opacity-50',
 );
 
-export function PlanBuilderClient({ exercises }: { exercises: Exercise[] }) {
+interface InitialPlan {
+  id: string;
+  name: string;
+  description: string | null;
+  goal: string | null;
+  difficulty: string;
+  days_per_week: number;
+  is_template: boolean;
+  days: Array<{
+    day_number: number;
+    name: string;
+    blocks: Array<{
+      exercise: { id: string; name: string };
+      block_type: string;
+      order: number;
+      sets: number;
+      reps_min: number | null;
+      reps_max: number | null;
+      rest_seconds: number | null;
+      notes: string | null;
+    }>;
+  }>;
+}
+
+export function PlanBuilderClient({
+  exercises,
+  initialPlan,
+}: {
+  exercises: Exercise[];
+  initialPlan?: InitialPlan;
+}) {
   const router = useRouter();
+  const isEdit = !!initialPlan;
 
   const [planInfo, setPlanInfo] = useState({
-    name: '',
-    description: '',
-    goal: '',
-    difficulty: 'INTERMEDIATE',
-    daysPerWeek: 3,
-    isTemplate: false,
+    name: initialPlan?.name ?? '',
+    description: initialPlan?.description ?? '',
+    goal: initialPlan?.goal ?? '',
+    difficulty: initialPlan?.difficulty ?? 'INTERMEDIATE',
+    daysPerWeek: initialPlan?.days_per_week ?? 3,
+    isTemplate: initialPlan?.is_template ?? false,
   });
 
-  const [days, setDays] = useState<DayDraft[]>([
-    { dayNumber: 1, name: 'Día 1', blocks: [], expanded: true },
-    { dayNumber: 2, name: 'Día 2', blocks: [], expanded: false },
-    { dayNumber: 3, name: 'Día 3', blocks: [], expanded: false },
-  ]);
+  const [days, setDays] = useState<DayDraft[]>(() => {
+    if (initialPlan && initialPlan.days.length > 0) {
+      return initialPlan.days.map((d, i) => ({
+        dayNumber: d.day_number,
+        name: d.name,
+        expanded: i === 0,
+        blocks: d.blocks
+          .sort((a, b) => a.order - b.order)
+          .map((b) => ({
+            exerciseId: b.exercise.id,
+            exerciseName: b.exercise.name,
+            blockType: b.block_type,
+            order: b.order,
+            sets: b.sets,
+            repsMin: (b.reps_min ?? '') as number | '',
+            repsMax: (b.reps_max ?? '') as number | '',
+            restSeconds: (b.rest_seconds ?? '') as number | '',
+            notes: b.notes ?? '',
+          })),
+      }));
+    }
+    return [
+      { dayNumber: 1, name: 'Día 1', blocks: [], expanded: true },
+      { dayNumber: 2, name: 'Día 2', blocks: [], expanded: false },
+      { dayNumber: 3, name: 'Día 3', blocks: [], expanded: false },
+    ];
+  });
 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -205,8 +258,11 @@ export function PlanBuilderClient({ exercises }: { exercises: Exercise[] }) {
     };
 
     try {
-      const res = await fetch('/api/proxy/workout-plans', {
-        method: 'POST',
+      const url = isEdit
+        ? `/api/proxy/workout-plans/${initialPlan!.id}`
+        : '/api/proxy/workout-plans';
+      const res = await fetch(url, {
+        method: isEdit ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
@@ -216,13 +272,16 @@ export function PlanBuilderClient({ exercises }: { exercises: Exercise[] }) {
         setError(
           Array.isArray(body.message)
             ? body.message.join(', ')
-            : (body.message ?? 'Error al crear el plan'),
+            : (body.message ?? `Error al ${isEdit ? 'actualizar' : 'crear'} el plan`),
         );
         return;
       }
 
-      setSuccess('Plan creado exitosamente');
-      setTimeout(() => router.push('/workouts/plans'), 1500);
+      setSuccess(isEdit ? 'Plan actualizado exitosamente' : 'Plan creado exitosamente');
+      setTimeout(
+        () => router.push(isEdit ? `/workouts/plans/${initialPlan!.id}` : '/workouts/plans'),
+        1500,
+      );
     } finally {
       setIsLoading(false);
     }
@@ -495,7 +554,13 @@ export function PlanBuilderClient({ exercises }: { exercises: Exercise[] }) {
           className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
         >
           {isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
-          {isLoading ? 'Guardando plan...' : 'Guardar plan'}
+          {isLoading
+            ? isEdit
+              ? 'Actualizando plan...'
+              : 'Guardando plan...'
+            : isEdit
+              ? 'Actualizar plan'
+              : 'Guardar plan'}
         </button>
       </div>
     </form>

@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Body,
   Param,
   Query,
@@ -116,6 +117,21 @@ export class WorkoutController {
   @Get('workout-plans/:id')
   getPlan(@CurrentUser() user: JwtPayload, @Param('id', ParseUUIDPipe) id: string) {
     return this.workoutService.getPlan(this.gymId(user), id);
+  }
+
+  @Patch('workout-plans/:id')
+  updatePlan(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreatePlanDto,
+  ) {
+    return this.workoutService.updatePlan(this.gymId(user), id, dto);
+  }
+
+  @Delete('workout-plans/:id')
+  @HttpCode(HttpStatus.OK)
+  deletePlan(@CurrentUser() user: JwtPayload, @Param('id', ParseUUIDPipe) id: string) {
+    return this.workoutService.deletePlan(this.gymId(user), id);
   }
 
   @Post('members/:memberId/plans')

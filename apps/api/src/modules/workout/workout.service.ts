@@ -311,6 +311,77 @@ export class WorkoutService {
     return this.getPlan(gymId, plan.id);
   }
 
+  async updatePlan(gymId: string, id: string, dto: CreatePlanDto) {
+    const existing = await this.prisma.workoutPlan.findFirst({
+      where: { id, gym_id: gymId },
+      select: { id: true },
+    });
+    if (!existing) throw new NotFoundException('Plan no encontrado');
+
+    await this.prisma.$transaction(async (tx) => {
+      // Update plan info
+      await tx.workoutPlan.update({
+        where: { id },
+        data: {
+          name: dto.name,
+          description: dto.description,
+          goal: dto.goal,
+          difficulty: dto.difficulty ?? 'INTERMEDIATE',
+          days_per_week: dto.daysPerWeek,
+          is_template: dto.isTemplate ?? false,
+        },
+      });
+
+      // Delete + recreate days/blocks (más simple que diff & sync)
+      await tx.workoutPlanDay.deleteMany({ where: { plan_id: id } });
+
+      for (const day of dto.days) {
+        const createdDay = await tx.workoutPlanDay.create({
+          data: {
+            plan_id: id,
+            day_number: day.dayNumber,
+            name: day.name,
+          },
+        });
+
+        if (day.blocks.length > 0) {
+          await tx.workoutBlock.createMany({
+            data: day.blocks.map((b) => ({
+              day_id: createdDay.id,
+              exercise_id: b.exerciseId,
+              block_type: b.blockType ?? 'STANDARD',
+              order: b.order,
+              sets: b.sets,
+              reps_min: b.repsMin,
+              reps_max: b.repsMax,
+              rpe: b.rpe,
+              rest_seconds: b.restSeconds,
+              notes: b.notes,
+            })),
+          });
+        }
+      }
+    });
+
+    return this.getPlan(gymId, id);
+  }
+
+  async deletePlan(gymId: string, id: string) {
+    const existing = await this.prisma.workoutPlan.findFirst({
+      where: { id, gym_id: gymId },
+      select: { id: true },
+    });
+    if (!existing) throw new NotFoundException('Plan no encontrado');
+
+    // Soft delete: marcar inactivo (preserva historial de sesiones)
+    await this.prisma.workoutPlan.update({
+      where: { id },
+      data: { is_active: false },
+    });
+
+    return { ok: true };
+  }
+
   async listPlans(gymId: string) {
     return this.prisma.workoutPlan.findMany({
       where: { gym_id: gymId, is_active: true },
