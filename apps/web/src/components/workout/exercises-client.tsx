@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Plus, Dumbbell, AlertCircle, Loader2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -326,7 +327,11 @@ export function ExercisesClient({
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {exercises.map((ex) => (
-            <div key={ex.id} className="rounded-lg border bg-card p-4 space-y-2.5">
+            <Link
+              key={ex.id}
+              href={`/workouts/exercises/${ex.id}`}
+              className="rounded-lg border bg-card p-4 space-y-2.5 block hover:border-primary/40 hover:shadow-sm transition-all"
+            >
               <div className="flex items-start justify-between gap-2">
                 <p className="font-medium text-sm leading-tight">{ex.name}</p>
                 <div className="flex items-center gap-1.5 shrink-0">
@@ -375,7 +380,7 @@ export function ExercisesClient({
                   ))}
                 </div>
               )}
-            </div>
+            </Link>
           ))}
         </div>
       )}
