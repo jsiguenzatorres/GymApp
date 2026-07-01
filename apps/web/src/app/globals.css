@@ -106,6 +106,54 @@
 @layer base {
   * { @apply border-border; }
   body { @apply bg-background text-foreground antialiased; }
+
+  /* Dark mode: forzar contraste correcto en inputs/textareas/selects.
+     Muchos formularios usan clases hardcoded como bg-white text-gray-900;
+     en dark mode el fondo del input quedaba blanco y el texto blanco (invisible).
+     Estas reglas usan las CSS variables del theme. */
+  .dark input:not([type='checkbox']):not([type='radio']):not([type='file']):not([type='range']):not([type='color']),
+  .dark textarea,
+  .dark select {
+    background-color: hsl(var(--card));
+    color: hsl(var(--card-foreground));
+    border-color: hsl(var(--border));
+  }
+
+  .dark input::placeholder,
+  .dark textarea::placeholder {
+    color: hsl(var(--muted-foreground));
+    opacity: 1;
+  }
+
+  /* Opciones de select también heredan en dark */
+  .dark select option {
+    background-color: hsl(var(--card));
+    color: hsl(var(--card-foreground));
+  }
+
+  /* Cards/containers que usan bg-white hardcoded: forzar dark equivalent */
+  .dark .bg-white {
+    background-color: hsl(var(--card)) !important;
+  }
+  .dark .bg-gray-50 {
+    background-color: hsl(var(--muted)) !important;
+  }
+  .dark .text-gray-900 {
+    color: hsl(var(--foreground)) !important;
+  }
+  .dark .text-gray-700,
+  .dark .text-gray-600 {
+    color: hsl(var(--muted-foreground)) !important;
+  }
+  .dark .text-gray-500,
+  .dark .text-gray-400 {
+    color: hsl(var(--muted-foreground)) !important;
+    opacity: 0.85;
+  }
+  .dark .border-gray-200,
+  .dark .border-gray-100 {
+    border-color: hsl(var(--border)) !important;
+  }
 }
 
 /* ── Animaciones GymApp ──────────────────────────────────────────────── */

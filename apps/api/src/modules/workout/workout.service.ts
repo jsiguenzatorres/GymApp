@@ -710,39 +710,52 @@ export class WorkoutService {
 
   // ─── ZEUS ─────────────────────────────────────────────────────────────────────
 
-  async zeusChat(gymId: string, memberId: string, message: string) {
+  async zeusChat(gymId: string, memberId: string | null, message: string) {
+    // Modo admin/staff sin miembro: solo carga ejercicios + RAG, sin contexto personal
+    const isAdminMode = !memberId;
+
     const [member, activeSession, recentPRs, exercises, ragContext, history] = await Promise.all([
-      this.prisma.member.findFirst({
-        where: { id: memberId, gym_id: gymId },
-        select: { first_name: true, last_name: true },
-      }),
-      this.prisma.workoutSession.findFirst({
-        where: { member_id: memberId, gym_id: gymId, finished_at: null },
-        include: {
-          plan: { select: { name: true, goal: true } },
-          sets: {
-            orderBy: { created_at: 'desc' },
-            take: 10,
-            include: { exercise: { select: { name: true, muscle_groups: true } } },
-          },
-        },
-      }),
-      this.prisma.personalRecord.findMany({
-        where: { member_id: memberId, gym_id: gymId },
-        orderBy: { achieved_at: 'desc' },
-        take: 5,
-        include: { exercise: { select: { name: true } } },
-      }),
+      isAdminMode
+        ? Promise.resolve(null)
+        : this.prisma.member.findFirst({
+            where: { id: memberId, gym_id: gymId },
+            select: { first_name: true, last_name: true },
+          }),
+      isAdminMode
+        ? Promise.resolve(null)
+        : this.prisma.workoutSession.findFirst({
+            where: { member_id: memberId, gym_id: gymId, finished_at: null },
+            include: {
+              plan: { select: { name: true, goal: true } },
+              sets: {
+                orderBy: { created_at: 'desc' },
+                take: 10,
+                include: { exercise: { select: { name: true, muscle_groups: true } } },
+              },
+            },
+          }),
+      isAdminMode
+        ? Promise.resolve([])
+        : this.prisma.personalRecord.findMany({
+            where: { member_id: memberId, gym_id: gymId },
+            orderBy: { achieved_at: 'desc' },
+            take: 5,
+            include: { exercise: { select: { name: true } } },
+          }),
       this.prisma.exercise.findMany({
         where: { gym_id: gymId },
         select: { name: true, muscle_groups: true, equipment: true },
         take: 30,
       }),
       this.rag.buildContext(gymId, message),
-      this.conversation.getHistory(gymId, memberId, 'ZEUS'),
+      isAdminMode ? Promise.resolve([]) : this.conversation.getHistory(gymId, memberId, 'ZEUS'),
     ]);
 
-    const memberName = member ? `${member.first_name} ${member.last_name}` : 'el miembro';
+    const memberName = member ? `${member.first_name} ${member.last_name}` : null;
+
+    const memberContext = isAdminMode
+      ? 'MODO ADMIN: Asistente general sin contexto de miembro específico. Responde como coach experto en fitness, sin asumir datos personales.'
+      : `Estás asistiendo a ${memberName ?? 'el miembro'} durante su entrenamiento.`;
 
     const sessionContext = activeSession
       ? `SESIÓN ACTIVA: Plan "${activeSession.plan?.name ?? 'sin plan'}" (objetivo: ${activeSession.plan?.goal ?? 'N/A'}).
@@ -750,18 +763,22 @@ export class WorkoutService {
           .slice(0, 5)
           .map((s) => `${s.exercise.name} ${s.weight_kg ?? 0}kg × ${s.reps ?? 0} reps`)
           .join(', ')}`
-      : 'Sin sesión activa ahora mismo.';
+      : isAdminMode
+        ? ''
+        : 'Sin sesión activa ahora mismo.';
 
     const prContext = recentPRs.length
       ? `PRs recientes: ${recentPRs.map((pr) => `${pr.exercise.name} ${pr.value}${pr.unit}`).join(', ')}`
-      : 'Sin PRs registrados aún.';
+      : isAdminMode
+        ? ''
+        : 'Sin PRs registrados aún.';
 
     const exerciseContext = exercises.length
       ? `Ejercicios disponibles en el gym: ${exercises.map((e) => e.name).join(', ')}`
       : '';
 
     const systemPrompt = `Eres ZEUS (Zone Expert Universal Support), el coach de workout en tiempo real de GymApp.
-Estás asistiendo a ${memberName} durante su entrenamiento.
+${memberContext}
 
 ${sessionContext}
 ${prContext}
@@ -772,7 +789,7 @@ INSTRUCCIONES:
 - Eres un coach de élite: directo, técnico y motivador
 - Si preguntan por un ejercicio, da instrucciones técnicas claras (postura, respiración, tempo)
 - Si preguntan por sustituciones, sugiere 2 alternativas con el mismo músculo objetivo
-- Si preguntan sobre peso o reps, basa tu respuesta en los PRs del miembro
+- Si preguntan sobre peso o reps, basa tu respuesta en los PRs del miembro (si tienes el contexto)
 - Si no hay sesión activa, ayuda a planificar el entrenamiento del día
 - Máximo 2 párrafos. Usa términos de fitness en español cuando sea posible
 - Añade una frase motivadora corta al final cuando sea apropiado`;
@@ -780,12 +797,16 @@ INSTRUCCIONES:
     try {
       const geminiHistory = this.conversation.toGeminiHistory(history);
       const response = await this.gemini.chat(systemPrompt, message, geminiHistory);
-      void this.conversation.addMessages(gymId, memberId, 'ZEUS', message, response);
+      // Solo persistir historial si hay miembro real (FK constraint)
+      if (memberId && member) {
+        void this.conversation.addMessages(gymId, memberId, 'ZEUS', message, response);
+      }
       return { response, isStub: false };
     } catch (err) {
       this.logger.error(`ZEUS Gemini error: ${(err as Error).message}`);
       return {
-        response: 'ZEUS no disponible en este momento. Consulta con tu trainer directamente.',
+        response:
+          'ZEUS no disponible en este momento. Verifica que GEMINI_API_KEY esté configurada en el backend.',
         isStub: false,
         error: true,
       };

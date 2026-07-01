@@ -102,14 +102,19 @@ export default function ZeusPage() {
         const reply = data.response ?? data.reply ?? '(Sin respuesta)';
         setMessages((prev) => [...prev, { role: 'zeus', content: reply, ts: Date.now() }]);
       } else {
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: 'zeus',
-            content: 'Error al conectar con ZEUS. Intenta de nuevo.',
-            ts: Date.now(),
-          },
-        ]);
+        const errBody = (await res.json().catch(() => ({}))) as { message?: string | string[] };
+        const detail = Array.isArray(errBody.message)
+          ? errBody.message.join(', ')
+          : errBody.message;
+        const errText =
+          res.status === 403
+            ? 'ZEUS requiere plan PRO o superior. Verifica el plan de tu gym.'
+            : res.status === 401
+              ? 'Sesión expirada. Recarga la página e ingresa de nuevo.'
+              : detail
+                ? `⚠️ Error del servidor: ${detail}`
+                : `Error ${res.status} al conectar con ZEUS. Verifica que GEMINI_API_KEY esté configurada.`;
+        setMessages((prev) => [...prev, { role: 'zeus', content: errText, ts: Date.now() }]);
       }
     } catch {
       setMessages((prev) => [

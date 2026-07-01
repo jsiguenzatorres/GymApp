@@ -128,7 +128,9 @@ export class StaffService {
     const fullName = `${dto.firstName} ${dto.lastName}`;
     this.email.sendWelcomeEmail(dto.email, fullName, tempPassword, gymName).catch(() => {});
 
-    return user;
+    // Retorna la tempPassword para que el admin pueda compartirla manualmente
+    // si el email no se envía (e.g. SMTP no configurado).
+    return { ...user, tempPassword };
   }
 
   async update(gymId: string, staffId: string, dto: UpdateStaffDto) {

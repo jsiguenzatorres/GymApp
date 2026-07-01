@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, User, CreditCard, Check } from 'lucide-react';
 
@@ -64,8 +63,6 @@ function SectionHeader({
 }
 
 export default function NewMemberPage() {
-  const router = useRouter();
-
   // ── Personal data ──────────────────────────────────────────────────────────
   const [form, setForm] = useState({
     firstName: '',
@@ -87,6 +84,11 @@ export default function NewMemberPage() {
   // ── UI state ──────────────────────────────────────────────────────────────
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<{
+    memberId: string;
+    tempPassword?: string;
+    membershipWarn: boolean;
+  } | null>(null);
 
   useEffect(() => {
     fetch('/api/proxy/membership-types')
@@ -135,17 +137,24 @@ export default function NewMemberPage() {
 
       if (!memberRes.ok) {
         const d = (await memberRes.json().catch(() => ({}))) as { message?: string | string[] };
-        const msg = Array.isArray(d.message)
+        const rawMsg = Array.isArray(d.message)
           ? d.message.join(', ')
           : (d.message ?? 'Error al crear miembro');
+        const msg =
+          memberRes.status === 401
+            ? 'Tu sesión expiró. Recarga la página y vuelve a iniciar sesión.'
+            : memberRes.status === 403
+              ? `Sin permisos: ${rawMsg}`
+              : rawMsg;
         setError(msg);
         setLoading(false);
         return;
       }
 
-      const newMember = (await memberRes.json()) as { id: string };
+      const newMember = (await memberRes.json()) as { id: string; tempPassword?: string };
 
       // 2. Assign membership if selected
+      let membershipWarn = false;
       if (assignMembership && selectedTypeId) {
         const memRes = await fetch(`/api/proxy/members/${newMember.id}/memberships`, {
           method: 'POST',
@@ -154,13 +163,16 @@ export default function NewMemberPage() {
         });
 
         if (!memRes.ok) {
-          // Member created but membership failed — go to profile anyway
-          router.push(`/members/${newMember.id}?warn=membership`);
-          return;
+          membershipWarn = true;
         }
       }
 
-      router.push(`/members/${newMember.id}`);
+      // Muestra pantalla de éxito con la contraseña temporal para compartir
+      setSuccess({
+        memberId: newMember.id,
+        tempPassword: newMember.tempPassword,
+        membershipWarn,
+      });
     } catch {
       setError('Error de red. Verifica tu conexión e inténtalo de nuevo.');
     } finally {
@@ -169,6 +181,57 @@ export default function NewMemberPage() {
   }
 
   const selectedType = membershipTypes.find((t) => t.id === selectedTypeId);
+
+  // Pantalla de éxito con contraseña temporal (para que el admin pueda compartirla si el email no llega)
+  if (success) {
+    return (
+      <div className="max-w-xl space-y-6">
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-6 text-center space-y-3">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100">
+            <span className="text-3xl">✓</span>
+          </div>
+          <h2 className="text-lg font-bold text-emerald-900">Miembro creado</h2>
+          <p className="text-sm text-emerald-800">
+            {form.firstName} {form.lastName} ({form.email})
+          </p>
+          {success.membershipWarn && (
+            <div className="rounded-lg border border-amber-300 bg-amber-100 p-2 text-xs text-amber-800">
+              ⚠️ El miembro fue creado pero la asignación de membresía falló. Puedes reintentar
+              desde su perfil.
+            </div>
+          )}
+          {success.tempPassword && (
+            <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-left">
+              <p className="text-xs font-semibold text-amber-900 mb-1">
+                🔑 Contraseña temporal del miembro:
+              </p>
+              <code className="block rounded bg-white px-3 py-2 font-mono text-sm text-amber-900 select-all">
+                {success.tempPassword}
+              </code>
+              <p className="mt-2 text-[11px] text-amber-700">
+                Se envió un email de bienvenida a <strong>{form.email}</strong>. Si no llega,
+                comparte esta contraseña con el miembro. Debe cambiarla en su primer login.
+              </p>
+            </div>
+          )}
+          <div className="flex gap-2 justify-center pt-3">
+            <Link
+              href="/members"
+              className="rounded-lg border border-emerald-300 bg-white px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100"
+            >
+              Ir a la lista
+            </Link>
+            <Link
+              href={`/members/${success.memberId}`}
+              className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700"
+            >
+              Ver perfil del miembro
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-2xl space-y-6">

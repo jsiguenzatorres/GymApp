@@ -150,7 +150,10 @@ export class MembersService {
       .sendWelcomeEmail(email, fullName, tempPassword, gymName)
       .catch((err) => this.logger.error(`Failed to send welcome email: ${err}`));
 
-    return this.getMember(gymId, result.id);
+    // Retorna la tempPassword para que el admin pueda compartirla manualmente
+    // si el email no se envía (SMTP no configurado).
+    const member = await this.getMember(gymId, result.id);
+    return { ...member, tempPassword };
   }
 
   async listMembers(gymId: string, query: ListMembersDto) {
