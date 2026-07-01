@@ -6,6 +6,7 @@ interface MemberRow {
   id: string;
   first_name: string;
   last_name: string;
+  avatar_url: string | null;
   phone: string | null;
   status: string;
   risk_score: number;
@@ -31,7 +32,12 @@ function RiskBadge({ score }: { score: number }) {
   return <span className={cn('text-sm font-semibold tabular-nums', color)}>{score}</span>;
 }
 
-function Initials({ name }: { name: string }) {
+function Avatar({ name, avatarUrl }: { name: string; avatarUrl: string | null }) {
+  if (avatarUrl) {
+    return (
+      <img src={avatarUrl} alt={name} className="h-8 w-8 shrink-0 rounded-full object-cover" />
+    );
+  }
   const parts = name.trim().split(' ');
   const initials = (parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '');
   return (
@@ -78,7 +84,10 @@ export function MembersTable({ members }: { members: MemberRow[] }) {
               <tr key={member.id} className="hover:bg-muted/30 transition-colors">
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-3">
-                    <Initials name={`${member.first_name} ${member.last_name}`} />
+                    <Avatar
+                      name={`${member.first_name} ${member.last_name}`}
+                      avatarUrl={member.avatar_url}
+                    />
                     <div>
                       <p className="font-medium text-foreground">
                         {member.first_name} {member.last_name}

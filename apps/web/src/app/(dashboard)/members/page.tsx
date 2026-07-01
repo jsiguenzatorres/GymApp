@@ -11,6 +11,7 @@ interface MemberRow {
   id: string;
   first_name: string;
   last_name: string;
+  avatar_url: string | null;
   phone: string | null;
   status: MemberStatus;
   risk_score: number;
