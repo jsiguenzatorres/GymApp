@@ -492,6 +492,19 @@ export class MembersService {
     });
   }
 
+  // Variante admin: staff/trainer sube el avatar de CUALQUIER miembro del gym
+  // (ej. cuando el miembro no tiene la app o pide ayuda en recepción).
+  async updateMemberAvatar(gymId: string, memberId: string, imageDataUri: string) {
+    await this.findMemberRecord(gymId, memberId);
+
+    const { url } = await this.storage.uploadAvatar(memberId, imageDataUri);
+    return this.prisma.member.update({
+      where: { id: memberId },
+      data: { avatar_url: url },
+      select: { id: true, avatar_url: true },
+    });
+  }
+
   async getMember(gymId: string, id: string) {
     const member = await this.prisma.member.findFirst({
       where: { id, gym_id: gymId },

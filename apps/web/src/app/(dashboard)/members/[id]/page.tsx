@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { serverFetch } from '@/lib/server-api';
 import { MemberStatusBadge } from '@/components/members/member-status-badge';
+import { MemberAvatarUploader } from '@/components/members/member-avatar-uploader';
 import { MembershipActionsClient } from '@/components/members/membership-actions-client';
 import { AddonsSection } from '@/components/members/addons-section';
 import { CreditSection } from '@/components/members/credit-section';
@@ -40,6 +41,7 @@ interface MemberDetail {
   id: string;
   first_name: string;
   last_name: string;
+  avatar_url: string | null;
   phone: string | null;
   birthdate: string | null;
   gender: string | null;
@@ -168,10 +170,11 @@ export default async function MemberDetailPage({ params }: PageProps) {
 
       {/* Header */}
       <div className="flex items-start gap-4">
-        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 text-xl font-bold text-primary">
-          {member.first_name[0]}
-          {member.last_name[0]}
-        </div>
+        <MemberAvatarUploader
+          memberId={id}
+          initialUrl={member.avatar_url}
+          initials={`${member.first_name[0]}${member.last_name[0]}`}
+        />
         <div className="flex-1">
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold">

@@ -78,6 +78,17 @@ export class MembersController {
     return this.membersService.updateMyAvatar(user.sub, this.gymId(user), body.image);
   }
 
+  // POST /api/v1/admin/members/:id/avatar — staff sube el avatar de un miembro
+  // (ej. en recepción, cuando el miembro no tiene la app instalada).
+  @Post('admin/members/:id/avatar')
+  uploadMemberAvatar(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: { image: string },
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.membersService.updateMemberAvatar(this.gymId(user), id, body.image);
+  }
+
   // GET /api/v1/members/me/stats — agregador para el Home: racha, semana, próximo entreno
   @Get('members/me/stats')
   getMyHomeStats(@CurrentUser() user: JwtPayload) {

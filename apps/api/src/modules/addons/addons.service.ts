@@ -4,6 +4,7 @@ import {
   ConflictException,
   BadRequestException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 
 export type AddonType = 'NUTRITION';
@@ -92,31 +93,50 @@ export class AddonsService {
     });
     if (!member) throw new NotFoundException('Miembro no encontrado en este gym');
 
-    return this.prisma.$transaction(async (tx) => {
-      // Cancelar cualquier addon activo previo del mismo tipo
-      await tx.memberAddon.updateMany({
-        where: { member_id: memberId, type: input.type, status: 'ACTIVE' },
-        data: {
-          status: 'CANCELLED',
-          cancellation_reason: 'Reemplazado por nuevo add-on',
-          ends_at: new Date(),
-        },
-      });
+    try {
+      return await this.prisma.$transaction(
+        async (tx) => {
+          // Cancelar cualquier addon activo previo del mismo tipo
+          await tx.memberAddon.updateMany({
+            where: { member_id: memberId, type: input.type, status: 'ACTIVE' },
+            data: {
+              status: 'CANCELLED',
+              cancellation_reason: 'Reemplazado por nuevo add-on',
+              ends_at: new Date(),
+            },
+          });
 
-      return tx.memberAddon.create({
-        data: {
-          member_id: memberId,
-          type: input.type,
-          tier: input.tier,
-          status: 'ACTIVE',
-          ends_at: input.ends_at ? new Date(input.ends_at) : null,
-          price_paid: input.price_paid ?? null,
-          currency: input.currency ?? 'USD',
-          assigned_by_staff_id: input.assigned_by_staff_id ?? null,
-          notes: input.notes ?? null,
+          return tx.memberAddon.create({
+            data: {
+              member_id: memberId,
+              type: input.type,
+              tier: input.tier,
+              status: 'ACTIVE',
+              ends_at: input.ends_at ? new Date(input.ends_at) : null,
+              price_paid: input.price_paid ?? null,
+              currency: input.currency ?? 'USD',
+              assigned_by_staff_id: input.assigned_by_staff_id ?? null,
+              notes: input.notes ?? null,
+            },
+          });
         },
-      });
-    });
+        // Serializable: si dos requests concurrentes intentan activar un addon
+        // para el mismo miembro, Postgres aborta una de las dos transacciones
+        // en vez de dejar que ambas vean "0 addons activos" y creen duplicados.
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
+    } catch (err) {
+      // P2002 = unique constraint violation (el partial index a nivel DB
+      // que garantiza max 1 addon ACTIVE por member+type). Puede ocurrir si
+      // dos transacciones serializable compiten — Postgres aborta una.
+      const code = (err as { code?: string }).code;
+      if (code === 'P2002' || code === '40001') {
+        throw new ConflictException(
+          'Ya se está procesando otro cambio de add-on para este miembro. Intenta de nuevo.',
+        );
+      }
+      throw err;
+    }
   }
 
   /** Cancela un add-on específico (admin). */

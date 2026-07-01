@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Send, Zap, User, Loader2, Search } from 'lucide-react';
+import Link from 'next/link';
+import { Send, Zap, User, Loader2, Search, X } from 'lucide-react';
 
 interface Message {
   role: 'user' | 'zeus';
@@ -193,6 +194,15 @@ export default function ZeusPage() {
           <span className="h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
           <span className="text-xs text-gray-500">En línea</span>
         </div>
+
+        <Link
+          href="/workouts"
+          className="ml-1 flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700"
+          aria-label="Cerrar ZEUS"
+          title="Cerrar"
+        >
+          <X className="h-4 w-4" />
+        </Link>
       </div>
 
       {/* Messages */}

@@ -14,11 +14,15 @@ interface MemberData {
   notes: string | null;
 }
 
+// Valores alineados con CreateMemberDto/UpdateMemberDto del backend (@IsIn(['M','F','X'])).
+// Antes este form usaba MALE/FEMALE/OTHER, lo que hacia fallar la validacion
+// en cuanto el usuario tocaba el select (400 Bad Request silencioso para el
+// resto de campos tambien, porque la request completa se rechazaba).
 const GENDER_OPTIONS = [
   { value: '', label: 'No especificado' },
-  { value: 'MALE', label: 'Masculino' },
-  { value: 'FEMALE', label: 'Femenino' },
-  { value: 'OTHER', label: 'Otro' },
+  { value: 'M', label: 'Masculino' },
+  { value: 'F', label: 'Femenino' },
+  { value: 'X', label: 'Otro / Prefiero no decir' },
 ];
 
 export default function EditMemberPage() {

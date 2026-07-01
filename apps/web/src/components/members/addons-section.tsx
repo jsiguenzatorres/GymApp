@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 
 interface Addon {
   id: string;
@@ -52,6 +52,9 @@ export function AddonsSection({ memberId }: { memberId: string }) {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Ref (no state) para bloquear clicks concurrentes de forma sincrona,
+  // sin esperar al re-render que setBusy(true) dispara de forma asincrona.
+  const busyRef = useRef(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -76,7 +79,10 @@ export function AddonsSection({ memberId }: { memberId: string }) {
   const currentTier = activeNutrition?.tier ?? 'BASIC';
 
   async function assign(tier: 'PRO' | 'ELITE') {
-    if (busy) return;
+    // Guard contra doble-click / doble-tap: si ya hay una request en curso,
+    // ignora nuevos clicks (incluidos los que llegan antes del re-render).
+    if (busyRef.current) return;
+    busyRef.current = true;
     setBusy(true);
     setError(null);
     try {
@@ -100,6 +106,7 @@ export function AddonsSection({ memberId }: { memberId: string }) {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error');
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   }
@@ -124,6 +131,7 @@ export function AddonsSection({ memberId }: { memberId: string }) {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error');
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   }
