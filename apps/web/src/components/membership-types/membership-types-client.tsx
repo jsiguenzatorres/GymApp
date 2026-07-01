@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import {
   Plus,
+  Pencil,
   ToggleLeft,
   ToggleRight,
   CheckCircle2,
@@ -54,6 +55,7 @@ function durationLabel(days: number) {
 export function MembershipTypesClient({ initialTypes }: { initialTypes: MembershipType[] }) {
   const [types, setTypes] = useState<MembershipType[]>(initialTypes);
   const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   if (types.length === 0 && !showForm) {
     return (
@@ -99,15 +101,32 @@ export function MembershipTypesClient({ initialTypes }: { initialTypes: Membersh
 
       {/* Grid de tipos */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {types.map((type) => (
-          <MembershipTypeCard
-            key={type.id}
-            type={type}
-            onToggled={(updated) =>
-              setTypes((prev) => prev.map((t) => (t.id === updated.id ? { ...t, ...updated } : t)))
-            }
-          />
-        ))}
+        {types.map((type) =>
+          editingId === type.id ? (
+            <EditTypeForm
+              key={type.id}
+              type={type}
+              onUpdated={(updated) => {
+                setTypes((prev) =>
+                  prev.map((t) => (t.id === updated.id ? { ...t, ...updated } : t)),
+                );
+                setEditingId(null);
+              }}
+              onCancel={() => setEditingId(null)}
+            />
+          ) : (
+            <MembershipTypeCard
+              key={type.id}
+              type={type}
+              onEdit={() => setEditingId(type.id)}
+              onToggled={(updated) =>
+                setTypes((prev) =>
+                  prev.map((t) => (t.id === updated.id ? { ...t, ...updated } : t)),
+                )
+              }
+            />
+          ),
+        )}
       </div>
     </div>
   );
@@ -115,9 +134,11 @@ export function MembershipTypesClient({ initialTypes }: { initialTypes: Membersh
 
 function MembershipTypeCard({
   type,
+  onEdit,
   onToggled,
 }: {
   type: MembershipType;
+  onEdit: () => void;
   onToggled: (t: Partial<MembershipType> & { id: string }) => void;
 }) {
   const [isToggling, setIsToggling] = useState(false);
@@ -162,18 +183,27 @@ function MembershipTypeCard({
             <p className="text-xs text-muted-foreground mt-0.5">{type.description}</p>
           )}
         </div>
-        <button
-          onClick={handleToggle}
-          disabled={isToggling}
-          className="shrink-0 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-          title={type.is_active ? 'Desactivar' : 'Activar'}
-        >
-          {type.is_active ? (
-            <ToggleRight className="h-5 w-5 text-emerald-500" />
-          ) : (
-            <ToggleLeft className="h-5 w-5" />
-          )}
-        </button>
+        <div className="flex shrink-0 items-center gap-1">
+          <button
+            onClick={onEdit}
+            className="text-muted-foreground hover:text-foreground transition-colors"
+            title="Editar"
+          >
+            <Pencil className="h-4 w-4" />
+          </button>
+          <button
+            onClick={handleToggle}
+            disabled={isToggling}
+            className="text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+            title={type.is_active ? 'Desactivar' : 'Activar'}
+          >
+            {type.is_active ? (
+              <ToggleRight className="h-5 w-5 text-emerald-500" />
+            ) : (
+              <ToggleLeft className="h-5 w-5" />
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Precio */}
@@ -467,6 +497,249 @@ function CreateTypeForm({
             className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
           >
             {isLoading ? 'Guardando...' : 'Crear tipo'}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+// ─── Formulario de edición ─────────────────────────────────────────────────
+
+function EditTypeForm({
+  type,
+  onUpdated,
+  onCancel,
+}: {
+  type: MembershipType;
+  onUpdated: (type: MembershipType) => void;
+  onCancel: () => void;
+}) {
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [featuresRaw, setFeaturesRaw] = useState(type.features.join('\n'));
+
+  const [form, setForm] = useState({
+    name: type.name,
+    description: type.description ?? '',
+    price: String(type.price),
+    billingFrequency: type.billing_frequency,
+    durationDays: String(type.duration_days),
+    maxFreezes: String(type.max_freezes),
+    maxFreezeDays: String(type.max_freeze_days),
+    isTrial: type.is_trial,
+  });
+
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>,
+  ) => {
+    const { name, value, type: inputType } = e.target;
+    setForm((prev) => ({
+      ...prev,
+      [name]: inputType === 'checkbox' ? (e.target as HTMLInputElement).checked : value,
+    }));
+    setError('');
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setError('');
+
+    const features = featuresRaw
+      .split('\n')
+      .map((f) => f.trim())
+      .filter(Boolean);
+
+    try {
+      const res = await fetch(`/api/proxy/membership-types/${type.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: form.name,
+          description: form.description || undefined,
+          price: Number(form.price),
+          billingFrequency: form.billingFrequency,
+          durationDays: Number(form.durationDays),
+          maxFreezes: Number(form.maxFreezes),
+          maxFreezeDays: Number(form.maxFreezeDays),
+          isTrial: form.isTrial,
+          features,
+        }),
+      });
+
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { message?: string | string[] };
+        setError(
+          Array.isArray(body.message)
+            ? body.message.join(', ')
+            : (body.message ?? 'Error al actualizar el tipo'),
+        );
+        return;
+      }
+
+      const updated = (await res.json()) as MembershipType;
+      onUpdated({ ...updated, activeCount: type.activeCount });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const inputClass = cn(
+    'w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground',
+    'outline-none focus:border-primary focus:ring-2 focus:ring-ring/30 disabled:opacity-50',
+  );
+
+  return (
+    <div className="rounded-xl border border-primary/40 bg-card p-5 sm:col-span-2 lg:col-span-3">
+      <h3 className="font-semibold mb-4">Editar: {type.name}</h3>
+
+      {error && (
+        <div className="mb-4 flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
+          <XCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          {error}
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Nombre</label>
+            <input
+              name="name"
+              required
+              value={form.name}
+              onChange={handleChange}
+              className={inputClass}
+              disabled={isLoading}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Precio (USD)</label>
+            <input
+              name="price"
+              type="number"
+              min="0"
+              step="0.01"
+              required
+              value={form.price}
+              onChange={handleChange}
+              className={inputClass}
+              disabled={isLoading}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Frecuencia de cobro</label>
+            <select
+              name="billingFrequency"
+              value={form.billingFrequency}
+              onChange={handleChange}
+              className={inputClass}
+              disabled={isLoading}
+            >
+              {FREQUENCIES.map((f) => (
+                <option key={f.value} value={f.value}>
+                  {f.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Duración (días)</label>
+            <input
+              name="durationDays"
+              type="number"
+              min="1"
+              required
+              value={form.durationDays}
+              onChange={handleChange}
+              className={inputClass}
+              disabled={isLoading}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Máx. congelaciones</label>
+            <input
+              name="maxFreezes"
+              type="number"
+              min="0"
+              value={form.maxFreezes}
+              onChange={handleChange}
+              className={inputClass}
+              disabled={isLoading}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Máx. días congelado</label>
+            <input
+              name="maxFreezeDays"
+              type="number"
+              min="0"
+              value={form.maxFreezeDays}
+              onChange={handleChange}
+              className={inputClass}
+              disabled={isLoading}
+            />
+          </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium">Descripción (opcional)</label>
+          <input
+            name="description"
+            value={form.description}
+            onChange={handleChange}
+            className={inputClass}
+            disabled={isLoading}
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium">
+            Beneficios incluidos{' '}
+            <span className="font-normal text-muted-foreground text-xs">(uno por línea)</span>
+          </label>
+          <textarea
+            value={featuresRaw}
+            onChange={(e) => setFeaturesRaw(e.target.value)}
+            rows={3}
+            className={inputClass}
+            disabled={isLoading}
+          />
+        </div>
+
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            name="isTrial"
+            checked={form.isTrial}
+            onChange={handleChange}
+            className="rounded"
+            disabled={isLoading}
+          />
+          <span className="text-sm">Es un plan de prueba (trial)</span>
+        </label>
+
+        <div className="flex gap-2 pt-1">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="rounded-lg border px-4 py-2 text-sm font-medium hover:bg-muted transition-colors"
+            disabled={isLoading}
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            disabled={isLoading || !form.name || !form.price}
+            className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
+          >
+            {isLoading ? 'Guardando...' : 'Guardar cambios'}
           </button>
         </div>
       </form>
