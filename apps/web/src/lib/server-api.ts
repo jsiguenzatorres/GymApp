@@ -28,6 +28,57 @@ export async function serverFetch<T>(path: string, init?: RequestInit): Promise<
   }
 }
 
+export type DetailFetchResult<T> =
+  | { kind: 'ok'; data: T }
+  | { kind: 'not_found' }
+  | { kind: 'session_expired' }
+  | { kind: 'error'; status: number; message: string };
+
+/**
+ * Variante de serverFetch para paginas de detalle (/entidad/[id]) que
+ * DISTINGUE por que fallo la carga, en vez de colapsar todo a null.
+ *
+ * serverFetch() trata 401/403/500/red/404 exactamente igual (retorna null),
+ * lo que llevaba a los `if (!data) notFound()` de las paginas de detalle a
+ * mostrar la pagina "404 no encontrada" incluso cuando el problema real era
+ * una sesion invalida o un error del servidor — indistinguible en la UI de
+ * un ID que genuinamente no existe.
+ */
+export async function serverFetchDetail<T>(path: string): Promise<DetailFetchResult<T>> {
+  const session = await auth();
+  if (!session) return { kind: 'session_expired' };
+  if ((session as { error?: string }).error) return { kind: 'session_expired' };
+
+  try {
+    const res = await fetch(`${API_URL}${path}`, {
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${(session as { accessToken?: string }).accessToken ?? ''}`,
+      },
+      next: { revalidate: 0 },
+    });
+
+    if (res.status === 404) return { kind: 'not_found' };
+    if (res.status === 401 || res.status === 403) return { kind: 'session_expired' };
+
+    if (!res.ok) {
+      let message = `Error ${res.status}`;
+      try {
+        const body = (await res.json()) as { message?: string | string[] };
+        if (body.message)
+          message = Array.isArray(body.message) ? body.message.join(', ') : body.message;
+      } catch {
+        // body no JSON — usa el mensaje default
+      }
+      return { kind: 'error', status: res.status, message };
+    }
+
+    return { kind: 'ok', data: (await res.json()) as T };
+  } catch {
+    return { kind: 'error', status: 0, message: 'Error de red. Verifica tu conexión.' };
+  }
+}
+
 /**
  * Variante de serverFetch que LANZA error si la respuesta no es OK.
  * Úsala dentro de Server Actions para que el `redirect()` solo se ejecute

@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ArrowLeft, Mail, Phone, Calendar, Clock, ShieldCheck } from 'lucide-react';
-import { serverFetch } from '@/lib/server-api';
+import { ArrowLeft, Mail, Phone, Calendar, Clock, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { serverFetchDetail } from '@/lib/server-api';
 import { StaffActions } from '@/components/staff/staff-actions';
 
 interface Appointment {
@@ -65,9 +65,38 @@ function fmtDateTime(iso: string) {
 
 export default async function StaffDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const staff = await serverFetch<StaffDetail>(`/api/v1/staff/${id}`);
+  const result = await serverFetchDetail<StaffDetail>(`/api/v1/staff/${id}`);
 
-  if (!staff) notFound();
+  if (result.kind === 'not_found') notFound();
+
+  if (result.kind === 'session_expired') {
+    return (
+      <div className="max-w-md mx-auto mt-16 rounded-xl border border-amber-200 bg-amber-50 p-6 text-center">
+        <AlertTriangle className="mx-auto h-8 w-8 text-amber-500" />
+        <h2 className="mt-3 font-semibold text-amber-900">Sesión expirada</h2>
+        <p className="mt-1 text-sm text-amber-700">
+          Recarga la página para iniciar sesión de nuevo.
+        </p>
+      </div>
+    );
+  }
+
+  if (result.kind === 'error') {
+    return (
+      <div className="max-w-md mx-auto mt-16 rounded-xl border border-red-200 bg-red-50 p-6 text-center">
+        <AlertTriangle className="mx-auto h-8 w-8 text-red-500" />
+        <h2 className="mt-3 font-semibold text-red-900">No se pudo cargar el staff</h2>
+        <p className="mt-1 text-sm text-red-700">
+          {result.message} (código {result.status})
+        </p>
+        <Link href="/staff" className="mt-4 inline-block text-sm text-red-700 underline">
+          Volver a la lista
+        </Link>
+      </div>
+    );
+  }
+
+  const staff = result.data;
 
   return (
     <div className="max-w-4xl space-y-6 p-6">
