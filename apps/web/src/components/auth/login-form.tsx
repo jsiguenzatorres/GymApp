@@ -16,6 +16,7 @@ export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get('callbackUrl') ?? '/dashboard';
+  const sessionExpired = searchParams.get('reason') === 'session_expired';
 
   const [form, setForm] = useState<FormState>({ email: '', password: '', totp: '' });
   const [showPassword, setShowPassword] = useState(false);
@@ -72,6 +73,14 @@ export function LoginForm() {
 
   return (
     <form onSubmit={handleSubmit} noValidate className="space-y-5">
+      {/* Sesión expirada — redirigido por el middleware */}
+      {sessionExpired && !error && (
+        <div className="flex items-start gap-2.5 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800 animate-fade-in">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>Tu sesión expiró. Inicia sesión de nuevo para continuar.</span>
+        </div>
+      )}
+
       {/* Error global */}
       {error && (
         <div className="flex items-start gap-2.5 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive animate-fade-in">
