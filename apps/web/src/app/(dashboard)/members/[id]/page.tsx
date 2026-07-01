@@ -6,6 +6,7 @@ import { MemberStatusBadge } from '@/components/members/member-status-badge';
 import { MemberAvatarUploader } from '@/components/members/member-avatar-uploader';
 import { MembershipActionsClient } from '@/components/members/membership-actions-client';
 import { AddonsSection } from '@/components/members/addons-section';
+import { WorkoutPlanSection } from '@/components/members/workout-plan-section';
 import { CreditSection } from '@/components/members/credit-section';
 import { HealthDataSection } from '@/components/members/health-data-section';
 import { OnboardingStatusSection } from '@/components/members/onboarding-status';
@@ -352,6 +353,9 @@ export default async function MemberDetailPage({ params }: PageProps) {
 
       {/* Onboarding status (J5) */}
       <OnboardingStatusSection memberId={id} />
+
+      {/* Plan de entrenamiento asignado */}
+      <WorkoutPlanSection memberId={id} />
 
       {/* Add-ons del miembro (NutriPro / NutriElite, etc.) */}
       <AddonsSection memberId={id} />

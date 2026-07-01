@@ -47,14 +47,38 @@ function extractYouTubeId(url: string): string | null {
   }
 }
 
+function isTikTokUrl(url: string): boolean {
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, '');
+    return host === 'tiktok.com' || host === 'vm.tiktok.com';
+  } catch {
+    return false;
+  }
+}
+
 export function ExerciseVideoPlayer({ videoUrl }: { videoUrl: string }) {
   const [error, setError] = useState(false);
   const youtubeId = extractYouTubeId(videoUrl);
+  const isTikTok = isTikTokUrl(videoUrl);
 
   return (
     <div className="rounded-xl border bg-card p-4">
       <h3 className="text-sm font-bold text-foreground mb-3">🎥 Video técnico</h3>
-      {youtubeId ? (
+      {isTikTok ? (
+        // TikTok no tiene una URL de embed simple tipo iframe — su embed
+        // oficial requiere cargar su script externo, fragil en una SPA.
+        // Enlazamos directo al video en vez de intentar embeberlo inline.
+        <a
+          href={videoUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-muted-foreground/30 bg-muted/30 p-8 text-center transition-colors hover:bg-muted/50"
+        >
+          <span className="text-3xl">🎵</span>
+          <span className="text-sm font-semibold text-foreground">Ver video en TikTok ↗</span>
+          <span className="text-xs text-muted-foreground">Se abre en una pestaña nueva</span>
+        </a>
+      ) : youtubeId ? (
         // YouTube aloja el video — embebemos su reproductor oficial, no
         // descargamos ni copiamos el archivo.
         <div
