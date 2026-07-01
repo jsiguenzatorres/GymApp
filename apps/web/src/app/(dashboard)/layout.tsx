@@ -1,6 +1,7 @@
 import { Sidebar } from '@/components/layout/sidebar';
 import { ThemeToggle } from '@/components/layout/theme-toggle';
 import { NotificationBell } from '@/components/layout/notification-bell';
+import { LogoutButton } from '@/components/layout/logout-button';
 import { auth } from '@/auth';
 import { serverFetch } from '@/lib/server-api';
 
@@ -31,6 +32,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
             </span>
             <NotificationBell initialCount={unreadData?.count ?? 0} />
             <ThemeToggle />
+            <LogoutButton />
           </div>
         </header>
 
