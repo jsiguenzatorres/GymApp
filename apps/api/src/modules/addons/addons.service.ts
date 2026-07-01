@@ -94,45 +94,53 @@ export class AddonsService {
     if (!member) throw new NotFoundException('Miembro no encontrado en este gym');
 
     try {
-      return await this.prisma.$transaction(
-        async (tx) => {
-          // Cancelar cualquier addon activo previo del mismo tipo
-          await tx.memberAddon.updateMany({
-            where: { member_id: memberId, type: input.type, status: 'ACTIVE' },
-            data: {
-              status: 'CANCELLED',
-              cancellation_reason: 'Reemplazado por nuevo add-on',
-              ends_at: new Date(),
-            },
-          });
+      // READ COMMITTED (default de Postgres/Prisma) — deliberadamente NO usamos
+      // Serializable aqui. Serializable detecta conflictos de forma muy amplia
+      // (incluso entre un GET de lectura concurrente y este UPDATE/INSERT sin
+      // overlap real de filas), lo que causaba abortos falsos-positivos: la
+      // transaccion completa (cancelar + crear) se revertia a medias segun el
+      // punto exacto del fallo, dejando el addon anterior cancelado pero sin
+      // el nuevo creado. La proteccion real contra duplicados no depende del
+      // isolation level: viene del UNIQUE INDEX parcial en DB (migration
+      // 20260701010000_member_addon_unique_active), que rechaza con P2002
+      // cualquier segundo INSERT que intente crear un addon ACTIVE mientras
+      // ya existe otro ACTIVE del mismo member+type — sin importar el orden
+      // de llegada ni el isolation level de cada transaccion individual.
+      return await this.prisma.$transaction(async (tx) => {
+        // Cancelar cualquier addon activo previo del mismo tipo
+        await tx.memberAddon.updateMany({
+          where: { member_id: memberId, type: input.type, status: 'ACTIVE' },
+          data: {
+            status: 'CANCELLED',
+            cancellation_reason: 'Reemplazado por nuevo add-on',
+            ends_at: new Date(),
+          },
+        });
 
-          return tx.memberAddon.create({
-            data: {
-              member_id: memberId,
-              type: input.type,
-              tier: input.tier,
-              status: 'ACTIVE',
-              ends_at: input.ends_at ? new Date(input.ends_at) : null,
-              price_paid: input.price_paid ?? null,
-              currency: input.currency ?? 'USD',
-              assigned_by_staff_id: input.assigned_by_staff_id ?? null,
-              notes: input.notes ?? null,
-            },
-          });
-        },
-        // Serializable: si dos requests concurrentes intentan activar un addon
-        // para el mismo miembro, Postgres aborta una de las dos transacciones
-        // en vez de dejar que ambas vean "0 addons activos" y creen duplicados.
-        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
-      );
+        return tx.memberAddon.create({
+          data: {
+            member_id: memberId,
+            type: input.type,
+            tier: input.tier,
+            status: 'ACTIVE',
+            ends_at: input.ends_at ? new Date(input.ends_at) : null,
+            price_paid: input.price_paid ?? null,
+            currency: input.currency ?? 'USD',
+            assigned_by_staff_id: input.assigned_by_staff_id ?? null,
+            notes: input.notes ?? null,
+          },
+        });
+      });
     } catch (err) {
-      // P2002 = unique constraint violation (el partial index a nivel DB
-      // que garantiza max 1 addon ACTIVE por member+type). Puede ocurrir si
-      // dos transacciones serializable compiten — Postgres aborta una.
-      const code = (err as { code?: string }).code;
-      if (code === 'P2002' || code === '40001') {
+      // P2002 = unique constraint violation. Prisma expone esto de forma
+      // confiable como PrismaClientKnownRequestError con .code === 'P2002'
+      // (a diferencia de fallos crudos de serializacion de Postgres, que no
+      // siempre llegan con un .code utilizable). Este es el caso real de
+      // "dos requests casi simultaneas" — la segunda pierde la carrera del
+      // INSERT y recibe un mensaje claro en vez de un 500 crudo.
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
         throw new ConflictException(
-          'Ya se está procesando otro cambio de add-on para este miembro. Intenta de nuevo.',
+          'Ya hay un cambio de add-on en curso para este miembro. Espera un segundo e intenta de nuevo.',
         );
       }
       throw err;
