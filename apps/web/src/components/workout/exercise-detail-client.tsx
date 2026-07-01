@@ -29,15 +29,50 @@ export function ExerciseImageCarousel({ images }: { images: string[] }) {
   );
 }
 
+// Extrae el ID de video de las variantes comunes de URL de YouTube:
+// watch?v=ID, youtu.be/ID, embed/ID, shorts/ID. Retorna null si no matchea.
+function extractYouTubeId(url: string): string | null {
+  try {
+    const u = new URL(url);
+    const host = u.hostname.replace(/^www\./, '');
+    if (host === 'youtu.be') return u.pathname.slice(1) || null;
+    if (host === 'youtube.com' || host === 'm.youtube.com') {
+      if (u.pathname === '/watch') return u.searchParams.get('v');
+      const embedMatch = /^\/(?:embed|shorts)\/([^/?]+)/.exec(u.pathname);
+      if (embedMatch) return embedMatch[1];
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export function ExerciseVideoPlayer({ videoUrl }: { videoUrl: string }) {
   const [error, setError] = useState(false);
+  const youtubeId = extractYouTubeId(videoUrl);
 
   return (
     <div className="rounded-xl border bg-card p-4">
       <h3 className="text-sm font-bold text-foreground mb-3">🎥 Video técnico</h3>
-      {error ? (
+      {youtubeId ? (
+        // YouTube aloja el video — embebemos su reproductor oficial, no
+        // descargamos ni copiamos el archivo.
+        <div
+          className="relative w-full overflow-hidden rounded-lg"
+          style={{ paddingTop: '56.25%' }}
+        >
+          <iframe
+            src={`https://www.youtube.com/embed/${youtubeId}`}
+            title="Video técnico del ejercicio"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+            className="absolute inset-0 h-full w-full rounded-lg"
+          />
+        </div>
+      ) : error ? (
         <div className="rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4 text-sm text-red-700 dark:text-red-400 text-center">
-          No se pudo cargar el video. Revisa la URL.
+          No se pudo cargar el video. Revisa la URL (debe ser un link directo a archivo .mp4/.webm o
+          una URL de YouTube).
         </div>
       ) : (
         <video

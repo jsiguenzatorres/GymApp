@@ -2,6 +2,7 @@ import 'reflect-metadata'; // entry point
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger, VersioningType } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
@@ -10,6 +11,13 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     logger: ['log', 'error', 'warn', 'debug', 'verbose'],
   });
+
+  // Limite de body explicito. El default de Express/body-parser (100kb) es
+  // insuficiente para uploads de imagen/video via data URI base64 (agrega
+  // ~33% de overhead sobre el tamano del archivo). 20mb cubre imagenes (2MB)
+  // y clips cortos de video de tecnica (hasta ~15MB) con margen.
+  app.use(json({ limit: '20mb' }));
+  app.use(urlencoded({ limit: '20mb', extended: true }));
 
   // Global prefix
   app.setGlobalPrefix('api');

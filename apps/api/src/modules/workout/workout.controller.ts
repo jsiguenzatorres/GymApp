@@ -17,6 +17,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { WorkoutService } from './workout.service';
+import { StorageService } from '../storage/storage.service';
 import { CreateExerciseDto } from './dto/create-exercise.dto';
 import { CreatePlanDto } from './dto/create-plan.dto';
 import { StartSessionDto } from './dto/start-session.dto';
@@ -25,7 +26,10 @@ import { LogSetDto, FinishSessionDto } from './dto/log-set.dto';
 @UseGuards(JwtAuthGuard)
 @Controller()
 export class WorkoutController {
-  constructor(private readonly workoutService: WorkoutService) {}
+  constructor(
+    private readonly workoutService: WorkoutService,
+    private readonly storageService: StorageService,
+  ) {}
 
   private gymId(user: JwtPayload): string {
     if (!user.gymId) throw new ForbiddenException('Sin contexto de gym');
@@ -99,6 +103,17 @@ export class WorkoutController {
     @Body() dto: Partial<CreateExerciseDto>,
   ) {
     return this.workoutService.updateExercise(this.gymId(user), id, dto);
+  }
+
+  // POST /exercises/upload-video — sube un clip corto de tecnica (grabado
+  // por el gym) a Supabase Storage y retorna la URL publica. Para videos de
+  // YouTube el frontend NO usa este endpoint — solo guarda la URL directa,
+  // ya que YouTube aloja el archivo.
+  @Post('exercises/upload-video')
+  @HttpCode(HttpStatus.CREATED)
+  async uploadExerciseVideo(@CurrentUser() user: JwtPayload, @Body('video') videoDataUri: string) {
+    const result = await this.storageService.uploadExerciseVideo(this.gymId(user), videoDataUri);
+    return { url: result.url };
   }
 
   // ─── PLANES ───────────────────────────────────────────────────────────────────

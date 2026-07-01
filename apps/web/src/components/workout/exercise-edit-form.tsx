@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AlertCircle, Loader2, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ExerciseVideoUpload } from './exercise-video-upload';
 
 const MUSCLE_GROUPS = [
   'CHEST',
@@ -238,13 +239,20 @@ export function ExerciseEditForm({ exercise }: { exercise: InitialExercise }) {
       </div>
 
       <div className="space-y-1.5">
-        <label className="text-sm font-medium">URL de video técnico</label>
+        <label className="text-sm font-medium">Video técnico</label>
         <input
           value={form.videoUrl}
           onChange={(e) => setForm((p) => ({ ...p, videoUrl: e.target.value }))}
           className={inputClass}
           disabled={isLoading}
-          placeholder="https://..."
+          placeholder="https://youtube.com/watch?v=... o link directo a .mp4"
+        />
+        <p className="text-xs text-muted-foreground">
+          Pega un link de YouTube (se embebe automático) o un archivo directo .mp4/.webm.
+        </p>
+        <ExerciseVideoUpload
+          disabled={isLoading}
+          onUploaded={(url) => setForm((p) => ({ ...p, videoUrl: url }))}
         />
       </div>
 
