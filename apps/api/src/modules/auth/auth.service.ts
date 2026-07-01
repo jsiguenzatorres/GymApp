@@ -200,12 +200,32 @@ export class AuthService {
 
     const rtHash = createHash('sha256').update(refreshToken).digest('hex');
     if (user.refresh_token_hash !== rtHash) {
-      // Reuse detectado: invalidar sesión completa
-      await this.prisma.user.update({
-        where: { id: userId },
-        data: { refresh_token_hash: null },
-      });
-      throw new UnauthorizedException('Sesión inválida — inicia sesión nuevamente');
+      // El hash no coincide con el actual. Esto pasa en dos escenarios:
+      //
+      // 1. Race condition BENIGNA: el frontend (Next.js Server Components +
+      //    multiples fetch() paralelos desde client components) puede disparar
+      //    2+ requests de refresh casi simultaneas con el MISMO refresh token
+      //    (React no dedupea auth() entre distintas invocaciones de Route
+      //    Handler). La primera request rotó el hash exitosamente; esta
+      //    segunda request ya llega con el token viejo.
+      // 2. Replay real de un token robado/viejo (ataque).
+      //
+      // No podemos distinguir ambos casos de forma barata, PERO el costo de
+      // tratarlos igual (nukear refresh_token_hash a null) es desproporcionado:
+      // deja al usuario legitimo sin poder refrescar NUNCA MAS, forzando
+      // re-login manual — un DoS accidental contra el propio usuario en el
+      // caso #1, que es el mas comun en uso normal de la app.
+      //
+      // Por eso: solo rechazamos ESTA request especifica (401), sin tocar el
+      // hash vigente en DB. Si fue el caso #1, el hash actual (de la request
+      // que SI gano la carrera) sigue intacto y la sesion se recupera sola en
+      // el siguiente intento. Si fue el caso #2 (replay real), el atacante
+      // de todos modos no puede avanzar porque su token ya no coincide con
+      // el hash vigente — sigue bloqueado, solo que no destruimos la sesion
+      // del usuario legitimo de paso.
+      throw new UnauthorizedException(
+        'Token de refresco no vigente (pudo haber sido reemplazado por otra sesión activa)',
+      );
     }
 
     const gymId = user.staff?.gym_id ?? user.member?.gym_id;

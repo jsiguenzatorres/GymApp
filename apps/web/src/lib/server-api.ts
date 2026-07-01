@@ -5,6 +5,9 @@ const API_URL = process.env.API_URL ?? 'http://localhost:3001';
 export async function serverFetch<T>(path: string, init?: RequestInit): Promise<T | null> {
   const session = await auth();
   if (!session) return null;
+  // session.error se marca en auth.ts cuando el refresh automatico del
+  // access token fallo — sin esto el fetch usaria un token que sabemos invalido.
+  if ((session as { error?: string }).error) return null;
 
   try {
     const res = await fetch(`${API_URL}${path}`, {
@@ -38,6 +41,9 @@ export async function serverFetch<T>(path: string, init?: RequestInit): Promise<
 export async function serverMutate<T>(path: string, init?: RequestInit): Promise<T | null> {
   const session = await auth();
   if (!session) {
+    throw new Error('Sesión expirada. Recarga la página e intenta de nuevo.');
+  }
+  if ((session as { error?: string }).error) {
     throw new Error('Sesión expirada. Recarga la página e intenta de nuevo.');
   }
 
