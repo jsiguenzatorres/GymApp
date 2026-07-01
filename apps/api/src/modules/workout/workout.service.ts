@@ -242,7 +242,15 @@ export class WorkoutService {
   }
 
   async updateExercise(gymId: string, id: string, dto: Partial<CreateExerciseDto>) {
-    const exercise = await this.prisma.exercise.findFirst({ where: { id, gym_id: gymId } });
+    // Mismo criterio que getExercise: incluye ejercicios globales (gym_id
+    // null, compartidos entre todos los gimnasios — la mayoria de la
+    // biblioteca, importada de wger). Antes esta condicion solo matcheaba
+    // gym_id === gymId, asi que CUALQUIER intento de editar un ejercicio
+    // global fallaba con 'Ejercicio no encontrado' pese a que el frontend
+    // ya permite editarlos (con warning de que el cambio es global).
+    const exercise = await this.prisma.exercise.findFirst({
+      where: { id, OR: [{ gym_id: gymId }, { gym_id: null }] },
+    });
     if (!exercise) throw new NotFoundException('Ejercicio no encontrado');
 
     return this.prisma.exercise.update({
