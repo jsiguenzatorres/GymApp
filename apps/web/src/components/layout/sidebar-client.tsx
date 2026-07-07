@@ -28,6 +28,7 @@ import {
   Megaphone,
   Repeat,
   Webhook,
+  Tag,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -44,6 +45,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/staff', label: 'Staff', icon: UserCog },
   { href: '/membership-types', label: 'Membresías', icon: CreditCard },
   { href: '/payments', label: 'Pagos', icon: DollarSign },
+  { href: '/coupons', label: 'Cupones', icon: Tag },
   { href: '/workouts', label: 'Entrenamiento', icon: Dumbbell },
   { href: '/workouts/zeus', label: 'ZEUS Coach IA', icon: Zap },
   { href: '/marketplace', label: 'Marketplace', icon: ShoppingBag },

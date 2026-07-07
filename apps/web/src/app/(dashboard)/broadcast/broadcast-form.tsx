@@ -20,6 +20,7 @@ export function BroadcastForm({
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [segment, setSegment] = useState<Segment>('all_active');
+  const [sendWhatsapp, setSendWhatsapp] = useState(false);
   const [pending, startTransition] = useTransition();
   const [result, setResult] = useState<null | {
     ok: boolean;
@@ -34,6 +35,7 @@ export function BroadcastForm({
       fd.set('title', title);
       fd.set('body', body);
       fd.set('segment', segment);
+      fd.set('sendWhatsapp', sendWhatsapp ? 'true' : 'false');
       const res = await sendAction(fd);
       setResult(res);
       if (res.ok) {
@@ -97,6 +99,15 @@ export function BroadcastForm({
           />
           <p className="mt-1 text-xs text-gray-400">{body.length}/300</p>
         </div>
+
+        <label className="flex items-center gap-2 text-xs text-gray-600">
+          <input
+            type="checkbox"
+            checked={sendWhatsapp}
+            onChange={(e) => setSendWhatsapp(e.target.checked)}
+          />
+          Enviar también por WhatsApp a miembros con teléfono registrado
+        </label>
 
         {/* Preview push */}
         {(title || body) && (

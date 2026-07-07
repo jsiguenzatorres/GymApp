@@ -1,7 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { Prisma, UserRole } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import { FcmService } from './fcm.service';
+import { WhatsAppService } from '../whatsapp/whatsapp.service';
 
 interface CreateNotifDto {
   gymId: string;
@@ -11,13 +12,21 @@ interface CreateNotifDto {
   body: string;
   data?: Record<string, unknown>;
   channel?: string;
+  // Envío WhatsApp opcional (recordatorios/cobros/anuncios) — requiere el
+  // teléfono del miembro y una plantilla pre-aprobada en Meta Business Manager
+  // (el texto libre solo funciona dentro de la ventana de 24h de servicio).
+  phone?: string | null;
+  whatsapp?: { templateName: string; languageCode?: string; components?: unknown[] };
 }
 
 @Injectable()
 export class NotificationService {
+  private readonly logger = new Logger(NotificationService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly fcm: FcmService,
+    private readonly whatsapp: WhatsAppService,
   ) {}
 
   // ─── CREAR ────────────────────────────────────────────────────────────────
@@ -45,6 +54,24 @@ export class NotificationService {
       .catch(() => {
         // los tokens inválidos los limpia FcmService internamente
       });
+
+    if (dto.whatsapp && dto.phone) {
+      this.whatsapp
+        .sendTemplateMessage(
+          dto.phone,
+          dto.whatsapp.templateName,
+          dto.whatsapp.languageCode ?? 'es',
+          dto.whatsapp.components,
+        )
+        .then((result) => {
+          if (!result.success) {
+            this.logger.warn(
+              `WhatsApp send failed (${dto.whatsapp?.templateName}): ${result.error}`,
+            );
+          }
+        })
+        .catch((err) => this.logger.error(`WhatsApp send error: ${(err as Error).message}`));
+    }
 
     return notification;
   }
@@ -119,6 +146,8 @@ export class NotificationService {
       body: string;
       segment?: 'all_active' | 'all' | 'tier_pro' | 'tier_elite' | 'at_risk';
       type?: string;
+      // Anuncio también por WhatsApp (plantilla pre-aprobada) para miembros con teléfono.
+      whatsappTemplate?: { templateName: string; languageCode?: string; components?: unknown[] };
     },
   ): Promise<{ recipients: number }> {
     let memberWhere: Record<string, unknown> = { gym_id: gymId };
@@ -142,7 +171,7 @@ export class NotificationService {
 
     const members = await this.prisma.member.findMany({
       where: memberWhere,
-      select: { user_id: true },
+      select: { user_id: true, phone: true },
     });
 
     if (members.length === 0) return { recipients: 0 };
@@ -168,6 +197,17 @@ export class NotificationService {
       this.fcm
         .sendToUser(m.user_id, { title: dto.title, body: dto.body }, { type, gymId })
         .catch(() => null);
+    }
+
+    // 3) Disparar WhatsApp fire-and-forget para miembros con teléfono (anuncio masivo)
+    if (dto.whatsappTemplate) {
+      const { templateName, languageCode, components } = dto.whatsappTemplate;
+      for (const m of members) {
+        if (!m.phone) continue;
+        this.whatsapp
+          .sendTemplateMessage(m.phone, templateName, languageCode ?? 'es', components)
+          .catch((err) => this.logger.error(`WhatsApp broadcast error: ${(err as Error).message}`));
+      }
     }
 
     return { recipients: members.length };

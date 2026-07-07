@@ -12,6 +12,7 @@ export default [
       '**/.expo/**',
       '**/coverage/**',
       '**/*.generated.ts',
+      '**/next-env.d.ts',
     ],
   },
   {

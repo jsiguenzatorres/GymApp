@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Salad, Search } from 'lucide-react';
+import { ArrowLeft, Salad, Search, Calculator, Loader2 } from 'lucide-react';
+import CopilotChat from './_components/CopilotChat';
 
 interface Member {
   id: string;
@@ -11,11 +12,70 @@ interface Member {
   last_name: string;
 }
 
+interface TmbTdeeResult {
+  tmb_kcal: number;
+  tmb_formula_used: string;
+  tdee_kcal: number;
+  factor_actividad: number;
+  declared_activity_level: string;
+  suggested_activity_level: string | null;
+  activity_note: string | null;
+  suggested: { kcal_target: number; protein_g: number; carbs_g: number; fat_g: number };
+  warnings: string[];
+}
+
 const GOALS = [
   { value: 'WEIGHT_LOSS', label: 'Pérdida de peso', desc: 'Déficit calórico controlado' },
   { value: 'MUSCLE_GAIN', label: 'Ganancia muscular', desc: 'Superávit con proteína alta' },
   { value: 'MAINTENANCE', label: 'Mantenimiento', desc: 'Macros equilibrados' },
   { value: 'PERFORMANCE', label: 'Rendimiento', desc: 'Optimización para entrenamiento' },
+];
+
+// Plantillas de plan base (D-28) — distribución % de macros, punto de partida
+// que el nutricionista personaliza, no un plan final.
+const TEMPLATES = [
+  {
+    key: 'deficit_alta_proteina',
+    label: 'Déficit Alta Proteína',
+    goal: 'WEIGHT_LOSS',
+    pct: { protein: 35, fat: 30, carbs: 35 },
+    desc: 'Pérdida de grasa preservando masa muscular',
+  },
+  {
+    key: 'superavit_limpio',
+    label: 'Superávit Limpio',
+    goal: 'MUSCLE_GAIN',
+    pct: { protein: 30, fat: 25, carbs: 45 },
+    desc: 'Ganancia muscular con mínima ganancia de grasa',
+  },
+  {
+    key: 'recomposicion',
+    label: 'Recomposición',
+    goal: 'MAINTENANCE',
+    pct: { protein: 30, fat: 30, carbs: 40 },
+    desc: 'Perder grasa y ganar músculo simultáneamente',
+  },
+  {
+    key: 'mantenimiento',
+    label: 'Mantenimiento Saludable',
+    goal: 'MAINTENANCE',
+    pct: { protein: 25, fat: 30, carbs: 45 },
+    desc: 'Sin objetivo de cambio de peso, solo bienestar',
+  },
+  {
+    key: 'rendimiento',
+    label: 'Rendimiento Deportivo',
+    goal: 'PERFORMANCE',
+    pct: { protein: 25, fat: 20, carbs: 55 },
+    desc: 'Mayor carbohidrato total, timing peri-entreno',
+  },
+  {
+    key: 'vegano_alto_rendimiento',
+    label: 'Vegano Alto Rendimiento',
+    goal: 'MUSCLE_GAIN',
+    pct: { protein: 35, fat: 20, carbs: 45 },
+    desc: 'Proteína alta por menor biodisponibilidad vegetal',
+  },
 ];
 
 function inputCls(extra = '') {
@@ -42,6 +102,10 @@ export default function NewPlanPage() {
     notes: '',
   });
 
+  const [tmbTdee, setTmbTdee] = useState<TmbTdeeResult | null>(null);
+  const [calculating, setCalculating] = useState(false);
+  const [calcError, setCalcError] = useState<string | null>(null);
+
   useEffect(() => {
     if (memberSearch.length < 2) {
       setMembers([]);
@@ -62,6 +126,72 @@ export default function NewPlanPage() {
   function set(field: string, value: string) {
     setForm((p) => ({ ...p, [field]: value }));
     setError(null);
+  }
+
+  function applyTemplate(t: (typeof TEMPLATES)[number]) {
+    const kcal = parseInt(form.kcal_target) || 2000;
+    const protein_g = Math.round((kcal * t.pct.protein) / 100 / 4);
+    const fat_g = Math.round((kcal * t.pct.fat) / 100 / 9);
+    const carbs_g = Math.round((kcal * t.pct.carbs) / 100 / 4);
+    setForm((p) => ({
+      ...p,
+      goal: t.goal,
+      protein_g: String(protein_g),
+      carbs_g: String(carbs_g),
+      fat_g: String(fat_g),
+      notes: p.notes || t.desc,
+    }));
+    setTmbTdee(null);
+  }
+
+  function applyCopilotPlan(
+    plan: { goal: string; kcal_target: number; protein_g: number; carbs_g: number; fat_g: number },
+    sampleDay: { meal_type: string; description: string }[] | null,
+  ) {
+    const notesFromSample = sampleDay?.length
+      ? sampleDay.map((m) => `${m.meal_type}: ${m.description}`).join(' · ')
+      : '';
+    setForm((p) => ({
+      ...p,
+      goal: plan.goal,
+      kcal_target: String(plan.kcal_target),
+      protein_g: String(plan.protein_g),
+      carbs_g: String(plan.carbs_g),
+      fat_g: String(plan.fat_g),
+      notes: p.notes || notesFromSample,
+    }));
+    setTmbTdee(null);
+  }
+
+  async function calculateTmbTdee() {
+    if (!selectedMember) return;
+    setCalculating(true);
+    setCalcError(null);
+    try {
+      const res = await fetch('/api/proxy/nutrition/calculate-tmb-tdee', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ memberId: selectedMember.id, goal: form.goal }),
+      });
+      if (!res.ok) {
+        const d = (await res.json().catch(() => ({}))) as { message?: string | string[] };
+        setCalcError(Array.isArray(d.message) ? d.message.join(', ') : (d.message ?? 'Error'));
+        return;
+      }
+      const result = (await res.json()) as TmbTdeeResult;
+      setTmbTdee(result);
+      setForm((p) => ({
+        ...p,
+        kcal_target: String(result.suggested.kcal_target),
+        protein_g: String(result.suggested.protein_g),
+        carbs_g: String(result.suggested.carbs_g),
+        fat_g: String(result.suggested.fat_g),
+      }));
+    } catch {
+      setCalcError('Error de red');
+    } finally {
+      setCalculating(false);
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -89,6 +219,14 @@ export default function NewPlanPage() {
           carbs_g: parseInt(form.carbs_g),
           fat_g: parseInt(form.fat_g),
           notes: form.notes || undefined,
+          ...(tmbTdee
+            ? {
+                tmb_kcal: tmbTdee.tmb_kcal,
+                tmb_formula_used: tmbTdee.tmb_formula_used,
+                tdee_kcal: tmbTdee.tdee_kcal,
+                factor_actividad: tmbTdee.factor_actividad,
+              }
+            : {}),
         }),
       });
 
@@ -136,7 +274,10 @@ export default function NewPlanPage() {
               </span>
               <button
                 type="button"
-                onClick={() => setSelectedMember(null)}
+                onClick={() => {
+                  setSelectedMember(null);
+                  setTmbTdee(null);
+                }}
                 className="text-xs text-violet-500 hover:text-violet-800"
               >
                 Cambiar
@@ -163,6 +304,7 @@ export default function NewPlanPage() {
                         setSelectedMember(m);
                         setShowDrop(false);
                         setMemberSearch('');
+                        setTmbTdee(null);
                       }}
                       className="cursor-pointer px-4 py-2.5 text-sm hover:bg-violet-50"
                     >
@@ -174,6 +316,10 @@ export default function NewPlanPage() {
             </div>
           )}
         </div>
+
+        {selectedMember && (
+          <CopilotChat memberId={selectedMember.id} onUsePlan={applyCopilotPlan} />
+        )}
 
         {/* Info del plan */}
         <div className="rounded-xl border bg-white p-5 shadow-sm space-y-4">
@@ -188,6 +334,31 @@ export default function NewPlanPage() {
               placeholder="Ej: Plan pérdida de peso - Fase 1"
               className={inputCls()}
             />
+          </div>
+
+          {/* Plantillas de plan base (D-28) */}
+          <div>
+            <label className="text-xs font-medium text-gray-600 mb-2 block">
+              Plantilla de plan (opcional — punto de partida)
+            </label>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {TEMPLATES.map((t) => (
+                <button
+                  key={t.key}
+                  type="button"
+                  onClick={() => applyTemplate(t)}
+                  title={t.desc}
+                  className="shrink-0 rounded-lg border border-gray-200 px-3 py-2 text-left hover:border-violet-300 hover:bg-violet-50"
+                >
+                  <p className="text-[11px] font-semibold text-gray-800 whitespace-nowrap">
+                    {t.label}
+                  </p>
+                  <p className="text-[10px] text-gray-400">
+                    P{t.pct.protein}/G{t.pct.fat}/C{t.pct.carbs}
+                  </p>
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Goal grid */}
@@ -210,9 +381,47 @@ export default function NewPlanPage() {
 
           {/* Macros */}
           <div>
-            <label className="text-xs font-medium text-gray-600 mb-2 block">
-              Objetivos de macros
-            </label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs font-medium text-gray-600 block">Objetivos de macros</label>
+              <button
+                type="button"
+                onClick={calculateTmbTdee}
+                disabled={!selectedMember || calculating}
+                className="inline-flex items-center gap-1 rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1 text-[11px] font-medium text-violet-700 hover:bg-violet-100 disabled:opacity-40"
+              >
+                {calculating ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Calculator className="h-3 w-3" />
+                )}
+                Calcular con TMB/TDEE
+              </button>
+            </div>
+
+            {calcError && (
+              <p className="mb-2 rounded-lg bg-red-50 border border-red-200 px-3 py-1.5 text-[11px] text-red-600">
+                {calcError}
+              </p>
+            )}
+
+            {tmbTdee && (
+              <div className="mb-2 rounded-lg bg-blue-50 border border-blue-100 px-3 py-2 text-[11px] text-blue-800 space-y-1">
+                <p>
+                  TMB: <strong>{tmbTdee.tmb_kcal} kcal</strong> ({tmbTdee.tmb_formula_used}) · TDEE:{' '}
+                  <strong>{tmbTdee.tdee_kcal} kcal</strong> (factor {tmbTdee.factor_actividad})
+                </p>
+                {tmbTdee.activity_note && <p className="text-blue-600">{tmbTdee.activity_note}</p>}
+                {tmbTdee.warnings.map((w, i) => (
+                  <p key={i} className="text-amber-700">
+                    ⚠️ {w}
+                  </p>
+                ))}
+                <p className="text-blue-500">
+                  Macros prellenadas — puedes ajustarlas manualmente antes de guardar.
+                </p>
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <label className="text-[10px] text-gray-500">Calorías objetivo (kcal)</label>

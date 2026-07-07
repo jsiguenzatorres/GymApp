@@ -22,6 +22,7 @@ import {
   DiaryDay,
   AddonTier,
   FoodItem,
+  TodayMacros,
 } from '@/lib/api-client';
 
 const GOAL_LABEL: Record<string, string> = {
@@ -97,6 +98,7 @@ export default function NutritionScreen() {
   const [plan, setPlan] = useState<NutritionPlan | null>(null);
   const [memberId, setMemberId] = useState<string | null>(null);
   const [diary, setDiary] = useState<DiaryDay | null>(null);
+  const [todayMacros, setTodayMacros] = useState<TodayMacros | null>(null);
   const [loading, setLoading] = useState(true);
   const [tier, setTier] = useState<AddonTier>('BASIC');
   const [aiInput, setAiInput] = useState('');
@@ -132,8 +134,12 @@ export default function NutritionScreen() {
 
       if (active) {
         const today = todayString();
-        const d = await nutritionApi.getDiary(me.id, today, accessToken).catch(() => null);
+        const [d, tm] = await Promise.all([
+          nutritionApi.getDiary(me.id, today, accessToken).catch(() => null),
+          nutritionApi.getTodayMacros(me.id, accessToken).catch(() => null),
+        ]);
         setDiary(d);
+        setTodayMacros(tm);
       }
     } catch {
       // silent
@@ -309,29 +315,38 @@ export default function NutritionScreen() {
                     <Text style={styles.planName}>{plan.name}</Text>
                   </View>
                   <View style={styles.kcalBadge}>
-                    <Text style={styles.kcalNum}>{plan.kcal_target}</Text>
+                    <Text style={styles.kcalNum}>
+                      {todayMacros?.today?.kcal_target ?? plan.kcal_target}
+                    </Text>
                     <Text style={styles.kcalUnit}>kcal</Text>
                   </View>
                 </View>
+                {todayMacros?.has_plan && (
+                  <Text style={styles.nutrientTimingNote}>
+                    {todayMacros.is_training_day
+                      ? '💪 Hoy entrenaste — carbos +12%'
+                      : '😴 Día de descanso — carbos -12%'}
+                  </Text>
+                )}
                 <View style={styles.macros}>
                   {[
                     {
                       label: 'Proteína',
-                      value: plan.protein_g,
+                      value: todayMacros?.today?.protein_g ?? plan.protein_g,
                       unit: 'g',
                       color: '#2563eb',
                       key: 'protein_g' as const,
                     },
                     {
                       label: 'Carbos',
-                      value: plan.carbs_g,
+                      value: todayMacros?.today?.carbs_g ?? plan.carbs_g,
                       unit: 'g',
                       color: '#d97706',
                       key: 'carbs_g' as const,
                     },
                     {
                       label: 'Grasas',
-                      value: plan.fat_g,
+                      value: todayMacros?.today?.fat_g ?? plan.fat_g,
                       unit: 'g',
                       color: '#dc2626',
                       key: 'fat_g' as const,
@@ -1019,6 +1034,7 @@ const styles = StyleSheet.create({
   },
   planGoal: { fontSize: 13, color: '#6b7280', fontWeight: '600' },
   planName: { fontSize: 17, fontWeight: '700', color: '#111827', marginTop: 2 },
+  nutrientTimingNote: { fontSize: 11, color: '#6b7280', marginTop: 6, fontStyle: 'italic' },
   kcalBadge: {
     backgroundColor: '#1d4ed8',
     paddingHorizontal: 14,

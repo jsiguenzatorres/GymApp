@@ -89,6 +89,43 @@ export class MercadoPagoService {
     }
   }
 
+  // ── Reintento de cobro (dunning): cobra directo con una tarjeta ya guardada
+  // (card token de MP), sin checkout — usado por DunningService.
+
+  async chargeSavedCard(params: {
+    cardToken: string;
+    amount: number;
+    payerEmail: string;
+    externalReference: string;
+    description?: string;
+  }): Promise<{ succeeded: boolean; paymentId: string | null; failureMessage?: string }> {
+    if (!this.client)
+      return { succeeded: false, paymentId: null, failureMessage: 'MercadoPago no configurado' };
+
+    try {
+      const paymentClient = new Payment(this.client);
+      const result = await paymentClient.create({
+        body: {
+          transaction_amount: params.amount,
+          token: params.cardToken,
+          description: params.description ?? 'Cobro de membresía',
+          installments: 1,
+          payer: { email: params.payerEmail },
+          external_reference: params.externalReference,
+        },
+      });
+      return {
+        succeeded: result.status === 'approved',
+        paymentId: result.id ? String(result.id) : null,
+        failureMessage:
+          result.status !== 'approved' ? (result.status_detail ?? 'Cobro rechazado') : undefined,
+      };
+    } catch (err) {
+      this.logger.error(`MP chargeSavedCard error: ${(err as Error).message}`);
+      return { succeeded: false, paymentId: null, failureMessage: (err as Error).message };
+    }
+  }
+
   // ── Consultar estado de un pago ───────────────────────────────────────────
 
   async getPaymentStatus(paymentId: string): Promise<{

@@ -129,6 +129,11 @@ model Gym {
   nutrition_plans     NutritionPlan[]
   food_items          FoodItem[]
   food_diary_entries  FoodDiaryEntry[]
+  nutrition_profiles     MemberNutritionProfile[]
+  nutrition_risk_alerts  NutritionRiskAlert[]
+  nutrition_plan_history NutritionPlanHistory[]
+  coupons                Coupon[]
+  lab_results            LabResult[]
   class_types         ClassType[]
   class_sessions      ClassSession[]
   class_enrollments   ClassEnrollment[]
@@ -267,6 +272,9 @@ model Member {
   marketplace_orders MarketplaceOrder[]
   nutrition_plans    NutritionPlan[]
   food_diary_entries FoodDiaryEntry[]
+  nutrition_profile  MemberNutritionProfile?
+  nutrition_risk_alerts NutritionRiskAlert[]
+  lab_results        LabResult[]
   class_enrollments   ClassEnrollment[]
   points_transactions PointsTransaction[]
   member_badges         MemberBadge[]
@@ -353,6 +361,50 @@ model Membership {
   @@index([gym_id, member_id])
   @@index([gym_id, end_date])
   @@map("memberships")
+}
+
+// ─── CUPONES Y DESCUENTOS ─────────────────────────────────────────────────────
+
+model Coupon {
+  id                    String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gym_id                String    @db.Uuid
+  code                  String    @db.VarChar(50)
+  name                  String    @db.VarChar(100)
+  description           String?
+  discount_type         String    @db.VarChar(20) // percentage|fixed
+  discount_value        Decimal   @db.Decimal(10, 2)
+  applies_to_type_ids   String[]  // vacío = aplica a todos los tipos de membresía
+  starts_at             DateTime?
+  expires_at            DateTime?
+  max_uses_total        Int?
+  max_uses_per_member   Int       @default(1)
+  first_time_only       Boolean   @default(false)
+  times_used            Int       @default(0)
+  is_active             Boolean   @default(true)
+  created_at            DateTime  @default(now())
+  updated_at            DateTime  @updatedAt
+
+  gym         Gym               @relation(fields: [gym_id], references: [id], onDelete: Cascade)
+  redemptions CouponRedemption[]
+
+  @@unique([gym_id, code])
+  @@index([gym_id, is_active])
+  @@map("coupons")
+}
+
+model CouponRedemption {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  coupon_id         String   @db.Uuid
+  member_id         String   @db.Uuid
+  membership_id     String?  @db.Uuid
+  discount_applied  Decimal  @db.Decimal(10, 2)
+  redeemed_at       DateTime @default(now())
+
+  coupon Coupon @relation(fields: [coupon_id], references: [id], onDelete: Cascade)
+
+  @@index([coupon_id])
+  @@index([member_id])
+  @@map("coupon_redemptions")
 }
 
 // ─── PAYMENT METHODS (tokens de gateway — NUNCA números de tarjeta) ──────────
@@ -820,16 +872,129 @@ model NutritionPlan {
   fat_g        Int
   notes        String?
   is_active    Boolean  @default(true)
+  // Basis calculada por el motor TMB/TDEE (D-26) — null si el plan se armó a mano
+  tmb_kcal          Decimal? @db.Decimal(7, 2)
+  tmb_formula_used  String?  @db.VarChar(30) // mifflin_st_jeor|katch_mcardle
+  tdee_kcal         Decimal? @db.Decimal(7, 2)
+  factor_actividad  Decimal? @db.Decimal(3, 2)
   created_at   DateTime @default(now())
   updated_at   DateTime @updatedAt
 
   gym             Gym              @relation(fields: [gym_id], references: [id], onDelete: Cascade)
   member          Member           @relation(fields: [member_id], references: [id])
   food_diary_entries FoodDiaryEntry[]
+  history            NutritionPlanHistory[]
 
   @@index([gym_id, member_id])
   @@index([gym_id, is_active])
   @@map("nutrition_plans")
+}
+
+// Perfil nutricional del miembro (D-25) — alergias, dieta, contexto práctico y
+// antecedentes que el motor TMB/TDEE y los guardrails de seguridad (D-23/D-24) usan.
+model MemberNutritionProfile {
+  id                             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gym_id                         String   @db.Uuid
+  member_id                      String   @unique @db.Uuid
+  dieta_base                     String   @default("omnivoro") @db.VarChar(30)
+  alergias                       String[]
+  intolerancias                  String[]
+  restricciones_religiosas       String?  @db.VarChar(30)
+  alimentos_evitar               String[]
+  alimentos_favoritos            String[]
+  presupuesto                    String   @default("medio") @db.VarChar(20)
+  tiempo_cocina                  String?  @db.VarChar(20)
+  // Datos biométricos que Member no tiene y que el motor TMB/TDEE necesita
+  height_cm                      Float?
+  activity_level                 String?  @db.VarChar(20) // sedentario|ligero|moderado|activo|muy_activo
+  condiciones_medicas             String[]
+  requiere_supervision_clinica    Boolean  @default(false)
+  // Salvaguarda TCA (D-24)
+  antecedente_tca_declarado       Boolean  @default(false)
+  tca_clinical_review_completed   Boolean  @default(false)
+  created_at                     DateTime @default(now())
+  updated_at                     DateTime @updatedAt
+
+  gym    Gym    @relation(fields: [gym_id], references: [id], onDelete: Cascade)
+  member Member @relation(fields: [member_id], references: [id], onDelete: Cascade)
+
+  @@index([gym_id])
+  @@map("member_nutrition_profiles")
+}
+
+// Exámenes de laboratorio (D-29) — la IA solo EXTRAE valores, nunca diagnostica.
+// extracted_markers ya incluye out_of_range por marcador; no se duplica en una
+// columna aparte (se deriva filtrando en el servicio) para evitar desincronía.
+// reviewed_by_nutritionist=false hasta que un nutricionista lo revise — este
+// batch no expone ningún endpoint member-facing, así que hoy el gate solo
+// importa para cuando se agregue una vista del miembro (mobile) más adelante.
+model LabResult {
+  id                        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gym_id                    String    @db.Uuid
+  member_id                 String    @db.Uuid
+  uploaded_by               String?   @db.Uuid
+  document_url              String
+  lab_date                  DateTime? @db.Date
+  extracted_markers         Json?
+  ai_note                   String?
+  reviewed_by_nutritionist  Boolean   @default(false)
+  reviewed_by               String?   @db.Uuid
+  reviewed_at               DateTime?
+  nutritionist_notes        String?
+  plan_adjusted_as_result   Boolean   @default(false)
+  created_at                DateTime  @default(now())
+
+  gym    Gym    @relation(fields: [gym_id], references: [id], onDelete: Cascade)
+  member Member @relation(fields: [member_id], references: [id], onDelete: Cascade)
+
+  @@index([gym_id, member_id, created_at(sort: Desc)])
+  @@index([gym_id, reviewed_by_nutritionist])
+  @@map("lab_results")
+}
+
+// Histórico de versiones del plan (D-39) — snapshot de los valores ANTERIORES
+// cada vez que updatePlan cambia nombre/objetivo/macros. No versiona el plan
+// completo (planned_meals, etc.), solo los campos editables desde el detalle.
+model NutritionPlanHistory {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gym_id            String   @db.Uuid
+  nutrition_plan_id String   @db.Uuid
+  name              String   @db.VarChar(200)
+  goal              String   @db.VarChar(30)
+  kcal_target       Int
+  protein_g         Int
+  carbs_g           Int
+  fat_g             Int
+  notes             String?
+  changed_at        DateTime @default(now())
+
+  gym  Gym           @relation(fields: [gym_id], references: [id], onDelete: Cascade)
+  plan NutritionPlan @relation(fields: [nutrition_plan_id], references: [id], onDelete: Cascade)
+
+  @@index([nutrition_plan_id, changed_at(sort: Desc)])
+  @@map("nutrition_plan_history")
+}
+
+// Alertas de patrones de riesgo alimentario (D-23) — nunca visibles al miembro,
+// solo a staff. auto_suggestions_paused se deriva en código de reviewed=false.
+model NutritionRiskAlert {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gym_id             String    @db.Uuid
+  member_id          String    @db.Uuid
+  pattern_detected   String    @db.VarChar(50) // restriccion_extrema|obsesion_registro
+  detection_details  Json
+  reviewed           Boolean   @default(false)
+  reviewed_by        String?   @db.Uuid
+  reviewed_at        DateTime?
+  resolution_notes   String?
+  created_at         DateTime  @default(now())
+
+  gym    Gym    @relation(fields: [gym_id], references: [id], onDelete: Cascade)
+  member Member @relation(fields: [member_id], references: [id], onDelete: Cascade)
+
+  @@index([gym_id, reviewed])
+  @@index([member_id, pattern_detected, created_at(sort: Desc)])
+  @@map("nutrition_risk_alerts")
 }
 
 model FoodItem {

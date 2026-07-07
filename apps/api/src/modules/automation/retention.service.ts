@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Cron } from '@nestjs/schedule';
 import { OnEvent } from '@nestjs/event-emitter';
 import { PrismaService } from '../database/prisma.service';
@@ -9,11 +10,28 @@ const DAY = 86_400_000;
 @Injectable()
 export class RetentionService {
   private readonly logger = new Logger(RetentionService.name);
+  // Plantillas de WhatsApp pre-aprobadas en Meta Business Manager — configurables
+  // por si el nombre real difiere por ambiente.
+  private readonly whatsappRetentionTemplate: string;
+  private readonly whatsappRenewalTemplate: string;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly notification: NotificationService,
-  ) {}
+    private readonly config: ConfigService,
+  ) {
+    this.whatsappRetentionTemplate =
+      this.config.get<string>('WHATSAPP_TEMPLATE_RETENTION') ?? 'retention_reminder';
+    this.whatsappRenewalTemplate =
+      this.config.get<string>('WHATSAPP_TEMPLATE_RENEWAL') ?? 'renewal_reminder';
+  }
+
+  private whatsappBody(firstName: string) {
+    return {
+      templateName: this.whatsappRetentionTemplate,
+      components: [{ type: 'body', parameters: [{ type: 'text', text: firstName }] }],
+    };
+  }
 
   // ─── DAILY CRON — 9am ────────────────────────────────────────────────────────
 
@@ -190,6 +208,8 @@ export class RetentionService {
           body: `${m.first_name}, hace unos días que no te vemos. ¿Todo bien? ¡Ven a entrenar hoy, tu progreso te espera!`,
           data: { workflow: 'WF004', daysSince: m.daysSince },
           channel: 'PUSH',
+          phone: m.phone,
+          whatsapp: this.whatsappBody(m.first_name),
         });
       }
 
@@ -219,6 +239,8 @@ export class RetentionService {
           body: `${m.first_name}, llevas varios días sin entrenar. Retomar ahora evita perder tu progreso. ¡Tu trainer te espera!`,
           data: { workflow: 'WF005', daysSince: m.daysSince },
           channel: 'PUSH',
+          phone: m.phone,
+          whatsapp: this.whatsappBody(m.first_name),
         });
 
         // Create CRM interaction to alert trainer
@@ -267,12 +289,18 @@ export class RetentionService {
             status: { in: ['ACTIVE', 'TRIAL'] },
             risk_score: { gte: 85 },
           },
-          select: { id: true, user_id: true, first_name: true, risk_score: true },
+          select: { id: true, user_id: true, first_name: true, phone: true, risk_score: true },
         }),
       ]);
 
       const memberIds = new Set<string>();
-      const targets: { id: string; user_id: string; first_name: string; reason: string }[] = [];
+      const targets: {
+        id: string;
+        user_id: string;
+        first_name: string;
+        phone: string | null;
+        reason: string;
+      }[] = [];
 
       for (const m of longInactive) {
         if (!memberIds.has(m.id)) {
@@ -281,6 +309,7 @@ export class RetentionService {
             id: m.id,
             user_id: m.user_id,
             first_name: m.first_name,
+            phone: m.phone,
             reason: `${m.daysSince} días sin entrenar`,
           });
         }
@@ -292,6 +321,7 @@ export class RetentionService {
             id: m.id,
             user_id: m.user_id,
             first_name: m.first_name,
+            phone: m.phone,
             reason: `riesgo de cancelación: ${m.risk_score}/100`,
           });
         }
@@ -306,6 +336,8 @@ export class RetentionService {
           body: `${m.first_name}, queremos mantenerte activo en el gym. Agenda una sesión gratuita con tu trainer esta semana. ¡Contáctanos!`,
           data: { workflow: 'WF006', reason: m.reason },
           channel: 'PUSH',
+          phone: m.phone,
+          whatsapp: this.whatsappBody(m.first_name),
         });
 
         await this.prisma.member.update({
@@ -380,7 +412,7 @@ export class RetentionService {
           end_date: { gte: d29, lte: d31 },
         },
         include: {
-          member: { select: { id: true, user_id: true, first_name: true } },
+          member: { select: { id: true, user_id: true, first_name: true, phone: true } },
           type: { select: { name: true } },
         },
       });
@@ -394,6 +426,19 @@ export class RetentionService {
           body: `${ms.member.first_name}, tu membresía "${ms.type.name}" vence en 30 días. ¡Renueva ahora y no pierdas tu progreso!`,
           data: { workflow: 'WF008', membershipId: ms.id },
           channel: 'PUSH',
+          phone: ms.member.phone,
+          whatsapp: {
+            templateName: this.whatsappRenewalTemplate,
+            components: [
+              {
+                type: 'body',
+                parameters: [
+                  { type: 'text', text: ms.member.first_name },
+                  { type: 'text', text: ms.type.name },
+                ],
+              },
+            ],
+          },
         });
 
         await this.prisma.crmInteraction.create({
@@ -426,17 +471,25 @@ export class RetentionService {
     gymId: string,
     from: Date,
     to: Date,
-  ): Promise<{ id: string; user_id: string; first_name: string; daysSince: number }[]> {
+  ): Promise<
+    { id: string; user_id: string; first_name: string; phone: string | null; daysSince: number }[]
+  > {
     const rows = await this.prisma.$queryRaw<
-      { id: string; user_id: string; first_name: string; last_session: Date | null }[]
+      {
+        id: string;
+        user_id: string;
+        first_name: string;
+        phone: string | null;
+        last_session: Date | null;
+      }[]
     >`
-      SELECT m.id, m.user_id, m.first_name,
+      SELECT m.id, m.user_id, m.first_name, m.phone,
              MAX(ws.started_at) AS last_session
       FROM members m
       LEFT JOIN workout_sessions ws ON ws.member_id = m.id AND ws.gym_id = m.gym_id AND ws.finished_at IS NOT NULL
       WHERE m.gym_id = ${gymId}::uuid
         AND m.status IN ('ACTIVE', 'TRIAL')
-      GROUP BY m.id, m.user_id, m.first_name
+      GROUP BY m.id, m.user_id, m.first_name, m.phone
       HAVING MAX(ws.started_at) >= ${from} AND MAX(ws.started_at) < ${to}
          OR (MAX(ws.started_at) IS NULL AND m.created_at < ${to})
     `;
@@ -445,6 +498,7 @@ export class RetentionService {
       id: r.id,
       user_id: r.user_id,
       first_name: r.first_name,
+      phone: r.phone,
       daysSince: r.last_session ? Math.floor((Date.now() - r.last_session.getTime()) / DAY) : 999,
     }));
   }

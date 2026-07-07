@@ -10,6 +10,7 @@ import * as crypto from 'crypto';
 import { PrismaService } from '../database/prisma.service';
 import { EmailService } from '../notifications/email.service';
 import { StorageService } from '../storage/storage.service';
+import { CouponsService } from '../coupons/coupons.service';
 import { CreateMembershipTypeDto, UpdateMembershipTypeDto } from './dto/create-membership-type.dto';
 import { CreateMemberDto, UpdateMemberDto } from './dto/create-member.dto';
 import {
@@ -27,6 +28,7 @@ export class MembersService {
     private readonly prisma: PrismaService,
     private readonly email: EmailService,
     private readonly storage: StorageService,
+    private readonly coupons: CouponsService,
   ) {}
 
   // ─── MEMBERSHIP TYPES ────────────────────────────────────────────────────────
@@ -555,6 +557,22 @@ export class MembersService {
     const membershipStatus = type.is_trial ? 'TRIAL' : 'ACTIVE';
     const memberStatus = type.is_trial ? 'TRIAL' : 'ACTIVE';
 
+    // Cupón (opcional): valida ANTES de crear la membresía — si el cupón no es
+    // válido, falla aquí y no se crea nada a medias.
+    let couponResult: { coupon: { id: string }; discountAmount: number } | null = null;
+    if (dto.couponCode) {
+      couponResult = await this.coupons.validate(
+        gymId,
+        dto.couponCode,
+        dto.typeId,
+        memberId,
+        Number(type.price),
+      );
+    }
+    const pricePaid = couponResult
+      ? Number(type.price) - couponResult.discountAmount
+      : Number(type.price);
+
     const membership = await this.prisma.$transaction(async (tx) => {
       const m = await tx.membership.create({
         data: {
@@ -564,7 +582,7 @@ export class MembersService {
           status: membershipStatus,
           start_date: startDate,
           end_date: endDate,
-          price_paid: type.price,
+          price_paid: pricePaid,
           currency: type.currency,
           notes: dto.notes,
         },
@@ -578,6 +596,15 @@ export class MembersService {
 
       return m;
     });
+
+    if (couponResult) {
+      await this.coupons.redeem(
+        couponResult.coupon.id,
+        memberId,
+        membership.id,
+        couponResult.discountAmount,
+      );
+    }
 
     return membership;
   }

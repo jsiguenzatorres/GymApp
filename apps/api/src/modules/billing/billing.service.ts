@@ -283,6 +283,7 @@ export class BillingService {
             amount: pi.amount / 100,
           },
         });
+        await this.activateSubscriptionIfMatched({ provider: 'stripe', externalId: pi.id });
         break;
       }
 
@@ -346,5 +347,71 @@ export class BillingService {
     });
 
     this.logger.log(`Payment ${payment.id} updated to ${newStatus} via MercadoPago`);
+
+    if (newStatus === 'SUCCEEDED') {
+      await this.activateSubscriptionIfMatched({
+        provider: 'mercadopago',
+        subscriptionId: payment.id,
+      });
+    }
+  }
+
+  // ─── Activación de BillingSubscription (autoservicio del miembro) ────────────
+  // Une el webhook de pago exitoso (Stripe/MP) con la suscripción PENDING creada
+  // en BillingEngineModule.createCheckout — activa la suscripción y genera la
+  // Membership real, sin depender del staff para confirmar manualmente.
+  private async activateSubscriptionIfMatched(matcher: {
+    provider: 'stripe' | 'mercadopago';
+    externalId?: string;
+    subscriptionId?: string;
+  }): Promise<void> {
+    const sub = await this.prisma.billingSubscription.findFirst({
+      where: {
+        provider: matcher.provider,
+        status: 'PENDING',
+        ...(matcher.subscriptionId
+          ? { id: matcher.subscriptionId }
+          : { external_id: matcher.externalId }),
+      },
+    });
+    if (!sub) return;
+
+    const type = await this.prisma.membershipType.findFirst({
+      where: { id: sub.membership_type_id },
+    });
+    if (!type) {
+      this.logger.error(`BillingSubscription ${sub.id}: membership_type_id no encontrado`);
+      return;
+    }
+
+    const startDate = new Date();
+    const endDate = new Date(startDate);
+    endDate.setDate(endDate.getDate() + type.duration_days);
+    const membershipStatus = type.is_trial ? 'TRIAL' : 'ACTIVE';
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.membership.create({
+        data: {
+          gym_id: sub.gym_id,
+          member_id: sub.member_id,
+          type_id: sub.membership_type_id,
+          status: membershipStatus,
+          start_date: startDate,
+          end_date: endDate,
+          price_paid: type.price,
+          currency: type.currency,
+          notes: `Auto-generada por suscripción ${matcher.provider} (checkout de autoservicio)`,
+        },
+      });
+      await tx.member.update({ where: { id: sub.member_id }, data: { status: membershipStatus } });
+      await tx.billingSubscription.update({
+        where: { id: sub.id },
+        data: { status: 'ACTIVE', current_period_start: startDate, current_period_end: endDate },
+      });
+    });
+
+    this.logger.log(
+      `BillingSubscription ${sub.id} activada vía ${matcher.provider} — Membership creada para member ${sub.member_id}`,
+    );
   }
 }

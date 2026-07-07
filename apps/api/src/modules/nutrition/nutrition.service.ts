@@ -1,7 +1,18 @@
-import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import { GeminiService } from '../ai/gemini.service';
-import { CreatePlanDto, CreateFoodItemDto, LogFoodDto } from './dto/nutrition.dto';
+import { StorageService } from '../storage/storage.service';
+import {
+  CreatePlanDto,
+  CreateFoodItemDto,
+  UpdateFoodItemDto,
+  LogFoodDto,
+  UpsertNutritionProfileDto,
+  ReviewRiskAlertDto,
+  UploadLabResultDto,
+  ReviewLabResultDto,
+} from './dto/nutrition.dto';
 
 @Injectable()
 export class NutritionService {
@@ -10,6 +21,7 @@ export class NutritionService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly gemini: GeminiService,
+    private readonly storage: StorageService,
   ) {}
 
   // ─── PLANES ───────────────────────────────────────────────────────────────────
@@ -42,6 +54,21 @@ export class NutritionService {
     });
     if (!member) throw new NotFoundException('Miembro no encontrado');
 
+    // Salvaguarda TCA (D-24): nunca generar un plan restrictivo (déficit) si el
+    // miembro declaró antecedente de TCA y un profesional aún no revisó el caso.
+    if (dto.goal === 'WEIGHT_LOSS') {
+      const profile = await this.prisma.memberNutritionProfile.findFirst({
+        where: { member_id: dto.member_id, gym_id: gymId },
+      });
+      if (profile?.antecedente_tca_declarado && !profile.tca_clinical_review_completed) {
+        throw new ForbiddenException(
+          'Este miembro tiene un antecedente de trastorno de conducta alimentaria declarado. ' +
+            'No se puede crear un plan de pérdida de peso hasta que un profesional revise el caso ' +
+            'en consulta presencial y marque la revisión clínica como completada en su perfil nutricional.',
+        );
+      }
+    }
+
     await this.prisma.nutritionPlan.updateMany({
       where: { gym_id: gymId, member_id: dto.member_id, is_active: true },
       data: { is_active: false },
@@ -54,11 +81,48 @@ export class NutritionService {
   }
 
   async updatePlan(gymId: string, id: string, dto: Partial<CreatePlanDto>) {
-    await this.getPlan(gymId, id);
+    const current = await this.getPlan(gymId, id);
+
+    // Versionado (D-39): snapshot de los valores ANTERIORES si cambia algo editable
+    const editableFields = [
+      'name',
+      'goal',
+      'kcal_target',
+      'protein_g',
+      'carbs_g',
+      'fat_g',
+    ] as const;
+    const changesSomething = editableFields.some(
+      (f) => f in dto && dto[f] !== undefined && dto[f] !== current[f],
+    );
+    if (changesSomething) {
+      await this.prisma.nutritionPlanHistory.create({
+        data: {
+          gym_id: gymId,
+          nutrition_plan_id: id,
+          name: current.name,
+          goal: current.goal,
+          kcal_target: current.kcal_target,
+          protein_g: current.protein_g,
+          carbs_g: current.carbs_g,
+          fat_g: current.fat_g,
+          notes: current.notes,
+        },
+      });
+    }
+
     return this.prisma.nutritionPlan.update({
       where: { id },
       data: dto,
       include: { member: { select: { id: true, first_name: true, last_name: true } } },
+    });
+  }
+
+  async listPlanHistory(gymId: string, planId: string) {
+    await this.getPlan(gymId, planId);
+    return this.prisma.nutritionPlanHistory.findMany({
+      where: { gym_id: gymId, nutrition_plan_id: planId },
+      orderBy: { changed_at: 'desc' },
     });
   }
 
@@ -82,6 +146,214 @@ export class NutritionService {
 
   async createFoodItem(gymId: string, dto: CreateFoodItemDto) {
     return this.prisma.foodItem.create({ data: { gym_id: gymId, ...dto } });
+  }
+
+  // Editar es seguro incluso con historial: logFood copia kcal/macros al momento de
+  // registrar, no los vuelve a leer del FoodItem — editar no reescribe el pasado.
+  // Solo se puede editar/eliminar alimentos propios del gym, nunca los globales
+  // (gym_id=null) que comparten todos los gyms.
+  async updateFoodItem(gymId: string, id: string, dto: UpdateFoodItemDto) {
+    const item = await this.prisma.foodItem.findFirst({ where: { id, gym_id: gymId } });
+    if (!item) {
+      throw new NotFoundException(
+        'Alimento no encontrado o es un alimento global (no editable desde este gym)',
+      );
+    }
+    return this.prisma.foodItem.update({ where: { id }, data: dto });
+  }
+
+  async deleteFoodItem(gymId: string, id: string) {
+    const item = await this.prisma.foodItem.findFirst({ where: { id, gym_id: gymId } });
+    if (!item) {
+      throw new NotFoundException(
+        'Alimento no encontrado o es un alimento global (no eliminable desde este gym)',
+      );
+    }
+    const usedCount = await this.prisma.foodDiaryEntry.count({ where: { food_item_id: id } });
+    if (usedCount > 0) {
+      throw new ForbiddenException(
+        `No se puede eliminar — tiene ${usedCount} registro(s) en diarios de miembros. Edítalo en vez de borrarlo si el dato está mal.`,
+      );
+    }
+    return this.prisma.foodItem.delete({ where: { id } });
+  }
+
+  // ─── PERFIL NUTRICIONAL (D-25) ──────────────────────────────────────────────
+
+  async getNutritionProfile(gymId: string, memberId: string) {
+    return this.prisma.memberNutritionProfile.findFirst({
+      where: { gym_id: gymId, member_id: memberId },
+    });
+  }
+
+  async upsertNutritionProfile(gymId: string, memberId: string, dto: UpsertNutritionProfileDto) {
+    const member = await this.prisma.member.findFirst({ where: { id: memberId, gym_id: gymId } });
+    if (!member) throw new NotFoundException('Miembro no encontrado');
+
+    return this.prisma.memberNutritionProfile.upsert({
+      where: { member_id: memberId },
+      create: { gym_id: gymId, member_id: memberId, ...dto },
+      update: { ...dto },
+    });
+  }
+
+  // ─── MOTOR TMB/TDEE (D-26) ──────────────────────────────────────────────────
+  // Calculadora pura: no crea ni edita el plan, solo devuelve una sugerencia que
+  // el nutricionista revisa y guarda (o ajusta) al crear/editar el plan.
+
+  private static readonly ACTIVITY_FACTORS: Record<string, number> = {
+    sedentario: 1.2,
+    ligero: 1.375,
+    moderado: 1.55,
+    activo: 1.725,
+    muy_activo: 1.9,
+  };
+
+  // Sesiones esperadas en 14 días por nivel declarado, usado solo para sugerir
+  // (nunca sobreescribe) un nivel más realista según asistencia real.
+  private static readonly EXPECTED_SESSIONS_14D: Record<string, [number, number]> = {
+    sedentario: [0, 1],
+    ligero: [1, 6],
+    moderado: [6, 10],
+    activo: [10, 14],
+    muy_activo: [14, 99],
+  };
+
+  async calculateTmbTdee(gymId: string, memberId: string, goal: string) {
+    const [profile, member, latestWeight, latestBodyFat, sessions14d] = await Promise.all([
+      this.prisma.memberNutritionProfile.findFirst({
+        where: { gym_id: gymId, member_id: memberId },
+      }),
+      this.prisma.member.findFirst({ where: { id: memberId, gym_id: gymId } }),
+      this.prisma.healthDataEntry.findFirst({
+        where: { member_id: memberId, kind: 'WEIGHT' },
+        orderBy: { recorded_at: 'desc' },
+      }),
+      this.prisma.healthDataEntry.findFirst({
+        where: {
+          member_id: memberId,
+          kind: 'BODY_FAT_PERCENT',
+          recorded_at: { gte: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000) },
+        },
+        orderBy: { recorded_at: 'desc' },
+      }),
+      this.prisma.workoutSession.count({
+        where: {
+          member_id: memberId,
+          gym_id: gymId,
+          finished_at: { gte: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000), not: null },
+        },
+      }),
+    ]);
+    if (!member) throw new NotFoundException('Miembro no encontrado');
+
+    if (!latestWeight) {
+      throw new ForbiddenException(
+        'Falta registrar el peso del miembro (health data, kind=WEIGHT) antes de poder calcular TMB/TDEE.',
+      );
+    }
+    const heightCm = profile?.height_cm;
+    if (!heightCm) {
+      throw new ForbiddenException(
+        'Falta la altura del miembro en su perfil nutricional antes de poder calcular TMB/TDEE.',
+      );
+    }
+    if (!member.birthdate) {
+      throw new ForbiddenException(
+        'Falta la fecha de nacimiento del miembro para calcular TMB/TDEE.',
+      );
+    }
+
+    const weightKg = Number(latestWeight.value);
+    const ageYears = Math.floor(
+      (Date.now() - member.birthdate.getTime()) / (365.25 * 24 * 60 * 60 * 1000),
+    );
+    const warnings: string[] = [];
+
+    let tmbKcal: number;
+    let formulaUsed: string;
+    if (latestBodyFat) {
+      const bodyFatPct = Number(latestBodyFat.value);
+      const leanMassKg = weightKg * (1 - bodyFatPct / 100);
+      tmbKcal = 370 + 21.6 * leanMassKg;
+      formulaUsed = 'katch_mcardle';
+    } else {
+      const isFemale = member.gender === 'F';
+      tmbKcal = isFemale
+        ? 10 * weightKg + 6.25 * heightCm - 5 * ageYears - 161
+        : 10 * weightKg + 6.25 * heightCm - 5 * ageYears + 5;
+      formulaUsed = 'mifflin_st_jeor';
+      if (member.gender === 'X') {
+        warnings.push(
+          'Sexo biológico no especificado como M/F: se usó la fórmula masculina de Mifflin-St Jeor por defecto.',
+        );
+      }
+    }
+
+    const declaredLevel = profile?.activity_level ?? 'moderado';
+    const factorUsed = NutritionService.ACTIVITY_FACTORS[declaredLevel] ?? 1.55;
+
+    // Cruce con asistencia real (no sobreescribe, solo sugiere)
+    let suggestedLevel: string | null = null;
+    let activityNote: string | null = null;
+    const [minExpected, maxExpected] = NutritionService.EXPECTED_SESSIONS_14D[declaredLevel] ?? [
+      0, 99,
+    ];
+    if (sessions14d < minExpected || sessions14d > maxExpected) {
+      const match = Object.entries(NutritionService.EXPECTED_SESSIONS_14D).find(
+        ([, [lo, hi]]) => sessions14d >= lo && sessions14d <= hi,
+      );
+      if (match && match[0] !== declaredLevel) {
+        suggestedLevel = match[0];
+        activityNote = `El miembro declaró actividad "${declaredLevel}" pero registró ${sessions14d} sesiones en los últimos 14 días, más cercano a "${match[0]}". Puedes ajustar el nivel de actividad en el perfil si aplica.`;
+      }
+    }
+
+    const tdeeKcal = tmbKcal * factorUsed;
+
+    const goalAdjustment: Record<string, number> = {
+      WEIGHT_LOSS: -0.18,
+      MUSCLE_GAIN: 0.15,
+      MAINTENANCE: 0,
+      PERFORMANCE: 0,
+    };
+    let kcalTarget = tdeeKcal * (1 + (goalAdjustment[goal] ?? 0));
+    if (kcalTarget < tmbKcal) {
+      kcalTarget = tmbKcal; // nunca por debajo del TMB (Sección 4.1 del documento)
+      warnings.push('El déficit calculado bajaba del TMB; se ajustó al piso mínimo seguro.');
+    }
+
+    const proteinPerKg: Record<string, number> = {
+      WEIGHT_LOSS: 2.0,
+      MUSCLE_GAIN: 1.9,
+      MAINTENANCE: 1.6,
+      PERFORMANCE: 1.8,
+    };
+    let proteinGPerKg = proteinPerKg[goal] ?? 1.6;
+    if (ageYears > 60) proteinGPerKg += 0.3;
+    const proteinG = proteinGPerKg * weightKg;
+
+    const fatGPerKgFloor = 0.6;
+    const fatG = Math.max(fatGPerKgFloor * weightKg, 0.9 * weightKg);
+
+    const carbsG = Math.max(0, (kcalTarget - proteinG * 4 - fatG * 9) / 4);
+
+    return {
+      tmb_kcal: Math.round(tmbKcal),
+      tmb_formula_used: formulaUsed,
+      tdee_kcal: Math.round(tdeeKcal),
+      factor_actividad: factorUsed,
+      declared_activity_level: declaredLevel,
+      suggested_activity_level: suggestedLevel,
+      activity_note: activityNote,
+      suggested: {
+        kcal_target: Math.round(kcalTarget),
+        protein_g: Math.round(proteinG),
+        carbs_g: Math.round(carbsG),
+        fat_g: Math.round(fatG),
+      },
+      warnings,
+    };
   }
 
   // ─── DIARIO ───────────────────────────────────────────────────────────────────
@@ -179,7 +451,7 @@ export class NutritionService {
     if (!foodItem) throw new NotFoundException('Alimento no encontrado');
 
     const factor = dto.quantity_g / 100;
-    return this.prisma.foodDiaryEntry.create({
+    const entry = await this.prisma.foodDiaryEntry.create({
       data: {
         gym_id: gymId,
         member_id: memberId,
@@ -196,6 +468,56 @@ export class NutritionService {
       },
       include: { food_item: { select: { id: true, name: true } } },
     });
+
+    await this.checkRiskPatterns(gymId, memberId);
+    return entry;
+  }
+
+  // ─── NUTRIENT TIMING (D-27) ─────────────────────────────────────────────────
+  // Adaptado a la arquitectura real: WorkoutPlanDay.day_number es una posición
+  // dentro de un split rotativo (no un día de la semana fijo tipo "Lunes"), así
+  // que no existe un calendario semanal fijo para vincular. En su lugar,
+  // ajustamos los macros de HOY según si el miembro ya entrenó hoy o no —
+  // el mismo principio del documento de diseño (más carbos en día de entreno,
+  // menos en descanso), aplicado de forma reactiva en vez de un JSON semanal fijo.
+  async getTodayAdjustedMacros(gymId: string, memberId: string) {
+    const plan = await this.prisma.nutritionPlan.findFirst({
+      where: { gym_id: gymId, member_id: memberId, is_active: true },
+    });
+    if (!plan) return { has_plan: false as const };
+
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const sessionsToday = await this.prisma.workoutSession.count({
+      where: { gym_id: gymId, member_id: memberId, started_at: { gte: startOfDay } },
+    });
+    const isTrainingDay = sessionsToday > 0;
+
+    const CARB_ADJUST_PCT = 0.12; // dentro del rango 10-15% del documento (Sección 4.2)
+    const carbFactor = isTrainingDay ? 1 + CARB_ADJUST_PCT : 1 - CARB_ADJUST_PCT;
+    const carbsG = Math.round(plan.carbs_g * carbFactor);
+    // Compensar en grasas para mantener el total calórico ~igual (proteína constante)
+    const carbDeltaKcal = (carbsG - plan.carbs_g) * 4;
+    const fatG = Math.max(0, Math.round(plan.fat_g - carbDeltaKcal / 9));
+    const kcal = plan.protein_g * 4 + carbsG * 4 + fatG * 9;
+
+    return {
+      has_plan: true as const,
+      is_training_day: isTrainingDay,
+      base: {
+        kcal_target: plan.kcal_target,
+        protein_g: plan.protein_g,
+        carbs_g: plan.carbs_g,
+        fat_g: plan.fat_g,
+      },
+      today: {
+        kcal_target: Math.round(kcal),
+        protein_g: plan.protein_g,
+        carbs_g: carbsG,
+        fat_g: fatG,
+      },
+    };
   }
 
   // ─── ANÁLISIS ADAPTATIVO IA: revisa progreso real vs plan y sugiere ajustes
@@ -287,6 +609,18 @@ Responde EXCLUSIVAMENTE con JSON válido:
         .replace(/```\s*$/i, '')
         .trim();
       const parsed = JSON.parse(cleaned);
+
+      // Salvaguarda TCA (D-23): con alerta activa, nunca sugerir más déficit
+      const riskAlertActive = await this.hasActiveRiskAlert(memberId);
+      if (riskAlertActive && parsed?.adjustments) {
+        if ((parsed.adjustments.target_kcal_delta ?? 0) < 0) {
+          parsed.adjustments.target_kcal_delta = 0;
+          parsed.adjustments.rationale =
+            'Ajuste de calorías pausado: hay una alerta de seguimiento nutricional activa para este ' +
+            'miembro, pendiente de revisión. No se sugieren reducciones adicionales hasta entonces.';
+        }
+      }
+
       return {
         success: true,
         plan_id: plan.id,
@@ -303,6 +637,7 @@ Responde EXCLUSIVAMENTE con JSON válido:
           avg_kcal: avgKcal,
         },
         analysis: parsed,
+        risk_alert_active: riskAlertActive,
         generated_at: new Date().toISOString(),
       };
     } catch (err) {
@@ -323,6 +658,13 @@ Responde EXCLUSIVAMENTE con JSON válido:
       where: { gym_id: gymId, member_id: memberId, is_active: true },
     });
     if (!plan) throw new NotFoundException('No tienes un plan activo');
+
+    if ((deltas.target_kcal_delta ?? 0) < 0 && (await this.hasActiveRiskAlert(memberId))) {
+      throw new ForbiddenException(
+        'Hay una alerta de seguimiento nutricional activa para este miembro. No se pueden aplicar ' +
+          'reducciones de calorías hasta que el nutricionista revise la alerta.',
+      );
+    }
 
     const newKcal = Math.max(800, plan.kcal_target + (deltas.target_kcal_delta ?? 0));
     const newProtein = Math.max(20, plan.protein_g + (deltas.target_protein_g_delta ?? 0));
@@ -493,6 +835,10 @@ Si no puedes entender el mensaje, devuelve { "items": [], "note": "explicación"
           kcal: Math.round(food.kcal_per_100g * factor),
           matched: true,
         });
+      }
+
+      if (registered.some((r) => r.matched)) {
+        await this.checkRiskPatterns(gymId, memberId);
       }
 
       return {
@@ -675,6 +1021,101 @@ Responde EXCLUSIVAMENTE con JSON válido:
     return this.prisma.foodDiaryEntry.delete({ where: { id: entryId } });
   }
 
+  // ─── SALVAGUARDAS TCA (D-23) ────────────────────────────────────────────────
+  // Heurística v1, intencionalmente simple: dos señales del documento de diseño
+  // (Sección 13.4) que se pueden calcular hoy con los datos que ya tenemos.
+  // Nunca diagnostica — solo alerta internamente a staff y pausa sugerencias de
+  // más déficit mientras la alerta siga sin revisar.
+
+  private async checkRiskPatterns(gymId: string, memberId: string): Promise<void> {
+    try {
+      const range = await this.getDiaryRange(gymId, memberId, 7);
+      if (range.days_with_logs === 0) return;
+
+      const totalEntries = range.daily.reduce((acc, d) => acc + d.entries, 0);
+      const avgEntriesPerLoggedDay = totalEntries / range.days_with_logs;
+
+      if (range.avg_kcal > 0 && range.avg_kcal < 1200) {
+        await this.raiseRiskAlert(gymId, memberId, 'restriccion_extrema', {
+          avg_kcal: range.avg_kcal,
+          days_with_logs: range.days_with_logs,
+        });
+      }
+
+      if (avgEntriesPerLoggedDay >= 7) {
+        await this.raiseRiskAlert(gymId, memberId, 'obsesion_registro', {
+          avg_entries_per_day: Number(avgEntriesPerLoggedDay.toFixed(1)),
+          days_with_logs: range.days_with_logs,
+        });
+      }
+    } catch (err) {
+      // Nunca debe romper el flujo de registro de comida por un error del chequeo de riesgo
+      this.logger.error(`checkRiskPatterns failed: ${(err as Error).message}`);
+    }
+  }
+
+  private async raiseRiskAlert(
+    gymId: string,
+    memberId: string,
+    pattern: string,
+    details: Record<string, unknown>,
+  ): Promise<void> {
+    const since7d = new Date();
+    since7d.setDate(since7d.getDate() - 7);
+
+    const existing = await this.prisma.nutritionRiskAlert.findFirst({
+      where: {
+        gym_id: gymId,
+        member_id: memberId,
+        pattern_detected: pattern,
+        reviewed: false,
+        created_at: { gte: since7d },
+      },
+    });
+    if (existing) return; // ya hay una alerta activa del mismo patrón, no duplicar
+
+    await this.prisma.nutritionRiskAlert.create({
+      data: {
+        gym_id: gymId,
+        member_id: memberId,
+        pattern_detected: pattern,
+        detection_details: details as Prisma.InputJsonValue,
+      },
+    });
+    this.logger.warn(`Alerta de riesgo nutricional creada: ${pattern} (member ${memberId})`);
+  }
+
+  private async hasActiveRiskAlert(memberId: string): Promise<boolean> {
+    const count = await this.prisma.nutritionRiskAlert.count({
+      where: { member_id: memberId, reviewed: false },
+    });
+    return count > 0;
+  }
+
+  async listRiskAlerts(gymId: string) {
+    return this.prisma.nutritionRiskAlert.findMany({
+      where: { gym_id: gymId, reviewed: false },
+      include: { member: { select: { id: true, first_name: true, last_name: true } } },
+      orderBy: { created_at: 'desc' },
+    });
+  }
+
+  async reviewRiskAlert(gymId: string, alertId: string, dto: ReviewRiskAlertDto) {
+    const alert = await this.prisma.nutritionRiskAlert.findFirst({
+      where: { id: alertId, gym_id: gymId },
+    });
+    if (!alert) throw new NotFoundException('Alerta no encontrada');
+
+    return this.prisma.nutritionRiskAlert.update({
+      where: { id: alertId },
+      data: {
+        reviewed: true,
+        reviewed_at: new Date(),
+        resolution_notes: dto.resolution_notes,
+      },
+    });
+  }
+
   // ─── STATS ────────────────────────────────────────────────────────────────────
 
   async getNutritionStats(gymId: string) {
@@ -688,11 +1129,97 @@ Responde EXCLUSIVAMENTE con JSON válido:
     return { totalPlans, activePlans, totalEntriesToday };
   }
 
+  // ─── CO-PILOTO CONVERSACIONAL DEL NUTRICIONISTA (D-37) ─────────────────────
+  // Análogo al Co-Piloto del Workout Builder: el nutricionista describe el plan
+  // deseado en lenguaje natural, la IA propone macros + un día de ejemplo, y el
+  // nutricionista itera por chat antes de usarlo para crear el plan real.
+  async copilotChat(
+    gymId: string,
+    memberId: string,
+    message: string,
+    history: { role: 'user' | 'model'; parts: { text: string }[] }[] = [],
+  ) {
+    const [member, profile, activePlan] = await Promise.all([
+      this.prisma.member.findFirst({ where: { id: memberId, gym_id: gymId } }),
+      this.prisma.memberNutritionProfile.findFirst({
+        where: { gym_id: gymId, member_id: memberId },
+      }),
+      this.prisma.nutritionPlan.findFirst({
+        where: { gym_id: gymId, member_id: memberId, is_active: true },
+      }),
+    ]);
+    if (!member) throw new NotFoundException('Miembro no encontrado');
+
+    const profileContext = profile
+      ? `
+PERFIL NUTRICIONAL DEL MIEMBRO:
+- Dieta base: ${profile.dieta_base}
+- Alergias: ${profile.alergias.join(', ') || 'ninguna declarada'}
+- Intolerancias: ${profile.intolerancias.join(', ') || 'ninguna'}
+- Alimentos a evitar: ${profile.alimentos_evitar.join(', ') || 'ninguno'}
+- Alimentos favoritos: ${profile.alimentos_favoritos.join(', ') || 'sin datos'}
+- Presupuesto: ${profile.presupuesto}
+- Tiempo disponible para cocinar: ${profile.tiempo_cocina ?? 'sin datos'}
+- Condiciones médicas relevantes: ${profile.condiciones_medicas.join(', ') || 'ninguna'}`
+      : '\nEl miembro aún no tiene perfil nutricional completo — pregunta por restricciones si no las mencionan.';
+
+    const riskAlertActive = await this.hasActiveRiskAlert(memberId);
+    const safetyNote = riskAlertActive
+      ? '\n⚠️ Este miembro tiene una alerta de seguimiento nutricional activa — NO propongas un plan con déficit calórico ni restrictivo. Sugiere mantenimiento y deriva a revisión profesional presencial.'
+      : profile?.antecedente_tca_declarado && !profile.tca_clinical_review_completed
+        ? '\n⚠️ Este miembro declaró antecedente de TCA sin revisión clínica completada — NO propongas un plan de déficit calórico. Solo mantenimiento, y recomienda consulta presencial antes de cualquier plan de pérdida de peso.'
+        : '';
+
+    const systemPrompt = `Eres el Co-Piloto de Planes Nutricionales de GymApp, una herramienta para que el nutricionista humano (nunca el miembro directamente) construya planes rápido con ayuda de IA.
+
+MIEMBRO: ${member.first_name} ${member.last_name}
+${profileContext}
+${activePlan ? `\nPLAN ACTUAL: ${activePlan.name} — ${activePlan.kcal_target} kcal (P${activePlan.protein_g}/C${activePlan.carbs_g}/G${activePlan.fat_g})` : '\nSin plan activo actualmente.'}
+${safetyNote}
+
+INSTRUCCIONES:
+- Hablas con el NUTRICIONISTA, no con el miembro — puedes ser técnico.
+- Cuando el nutricionista pida un plan, propone macros concretos Y un día de ejemplo con comidas típicas de El Salvador/LATAM, prácticas y accesibles.
+- Respeta SIEMPRE las alergias, intolerancias y restricciones del perfil — nunca las ignores.
+- Si el nutricionista pide ajustes ("cambia la cena", "más proteína"), ajusta manteniendo el resto.
+- Nunca generes un plan con déficit calórico si hay una alerta de seguridad activa (ver arriba).
+
+Responde EXCLUSIVAMENTE con JSON válido en este formato exacto:
+{
+  "message": "tu respuesta conversacional al nutricionista (explica lo que propones, máximo 4 líneas)",
+  "plan_summary": { "goal": "WEIGHT_LOSS"|"MUSCLE_GAIN"|"MAINTENANCE"|"PERFORMANCE", "kcal_target": NN, "protein_g": NN, "carbs_g": NN, "fat_g": NN } | null,
+  "sample_day": [
+    { "meal_type": "BREAKFAST"|"LUNCH"|"DINNER"|"SNACK", "description": "...", "kcal": NN, "protein_g": NN, "carbs_g": NN, "fat_g": NN }
+  ] | null
+}
+
+Usa "plan_summary": null y "sample_day": null SOLO si todavía estás haciendo preguntas de aclaración y aún no tienes suficiente información para proponer números.`;
+
+    try {
+      const raw = await this.gemini.chat(systemPrompt, message, history);
+      const cleaned = raw
+        .replace(/^```json\s*/i, '')
+        .replace(/```\s*$/i, '')
+        .trim();
+      const parsed = JSON.parse(cleaned);
+      return { success: true, ...parsed };
+    } catch (err) {
+      this.logger.error(`Copilot chat failed: ${(err as Error).message}`);
+      return {
+        success: false,
+        message: 'El co-piloto no está disponible ahora. Intenta de nuevo en unos minutos.',
+        plan_summary: null,
+        sample_day: null,
+      };
+    }
+  }
+
   // ─── IA: SUGERENCIA DE COMIDAS ────────────────────────────────────────────────
 
   async aiSuggest(gymId: string, planId?: string, memberId?: string, context?: string) {
     let planContext = '';
     let memberName = 'el miembro';
+    let riskAlertActive = false;
 
     if (planId) {
       const plan = await this.prisma.nutritionPlan.findFirst({
@@ -700,6 +1227,7 @@ Responde EXCLUSIVAMENTE con JSON válido:
         include: { member: { select: { first_name: true, last_name: true } } },
       });
       if (plan) {
+        riskAlertActive = await this.hasActiveRiskAlert(plan.member_id);
         memberName = `${plan.member.first_name} ${plan.member.last_name}`;
         planContext = `
 PLAN ACTIVO:
@@ -722,9 +1250,19 @@ Alimentos registrados hoy: ${diary.entries.map((e) => e.food_item.name).join(', 
       }
     }
 
+    const safetyInstruction = riskAlertActive
+      ? `
+⚠️ ALERTA DE SEGUIMIENTO ACTIVA para este miembro (patrón de riesgo alimentario detectado,
+pendiente de revisión por el nutricionista humano). NO sugieras reducir calorías, saltarse
+comidas, ni ningún enfoque restrictivo. Enfócate en bienestar general, variedad y comidas
+completas. Si el miembro pregunta por reducir más su ingesta, indícale amablemente que hable
+primero con su nutricionista.`
+      : '';
+
     const systemPrompt = `Eres un nutricionista deportivo experto especializado en nutrición para atletas de gimnasio en Latinoamérica.
 Eres parte de GymApp, una plataforma de gestión de gimnasios.
 ${planContext}
+${safetyInstruction}
 
 INSTRUCCIONES:
 - Responde SIEMPRE en español
@@ -752,5 +1290,106 @@ INSTRUCCIONES:
         error: true,
       };
     }
+  }
+
+  // ─── ANÁLISIS DE LABORATORIO (D-29) ─────────────────────────────────────────
+  // La IA solo EXTRAE y señala valores fuera de rango — nunca diagnostica ni
+  // interpreta clínicamente. reviewed_by_nutritionist queda en false hasta que
+  // un nutricionista lo revise; hoy no hay ningún endpoint member-facing en
+  // este módulo, así que el miembro no ve nada de esto en ninguna circunstancia
+  // todavía — el gate importa quando se agregue una vista propia (mobile).
+
+  async uploadLabResult(gymId: string, staffId: string | undefined, dto: UploadLabResultDto) {
+    const member = await this.prisma.member.findFirst({
+      where: { id: dto.memberId, gym_id: gymId },
+    });
+    if (!member) throw new NotFoundException('Miembro no encontrado');
+
+    const { url } = await this.storage.uploadDocument(
+      'lab-results',
+      `${gymId}/${dto.memberId}`,
+      dto.document,
+    );
+
+    const m = /^data:(image\/(?:jpeg|png|webp)|application\/pdf);base64,(.+)$/i.exec(
+      dto.document.trim(),
+    );
+    const mimeType = m?.[1].toLowerCase() ?? 'image/jpeg';
+    const base64 = m?.[2] ?? '';
+
+    const prompt = `Eres un asistente que EXTRAE valores de un examen de laboratorio a partir de una foto o PDF.
+NUNCA diagnostiques ni interpretes clínicamente el resultado — solo extrae los marcadores visibles y
+señala si están fuera del rango de referencia QUE APARECE IMPRESO EN EL DOCUMENTO (no un rango genérico
+que tú conozcas). Si el documento no trae rango de referencia para un marcador, no marques out_of_range.
+
+Responde EXCLUSIVAMENTE con JSON válido:
+{
+  "markers": [
+    { "name": "Glucosa en ayunas", "value": "88", "unit": "mg/dL", "reference_range": "70-100", "out_of_range": false }
+  ],
+  "note": "comentario breve (max 150 caracteres) sobre la calidad/legibilidad de la foto"
+}
+Si no puedes leer el documento, devuelve { "markers": [], "note": "explicación" }.`;
+
+    let markers: unknown[] = [];
+    let note = '';
+    try {
+      const raw = await this.gemini.generateWithImage(base64, mimeType, prompt);
+      const cleaned = raw
+        .replace(/^```json\s*/i, '')
+        .replace(/```\s*$/i, '')
+        .trim();
+      const parsed = JSON.parse(cleaned) as { markers: unknown[]; note?: string };
+      markers = parsed.markers ?? [];
+      note = parsed.note ?? '';
+    } catch (err) {
+      this.logger.error(`Lab result extraction failed: ${(err as Error).message}`);
+      note =
+        'No se pudo extraer automáticamente. El nutricionista puede leer el documento directamente.';
+    }
+
+    return this.prisma.labResult.create({
+      data: {
+        gym_id: gymId,
+        member_id: dto.memberId,
+        uploaded_by: staffId,
+        document_url: url,
+        lab_date: dto.lab_date ? new Date(dto.lab_date) : undefined,
+        extracted_markers: markers as Prisma.InputJsonValue,
+        ai_note: note,
+      },
+    });
+  }
+
+  async listLabResults(gymId: string, memberId: string) {
+    return this.prisma.labResult.findMany({
+      where: { gym_id: gymId, member_id: memberId },
+      orderBy: { created_at: 'desc' },
+    });
+  }
+
+  async getLabResult(gymId: string, id: string) {
+    const result = await this.prisma.labResult.findFirst({ where: { id, gym_id: gymId } });
+    if (!result) throw new NotFoundException('Examen de laboratorio no encontrado');
+    return result;
+  }
+
+  async reviewLabResult(
+    gymId: string,
+    id: string,
+    staffId: string | undefined,
+    dto: ReviewLabResultDto,
+  ) {
+    await this.getLabResult(gymId, id);
+    return this.prisma.labResult.update({
+      where: { id },
+      data: {
+        reviewed_by_nutritionist: true,
+        reviewed_by: staffId,
+        reviewed_at: new Date(),
+        nutritionist_notes: dto.nutritionist_notes,
+        plan_adjusted_as_result: dto.plan_adjusted_as_result ?? false,
+      },
+    });
   }
 }

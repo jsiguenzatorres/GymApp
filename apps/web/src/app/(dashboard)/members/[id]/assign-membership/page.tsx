@@ -41,6 +41,50 @@ export default function AssignMembershipPage() {
   const [fetchError, setFetchError] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Cupón
+  const [couponCode, setCouponCode] = useState('');
+  const [couponChecking, setCouponChecking] = useState(false);
+  const [couponResult, setCouponResult] = useState<{
+    discount_amount: number;
+    final_price: number;
+  } | null>(null);
+  const [couponError, setCouponError] = useState<string | null>(null);
+
+  async function checkCoupon() {
+    if (!couponCode.trim() || !selected) return;
+    setCouponChecking(true);
+    setCouponError(null);
+    setCouponResult(null);
+    try {
+      const res = await fetch('/api/proxy/coupons/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: couponCode.trim(), membershipTypeId: selected, memberId }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        discount_amount?: number;
+        final_price?: number;
+        message?: string | string[];
+      };
+      if (res.ok && data.discount_amount !== undefined) {
+        setCouponResult({
+          discount_amount: data.discount_amount,
+          final_price: data.final_price ?? 0,
+        });
+      } else {
+        setCouponError(
+          Array.isArray(data.message)
+            ? data.message.join(', ')
+            : (data.message ?? 'Cupón no válido'),
+        );
+      }
+    } catch {
+      setCouponError('Error de red');
+    } finally {
+      setCouponChecking(false);
+    }
+  }
+
   useEffect(() => {
     fetch('/api/proxy/membership-types')
       .then((r) => r.json())
@@ -60,7 +104,12 @@ export default function AssignMembershipPage() {
       const res = await fetch(`/api/proxy/members/${memberId}/memberships`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ typeId: selected, startDate, notes: notes || undefined }),
+        body: JSON.stringify({
+          typeId: selected,
+          startDate,
+          notes: notes || undefined,
+          couponCode: couponResult ? couponCode.trim() : undefined,
+        }),
       });
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { message?: string };
@@ -167,6 +216,43 @@ export default function AssignMembershipPage() {
             placeholder="Ej: Promo diciembre, pago en efectivo..."
             className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 resize-none"
           />
+        </div>
+
+        {/* Cupón */}
+        <div className="space-y-1.5">
+          <label htmlFor="coupon" className="text-sm font-medium text-gray-700">
+            Cupón <span className="text-gray-400 font-normal">(opcional)</span>
+          </label>
+          <div className="flex gap-2">
+            <input
+              id="coupon"
+              value={couponCode}
+              onChange={(e) => {
+                setCouponCode(e.target.value.toUpperCase());
+                setCouponResult(null);
+                setCouponError(null);
+              }}
+              placeholder="Ej: VERANO2026"
+              disabled={!selected}
+              className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 disabled:bg-gray-50"
+            />
+            <button
+              type="button"
+              onClick={checkCoupon}
+              disabled={!couponCode.trim() || !selected || couponChecking}
+              className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            >
+              {couponChecking ? '...' : 'Validar'}
+            </button>
+          </div>
+          {!selected && <p className="text-xs text-gray-400">Selecciona un plan primero</p>}
+          {couponError && <p className="text-xs text-red-600">{couponError}</p>}
+          {couponResult && (
+            <p className="text-xs text-green-600">
+              ✓ Descuento de ${couponResult.discount_amount.toFixed(2)} — precio final: $
+              {couponResult.final_price.toFixed(2)}
+            </p>
+          )}
         </div>
 
         {error && (

@@ -88,6 +88,7 @@ export class NotificationController {
       body: string;
       segment?: 'all' | 'all_active' | 'tier_pro' | 'tier_elite' | 'at_risk';
       type?: string;
+      sendWhatsapp?: boolean;
     },
   ) {
     if (!['GYM_OWNER', 'GYM_ADMIN', 'SUPER_ADMIN'].includes(user.role)) {
@@ -97,6 +98,16 @@ export class NotificationController {
     if (!body.title?.trim() || !body.body?.trim()) {
       throw new ForbiddenException('title y body son requeridos');
     }
-    return this.notifService.broadcast(user.gymId, body);
+    return this.notifService.broadcast(user.gymId, {
+      ...body,
+      ...(body.sendWhatsapp
+        ? {
+            whatsappTemplate: {
+              templateName: process.env.WHATSAPP_TEMPLATE_ANNOUNCEMENT ?? 'gym_announcement',
+              components: [{ type: 'body', parameters: [{ type: 'text', text: body.body }] }],
+            },
+          }
+        : {}),
+    });
   }
 }

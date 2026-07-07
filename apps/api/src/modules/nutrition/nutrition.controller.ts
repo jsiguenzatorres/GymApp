@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Put,
   Patch,
   Delete,
   Param,
@@ -15,11 +16,27 @@ import {
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { PlanGuard } from '../../common/guards/plan.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
 import { RequiresPlan } from '../../common/decorators/requires-plan.decorator';
+import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
+import { UserRole } from '@gymapp/shared-types';
 import { NutritionService } from './nutrition.service';
-import { CreatePlanDto, CreateFoodItemDto, LogFoodDto, AiSuggestDto } from './dto/nutrition.dto';
+import {
+  CreatePlanDto,
+  CreateFoodItemDto,
+  UpdateFoodItemDto,
+  LogFoodDto,
+  AiSuggestDto,
+  UpsertNutritionProfileDto,
+  CalculateTmbTdeeDto,
+  ReviewRiskAlertDto,
+  UploadLabResultDto,
+  ReviewLabResultDto,
+} from './dto/nutrition.dto';
+
+const NUTRITION_STAFF_ROLES = [UserRole.GYM_OWNER, UserRole.GYM_ADMIN, UserRole.NUTRITIONIST];
 
 @RequiresPlan('PRO', 'ELITE', 'ENTERPRISE')
 @UseGuards(JwtAuthGuard, PlanGuard)
@@ -71,6 +88,96 @@ export class NutritionController {
     return this.nutritionService.deletePlan(this.gymId(user), id);
   }
 
+  @Get('nutrition-plans/:id/history')
+  listPlanHistory(@CurrentUser() user: JwtPayload, @Param('id', ParseUUIDPipe) id: string) {
+    return this.nutritionService.listPlanHistory(this.gymId(user), id);
+  }
+
+  // ─── PERFIL NUTRICIONAL (D-25) ──────────────────────────────────────────────
+
+  @Get('members/:memberId/nutrition-profile')
+  getNutritionProfile(
+    @CurrentUser() user: JwtPayload,
+    @Param('memberId', ParseUUIDPipe) memberId: string,
+  ) {
+    return this.nutritionService.getNutritionProfile(this.gymId(user), memberId);
+  }
+
+  @Put('members/:memberId/nutrition-profile')
+  upsertNutritionProfile(
+    @CurrentUser() user: JwtPayload,
+    @Param('memberId', ParseUUIDPipe) memberId: string,
+    @Body() dto: UpsertNutritionProfileDto,
+  ) {
+    return this.nutritionService.upsertNutritionProfile(this.gymId(user), memberId, dto);
+  }
+
+  // ─── MOTOR TMB/TDEE (D-26) ──────────────────────────────────────────────────
+
+  @Post('nutrition/calculate-tmb-tdee')
+  calculateTmbTdee(@CurrentUser() user: JwtPayload, @Body() dto: CalculateTmbTdeeDto) {
+    return this.nutritionService.calculateTmbTdee(this.gymId(user), dto.memberId, dto.goal);
+  }
+
+  // ─── ALERTAS DE RIESGO TCA (D-23) ───────────────────────────────────────────
+
+  @Get('nutrition/risk-alerts')
+  listRiskAlerts(@CurrentUser() user: JwtPayload) {
+    return this.nutritionService.listRiskAlerts(this.gymId(user));
+  }
+
+  @Patch('nutrition/risk-alerts/:id/review')
+  reviewRiskAlert(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ReviewRiskAlertDto,
+  ) {
+    return this.nutritionService.reviewRiskAlert(this.gymId(user), id, dto);
+  }
+
+  // ─── ANÁLISIS DE LABORATORIO (D-29) — staff-only ────────────────────────────
+
+  @UseGuards(RolesGuard)
+  @Roles(...NUTRITION_STAFF_ROLES)
+  @Post('nutrition/lab-results')
+  @HttpCode(HttpStatus.CREATED)
+  uploadLabResult(@CurrentUser() user: JwtPayload, @Body() dto: UploadLabResultDto) {
+    return this.nutritionService.uploadLabResult(this.gymId(user), user.staffId ?? user.sub, dto);
+  }
+
+  @UseGuards(RolesGuard)
+  @Roles(...NUTRITION_STAFF_ROLES)
+  @Get('members/:memberId/lab-results')
+  listLabResults(
+    @CurrentUser() user: JwtPayload,
+    @Param('memberId', ParseUUIDPipe) memberId: string,
+  ) {
+    return this.nutritionService.listLabResults(this.gymId(user), memberId);
+  }
+
+  @UseGuards(RolesGuard)
+  @Roles(...NUTRITION_STAFF_ROLES)
+  @Get('lab-results/:id')
+  getLabResult(@CurrentUser() user: JwtPayload, @Param('id', ParseUUIDPipe) id: string) {
+    return this.nutritionService.getLabResult(this.gymId(user), id);
+  }
+
+  @UseGuards(RolesGuard)
+  @Roles(...NUTRITION_STAFF_ROLES)
+  @Patch('lab-results/:id/review')
+  reviewLabResult(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ReviewLabResultDto,
+  ) {
+    return this.nutritionService.reviewLabResult(
+      this.gymId(user),
+      id,
+      user.staffId ?? user.sub,
+      dto,
+    );
+  }
+
   // ─── FOOD ITEMS ───────────────────────────────────────────────────────────────
 
   @Get('food-items')
@@ -84,6 +191,20 @@ export class NutritionController {
     return this.nutritionService.createFoodItem(this.gymId(user), dto);
   }
 
+  @Patch('food-items/:id')
+  updateFoodItem(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateFoodItemDto,
+  ) {
+    return this.nutritionService.updateFoodItem(this.gymId(user), id, dto);
+  }
+
+  @Delete('food-items/:id')
+  deleteFoodItem(@CurrentUser() user: JwtPayload, @Param('id', ParseUUIDPipe) id: string) {
+    return this.nutritionService.deleteFoodItem(this.gymId(user), id);
+  }
+
   // ─── DIARIO ───────────────────────────────────────────────────────────────────
 
   @Get('members/:memberId/food-diary')
@@ -94,6 +215,16 @@ export class NutritionController {
   ) {
     const d = date ?? new Date().toISOString().split('T')[0];
     return this.nutritionService.getDiary(this.gymId(user), memberId, d);
+  }
+
+  // GET /members/:memberId/nutrition/today-macros — nutrient timing (D-27):
+  // ajusta carbos/grasas de HOY según si el miembro ya entrenó hoy.
+  @Get('members/:memberId/nutrition/today-macros')
+  getTodayAdjustedMacros(
+    @CurrentUser() user: JwtPayload,
+    @Param('memberId', ParseUUIDPipe) memberId: string,
+  ) {
+    return this.nutritionService.getTodayAdjustedMacros(this.gymId(user), memberId);
   }
 
   @Get('members/:memberId/food-diary/range')
@@ -128,6 +259,26 @@ export class NutritionController {
   }
 
   // ─── IA ───────────────────────────────────────────────────────────────────────
+
+  // POST /nutrition/copilot-chat — co-piloto conversacional del nutricionista (D-37)
+  // Body: { memberId, message, history?: [{role, parts:[{text}]}] }
+  @Post('nutrition/copilot-chat')
+  copilotChat(
+    @CurrentUser() user: JwtPayload,
+    @Body()
+    body: {
+      memberId: string;
+      message: string;
+      history?: { role: 'user' | 'model'; parts: { text: string }[] }[];
+    },
+  ) {
+    return this.nutritionService.copilotChat(
+      this.gymId(user),
+      body.memberId,
+      body.message,
+      body.history ?? [],
+    );
+  }
 
   @Post('nutrition/ai-suggest')
   aiSuggest(@CurrentUser() user: JwtPayload, @Body() dto: AiSuggestDto) {

@@ -13,6 +13,7 @@ async function sendBroadcastAction(
       (formData.get('segment') as 'all' | 'all_active' | 'tier_pro' | 'tier_elite' | 'at_risk') ??
       'all_active',
     type: 'BROADCAST',
+    sendWhatsapp: formData.get('sendWhatsapp') === 'true',
   };
   if (!payload.title?.trim() || !payload.body?.trim()) {
     return { ok: false, error: 'Título y mensaje son requeridos' };

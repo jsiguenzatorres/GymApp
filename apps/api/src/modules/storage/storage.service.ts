@@ -12,6 +12,11 @@ const MAX_BYTES = 2 * 1024 * 1024; // 2 MB
 const ALLOWED_VIDEO_MIME = ['video/mp4', 'video/webm', 'video/quicktime'];
 const MAX_VIDEO_BYTES = 15 * 1024 * 1024; // 15 MB — clip corto de tecnica, no pelicula
 
+// Imagen o PDF — usado por lab results (D-29): Gemini soporta PDF nativo via inlineData,
+// no requiere conversión a imagen.
+const ALLOWED_DOCUMENT_MIME = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+const MAX_DOCUMENT_BYTES = 8 * 1024 * 1024; // 8 MB — documentos escaneados, no solo fotos
+
 @Injectable()
 export class StorageService {
   private readonly logger = new Logger(StorageService.name);
@@ -108,6 +113,77 @@ export class StorageService {
   uploadProductImage(gymId: string, dataUri: string) {
     const bucket = this.config.get<string>('SUPABASE_PRODUCTS_BUCKET') ?? 'product-images';
     return this.uploadImage(bucket, gymId, dataUri);
+  }
+
+  // Decodifica un data-URI base64 de imagen O PDF y retorna { buffer, mimeType }.
+  private parseDocumentDataUri(dataUri: string): { buffer: Buffer; mimeType: string } {
+    const match = /^data:(image\/(?:jpeg|png|webp)|application\/pdf);base64,(.+)$/i.exec(
+      dataUri.trim(),
+    );
+    if (!match) {
+      throw new BadRequestException(
+        'Formato inválido. Usa data:image/{jpeg|png|webp};base64,... o data:application/pdf;base64,...',
+      );
+    }
+    const mimeType = match[1].toLowerCase();
+    const buffer = Buffer.from(match[2], 'base64');
+    if (buffer.length === 0) throw new BadRequestException('Documento vacío');
+    if (buffer.length > MAX_DOCUMENT_BYTES) {
+      throw new BadRequestException(
+        `Documento muy grande: ${(buffer.length / 1024 / 1024).toFixed(2)}MB (máx ${MAX_DOCUMENT_BYTES / 1024 / 1024}MB)`,
+      );
+    }
+    return { buffer, mimeType };
+  }
+
+  // Sube una imagen O PDF (ej. examen de laboratorio, D-29) a un bucket.
+  async uploadDocument(
+    bucket: string,
+    pathPrefix: string,
+    dataUri: string,
+  ): Promise<{ url: string; sizeBytes: number; mimeType: string }> {
+    if (!this.supabaseUrl || !this.serviceRoleKey) {
+      throw new InternalServerErrorException(
+        'Storage no configurado (faltan SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)',
+      );
+    }
+
+    const { buffer, mimeType } = this.parseDocumentDataUri(dataUri);
+    if (!ALLOWED_DOCUMENT_MIME.includes(mimeType)) {
+      throw new BadRequestException(`MIME no permitido: ${mimeType}`);
+    }
+
+    const ext =
+      mimeType === 'application/pdf'
+        ? 'pdf'
+        : mimeType === 'image/jpeg'
+          ? 'jpg'
+          : mimeType.split('/')[1];
+    const stamp = process.hrtime.bigint().toString(36);
+    const path = `${pathPrefix}/${stamp}.${ext}`;
+
+    const uploadUrl = `${this.supabaseUrl}/storage/v1/object/${bucket}/${path}`;
+    const res = await fetch(uploadUrl, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.serviceRoleKey}`,
+        'Content-Type': mimeType,
+        'x-upsert': 'true',
+        'Cache-Control': 'public, max-age=86400',
+      },
+      body: buffer,
+    });
+
+    if (!res.ok) {
+      const errBody = await res.text();
+      this.logger.error(
+        `Supabase Storage upload de documento falló (${res.status}): ${errBody.slice(0, 300)}`,
+      );
+      throw new InternalServerErrorException(`Storage upload failed (${res.status})`);
+    }
+
+    const publicUrl = `${this.supabaseUrl}/storage/v1/object/public/${bucket}/${path}`;
+    return { url: publicUrl, sizeBytes: buffer.length, mimeType };
   }
 
   // Decodifica un data-URI base64 de VIDEO y retorna { buffer, mimeType }.

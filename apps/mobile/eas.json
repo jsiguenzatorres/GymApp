@@ -5,6 +5,7 @@
   },
   "build": {
     "development": {
+      "node": "22.13.0",
       "developmentClient": true,
       "distribution": "internal",
       "android": {
@@ -12,6 +13,7 @@
       }
     },
     "preview": {
+      "node": "22.13.0",
       "distribution": "internal",
       "android": {
         "buildType": "apk"
@@ -21,8 +23,12 @@
       }
     },
     "production": {
+      "node": "22.13.0",
       "android": {
         "buildType": "app-bundle"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://gymappapi-production-ebd4.up.railway.app"
       }
     }
   },

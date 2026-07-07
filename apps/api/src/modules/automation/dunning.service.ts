@@ -1,7 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../database/prisma.service';
 import { NotificationService } from '../notifications/notification.service';
+import { StripeService } from '../billing/stripe.service';
+import { MercadoPagoService } from '../billing/mercadopago.service';
 
 interface DunningStep {
   attempt: number;
@@ -65,10 +68,20 @@ const DUNNING_STEPS: DunningStep[] = [
 export class DunningService {
   private readonly logger = new Logger(DunningService.name);
 
+  // Plantilla de WhatsApp pre-aprobada en Meta Business Manager para recordatorios
+  // de cobro (día 3/5/7). Configurable por si el nombre real difiere por ambiente.
+  private readonly whatsappTemplate: string;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly notification: NotificationService,
-  ) {}
+    private readonly stripe: StripeService,
+    private readonly mp: MercadoPagoService,
+    private readonly config: ConfigService,
+  ) {
+    this.whatsappTemplate =
+      this.config.get<string>('WHATSAPP_TEMPLATE_PAYMENT_REMINDER') ?? 'payment_reminder';
+  }
 
   @Cron(CronExpression.EVERY_HOUR)
   async processDunning() {
@@ -82,7 +95,9 @@ export class DunningService {
         attempt_number: 1,
       },
       include: {
-        member: { select: { id: true, user_id: true, first_name: true, status: true } },
+        member: {
+          select: { id: true, user_id: true, first_name: true, status: true, phone: true },
+        },
       },
       take: 50,
     });
@@ -95,7 +110,9 @@ export class DunningService {
         attempt_number: { gte: 2, lte: 5 },
       },
       include: {
-        member: { select: { id: true, user_id: true, first_name: true, status: true } },
+        member: {
+          select: { id: true, user_id: true, first_name: true, status: true, phone: true },
+        },
       },
       take: 50,
     });
@@ -124,14 +141,47 @@ export class DunningService {
     id: string;
     gym_id: string;
     attempt_number: number;
-    member: { id: string; user_id: string; first_name: string; status: string } | null;
+    member: {
+      id: string;
+      user_id: string;
+      first_name: string;
+      status: string;
+      phone: string | null;
+    } | null;
   }) {
     if (!payment.member) return;
 
     const step = DUNNING_STEPS.find((s) => s.attempt === payment.attempt_number);
     if (!step) return;
 
-    // Send notification to member
+    // Reintento real de cobro en los pasos de reintento (día 3, 5, 7 — no en el
+    // primer fallo del día 0 ni en la cancelación final del día 14, que no reintentan).
+    if (payment.attempt_number >= 2 && payment.attempt_number <= 4) {
+      const recovered = await this.attemptRetryCharge(payment.id);
+      if (recovered) {
+        await this.notification.create({
+          gymId: payment.gym_id,
+          userId: payment.member.user_id,
+          type: 'PAYMENT_RECOVERED',
+          title: '¡Tu pago fue procesado exitosamente! 💳',
+          body: 'Cobramos tu pago pendiente con éxito. Tu membresía sigue activa, gracias por regularizar.',
+          data: { paymentId: payment.id },
+        });
+        if (payment.member.status === 'PRE_CANCEL' || payment.member.status === 'EXPIRED') {
+          await this.prisma.member.update({
+            where: { id: payment.member.id },
+            data: { status: 'ACTIVE' },
+          });
+        }
+        this.logger.log(
+          `Dunning recovered payment ${payment.id} on attempt ${payment.attempt_number}`,
+        );
+        return; // se detiene la secuencia — ya no se agenda otro reintento
+      }
+    }
+
+    // Send notification to member (también por WhatsApp desde el día 3, ya que el
+    // día 0 y el día 14 tienen menos urgencia de alcanzar al miembro por ese canal)
     await this.notification.create({
       gymId: payment.gym_id,
       userId: payment.member.user_id,
@@ -139,6 +189,20 @@ export class DunningService {
       title: step.title,
       body: step.body,
       data: { paymentId: payment.id, attempt: step.attempt },
+      ...(step.attempt >= 2 && step.attempt <= 4
+        ? {
+            phone: payment.member.phone,
+            whatsapp: {
+              templateName: this.whatsappTemplate,
+              components: [
+                {
+                  type: 'body',
+                  parameters: [{ type: 'text', text: payment.member.first_name }],
+                },
+              ],
+            },
+          }
+        : {}),
     });
 
     // Block access on Day 7+
@@ -177,6 +241,69 @@ export class DunningService {
         next_retry_at: nextAt,
       },
     });
+  }
+
+  // Intenta cobrar de nuevo usando el método de pago guardado del pago fallido.
+  // Devuelve true si el cobro fue exitoso (y ya actualizó el Payment a SUCCEEDED).
+  private async attemptRetryCharge(paymentId: string): Promise<boolean> {
+    const payment = await this.prisma.payment.findFirst({
+      where: { id: paymentId },
+      include: {
+        payment_method: true,
+        member: { select: { user: { select: { email: true } } } },
+      },
+    });
+    if (!payment?.payment_method?.is_active) return false;
+
+    const pm = payment.payment_method;
+    try {
+      if (pm.gateway === 'stripe') {
+        const result = await this.stripe.chargeSavedPaymentMethod({
+          paymentMethodToken: pm.gateway_token,
+          amount: Number(payment.amount),
+          currency: payment.currency,
+          metadata: { paymentId: payment.id },
+          description: payment.description ?? 'Reintento de cobro de membresía',
+        });
+        if (!result.succeeded) return false;
+        await this.prisma.payment.update({
+          where: { id: payment.id },
+          data: {
+            status: 'SUCCEEDED',
+            paid_at: new Date(),
+            gateway_payment_id: result.paymentIntentId ?? undefined,
+            next_retry_at: null,
+          },
+        });
+        return true;
+      }
+
+      if (pm.gateway === 'mercadopago') {
+        const result = await this.mp.chargeSavedCard({
+          cardToken: pm.gateway_token,
+          amount: Number(payment.amount),
+          payerEmail: payment.member?.user.email ?? '',
+          externalReference: payment.id,
+          description: payment.description ?? 'Reintento de cobro de membresía',
+        });
+        if (!result.succeeded) return false;
+        await this.prisma.payment.update({
+          where: { id: payment.id },
+          data: {
+            status: 'SUCCEEDED',
+            paid_at: new Date(),
+            gateway_payment_id: result.paymentId ?? undefined,
+            next_retry_at: null,
+          },
+        });
+        return true;
+      }
+
+      return false; // efectivo/transferencia/manual — no se puede reintentar automáticamente
+    } catch (err) {
+      this.logger.error(`Retry charge failed for payment ${paymentId}: ${(err as Error).message}`);
+      return false;
+    }
   }
 
   // Manually trigger dunning for a specific payment (e.g. after manual failed charge)

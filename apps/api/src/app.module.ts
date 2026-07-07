@@ -38,6 +38,8 @@ import { SubscriptionsModule } from './modules/subscriptions/subscriptions.modul
 import { OnboardingModule } from './modules/onboarding/onboarding.module';
 import { BlogModule } from './modules/blog/blog.module';
 import { BillingEngineModule } from './modules/billing-engine/billing-engine.module';
+import { CouponsModule } from './modules/coupons/coupons.module';
+import { WhatsAppModule } from './modules/whatsapp/whatsapp.module';
 
 @Module({
   imports: [
@@ -90,6 +92,8 @@ import { BillingEngineModule } from './modules/billing-engine/billing-engine.mod
     OnboardingModule,
     BlogModule,
     BillingEngineModule,
+    CouponsModule,
+    WhatsAppModule,
     // Módulos de negocio se agregan aquí en cada sprint
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

@@ -51,6 +51,43 @@ export class StripeService {
     return this.client.paymentIntents.retrieve(id);
   }
 
+  // Reintento de cobro (dunning): cobra directo con un payment_method ya guardado,
+  // sin que el miembro esté presente (off_session). Usado por DunningService.
+  async chargeSavedPaymentMethod(params: {
+    paymentMethodToken: string;
+    amount: number; // cents no incluidos, en unidad de moneda (ej. 95.00)
+    currency: string;
+    metadata?: Record<string, string>;
+    description?: string;
+  }): Promise<{ succeeded: boolean; paymentIntentId: string | null; failureMessage?: string }> {
+    if (!this.client)
+      return { succeeded: false, paymentIntentId: null, failureMessage: 'Stripe no configurado' };
+
+    try {
+      const pi = await this.client.paymentIntents.create({
+        amount: Math.round(params.amount * 100),
+        currency: params.currency.toLowerCase(),
+        payment_method: params.paymentMethodToken,
+        confirm: true,
+        off_session: true,
+        metadata: params.metadata ?? {},
+        description: params.description,
+      });
+      return { succeeded: pi.status === 'succeeded', paymentIntentId: pi.id };
+    } catch (err) {
+      const stripeErr = err as {
+        code?: string;
+        message?: string;
+        payment_intent?: { id?: string };
+      };
+      return {
+        succeeded: false,
+        paymentIntentId: stripeErr.payment_intent?.id ?? null,
+        failureMessage: stripeErr.message ?? 'Cobro rechazado',
+      };
+    }
+  }
+
   // ─── Refunds ────────────────────────────────────────────────────────────────
 
   async createRefund(paymentIntentId: string, reason?: string): Promise<Stripe.Refund | null> {

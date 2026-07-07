@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useAuthStore } from '@/store/auth.store';
 import { memberApi, nutritionApi, TextLogResponse } from '@/lib/api-client';
+import { useStt } from '@/hooks/useStt';
 
 const EXAMPLES = [
   'Comí 200g de pollo a la plancha con arroz y ensalada',
@@ -28,6 +29,16 @@ export default function NutritionTextLogScreen() {
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<TextLogResponse | null>(null);
+  const { isRecording, startRecording, stopAndTranscribe } = useStt(accessToken);
+
+  const toggleRecording = async () => {
+    if (isRecording) {
+      const transcribed = await stopAndTranscribe();
+      if (transcribed) setText(transcribed);
+    } else {
+      await startRecording();
+    }
+  };
 
   const submit = async () => {
     if (!accessToken || !text.trim()) return;
@@ -57,7 +68,7 @@ export default function NutritionTextLogScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.headerBtn}>
           <Text style={styles.headerBtnText}>‹</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>✏️ Registrar por texto</Text>
+        <Text style={styles.headerTitle}>✏️ Registrar por texto o voz</Text>
         <View style={styles.headerBtn} />
       </View>
 
@@ -69,20 +80,32 @@ export default function NutritionTextLogScreen() {
           <View style={styles.intro}>
             <Text style={styles.introTitle}>Cuéntame qué comiste</Text>
             <Text style={styles.introDesc}>
-              Escribe en tus propias palabras y la IA identifica los alimentos, estima la porción y
-              los registra al diario.
+              Escribe o graba por voz en tus propias palabras — la IA identifica los alimentos,
+              estima la porción y los registra al diario.
             </Text>
           </View>
 
-          <TextInput
-            value={text}
-            onChangeText={setText}
-            placeholder="Ej: comí 200g de pollo con arroz y ensalada…"
-            style={styles.input}
-            multiline
-            autoFocus
-            editable={!loading}
-          />
+          <View style={styles.inputRow}>
+            <TextInput
+              value={text}
+              onChangeText={setText}
+              placeholder="Ej: comí 200g de pollo con arroz y ensalada…"
+              style={[styles.input, { flex: 1 }]}
+              multiline
+              autoFocus
+              editable={!loading && !isRecording}
+            />
+            <TouchableOpacity
+              onPress={toggleRecording}
+              disabled={loading}
+              style={[styles.micBtn, isRecording && styles.micBtnActive]}
+            >
+              <Text style={styles.micBtnText}>{isRecording ? '⏹' : '🎙️'}</Text>
+            </TouchableOpacity>
+          </View>
+          {isRecording && (
+            <Text style={styles.recordingHint}>Grabando... toca ⏹ para transcribir</Text>
+          )}
 
           <TouchableOpacity
             style={[styles.submitBtn, (!text.trim() || loading) && { opacity: 0.5 }]}
@@ -184,6 +207,7 @@ const styles = StyleSheet.create({
   introTitle: { fontSize: 20, fontWeight: '800', color: '#111827' },
   introDesc: { fontSize: 13, color: '#6b7280', lineHeight: 19 },
 
+  inputRow: { flexDirection: 'row', gap: 8, alignItems: 'flex-start' },
   input: {
     backgroundColor: '#fff',
     borderRadius: 12,
@@ -195,6 +219,19 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#d1d5db',
   },
+  micBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  micBtnActive: { backgroundColor: '#fee2e2', borderColor: '#fca5a5' },
+  micBtnText: { fontSize: 18 },
+  recordingHint: { fontSize: 12, color: '#dc2626', fontStyle: 'italic', marginTop: -6 },
   submitBtn: {
     backgroundColor: '#15803d',
     borderRadius: 12,

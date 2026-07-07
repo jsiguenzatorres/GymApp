@@ -293,6 +293,14 @@ export interface NutritionPlan {
   member: { id: string; first_name: string; last_name: string };
 }
 
+// Nutrient timing (D-27) — ajuste de macros de HOY según si el miembro ya entrenó
+export interface TodayMacros {
+  has_plan: boolean;
+  is_training_day?: boolean;
+  base?: { kcal_target: number; protein_g: number; carbs_g: number; fat_g: number };
+  today?: { kcal_target: number; protein_g: number; carbs_g: number; fat_g: number };
+}
+
 export interface DiaryEntry {
   id: string;
   meal_type: string;
@@ -368,6 +376,8 @@ export const nutritionApi = {
     apiClient.get<NutritionPlan[]>(`/api/v1/nutrition-plans?memberId=${memberId}`, token),
   getDiary: (memberId: string, date: string, token: string) =>
     apiClient.get<DiaryDay>(`/api/v1/members/${memberId}/food-diary?date=${date}`, token),
+  getTodayMacros: (memberId: string, token: string) =>
+    apiClient.get<TodayMacros>(`/api/v1/members/${memberId}/nutrition/today-macros`, token),
   getDiaryRange: (memberId: string, token: string, days = 30) =>
     apiClient.get<DiaryRange>(`/api/v1/members/${memberId}/food-diary/range?days=${days}`, token),
   searchFoodItems: (token: string, search?: string) => {
@@ -462,6 +472,25 @@ export const healthDataApi = {
     ),
   summary: (token: string) => apiClient.get<HealthSummary>('/api/v1/me/health-data/summary', token),
   delete: (token: string, id: string) => apiClient.delete(`/api/v1/me/health-data/${id}`, token),
+  // D-19: sincronización con Apple Health / Health Connect — hasta 500 entradas por llamada
+  bulkImport: (
+    token: string,
+    body: {
+      source: 'apple_health' | 'google_fit' | 'wearable';
+      entries: Array<{
+        kind: HealthKind;
+        value: number;
+        unit?: string;
+        recorded_at: string;
+        notes?: string;
+      }>;
+    },
+  ) =>
+    apiClient.post<{ imported: number; total: number; source: string }>(
+      '/api/v1/me/health-data/bulk-import',
+      body,
+      token,
+    ),
 };
 
 // ─── Notification Preferences API ─────────────────────────────────────────

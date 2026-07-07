@@ -6,6 +6,12 @@
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0f0f12"
+    },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.gymapp.mobile",
@@ -13,11 +19,19 @@
         "NSCameraUsageDescription": "Necesitamos acceso a la cámara para escanear el QR de acceso y fotografiar productos.",
         "NSFaceIDUsageDescription": "Usa Face ID para autenticarte rápidamente.",
         "NFCReaderUsageDescription": "Usa NFC para acceso al gym con tu tarjeta o pulsera.",
-        "NSPhotoLibraryUsageDescription": "Permite seleccionar una foto de tu galería para tu avatar de perfil."
+        "NSPhotoLibraryUsageDescription": "Permite seleccionar una foto de tu galería para tu avatar de perfil.",
+        "NSHealthShareUsageDescription": "Permite a GymApp leer tu peso, agua y sueño de Salud para sincronizar tu progreso nutricional automáticamente."
+      },
+      "entitlements": {
+        "com.apple.developer.healthkit": true
       }
     },
     "android": {
       "package": "com.gymapp.mobile",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0f0f12"
+      },
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.NFC",
@@ -25,7 +39,10 @@
         "android.permission.RECORD_AUDIO",
         "android.permission.USE_BIOMETRIC",
         "android.permission.USE_FINGERPRINT",
-        "android.permission.READ_MEDIA_IMAGES"
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.health.READ_WEIGHT",
+        "android.permission.health.READ_HYDRATION",
+        "android.permission.health.READ_SLEEP"
       ]
     },
     "plugins": [
@@ -35,6 +52,16 @@
         "expo-local-authentication",
         {
           "faceIDPermission": "Permite a GymApp usar Face ID para autenticarte."
+        }
+      ],
+      "@kingstinct/react-native-healthkit",
+      "react-native-health-connect",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 26
+          }
         }
       ]
     ],

@@ -10,6 +10,10 @@ export class AssignMembershipDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @IsOptional()
+  @IsString()
+  couponCode?: string;
 }
 
 export class FreezeMembershipDto {

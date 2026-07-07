@@ -16,6 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useAuthStore } from '@/store/auth.store';
 import { healthDataApi, HealthEntry, HealthKind, HealthSummary } from '@/lib/api-client';
+import healthSync from '@/lib/health-sync';
 
 const KINDS: Array<{
   kind: HealthKind;
@@ -39,6 +40,11 @@ export default function HealthDataScreen() {
   const [value, setValue] = useState('');
   const [saving, setSaving] = useState(false);
 
+  // D-19: sincronización con Apple Health / Health Connect
+  const [nativeAvailable, setNativeAvailable] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
+
   const load = useCallback(async () => {
     if (!accessToken) return;
     setLoading(true);
@@ -57,6 +63,41 @@ export default function HealthDataScreen() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    healthSync
+      .isAvailable()
+      .then(setNativeAvailable)
+      .catch(() => setNativeAvailable(false));
+  }, []);
+
+  const connectAndSync = async () => {
+    if (!accessToken) return;
+    setSyncing(true);
+    setSyncMessage(null);
+    try {
+      const granted = await healthSync.requestPermissions();
+      if (!granted) {
+        setSyncMessage(
+          'No se concedieron permisos. Revisa los ajustes de privacidad de tu teléfono.',
+        );
+        return;
+      }
+      const since = new Date();
+      since.setDate(since.getDate() - 30); // primera sincronización: últimos 30 días
+      const result = await healthSync.syncNow(accessToken, since);
+      setSyncMessage(
+        result.imported > 0
+          ? `✓ ${result.imported} registro(s) sincronizados desde ${healthSync.platformLabel}`
+          : `Sin datos nuevos que sincronizar desde ${healthSync.platformLabel}`,
+      );
+      await load();
+    } catch (err) {
+      setSyncMessage(err instanceof Error ? err.message : 'Error al sincronizar');
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const submit = async () => {
     if (!accessToken || !openLog) return;
@@ -217,11 +258,38 @@ export default function HealthDataScreen() {
               </View>
             )}
 
-            {/* Tip de integración nativa */}
-            <View style={styles.tipBox}>
-              <Text style={styles.tipText}>
-                💡 Próximamente: sincronización automática con Apple Health y Google Fit
+            {/* Sincronización nativa (D-19) */}
+            <View style={styles.syncCard}>
+              <Text style={styles.syncTitle}>
+                {Platform.OS === 'ios' ? '🍎 Apple Health' : '🩺 Health Connect'}
               </Text>
+              {nativeAvailable ? (
+                <>
+                  <Text style={styles.syncDesc}>
+                    Sincroniza tu peso, agua y sueño automáticamente en vez de registrarlos a mano.
+                  </Text>
+                  <TouchableOpacity
+                    style={[styles.syncBtn, syncing && { opacity: 0.6 }]}
+                    onPress={connectAndSync}
+                    disabled={syncing}
+                  >
+                    {syncing ? (
+                      <ActivityIndicator color="#fff" />
+                    ) : (
+                      <Text style={styles.syncBtnText}>
+                        Sincronizar con {Platform.OS === 'ios' ? 'Apple Health' : 'Health Connect'}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                  {syncMessage && <Text style={styles.syncMessage}>{syncMessage}</Text>}
+                </>
+              ) : (
+                <Text style={styles.syncDesc}>
+                  {Platform.OS === 'ios'
+                    ? 'Apple Health no está disponible en este dispositivo (requiere iPhone físico, no funciona en simulador).'
+                    : 'Health Connect no está disponible — instala la app "Health Connect" desde Play Store.'}
+                </Text>
+              )}
             </View>
           </>
         )}
@@ -376,8 +444,18 @@ const styles = StyleSheet.create({
   delBtn: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
   delBtnText: { color: '#9ca3af', fontSize: 16 },
 
-  tipBox: { backgroundColor: '#fef3c7', borderRadius: 10, padding: 12 },
-  tipText: { fontSize: 12, color: '#78350f', textAlign: 'center', lineHeight: 18 },
+  syncCard: { backgroundColor: '#fff', borderRadius: 14, padding: 16, gap: 8 },
+  syncTitle: { fontSize: 15, fontWeight: '800', color: '#111827' },
+  syncDesc: { fontSize: 12, color: '#6b7280', lineHeight: 18 },
+  syncBtn: {
+    backgroundColor: '#111827',
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  syncBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
+  syncMessage: { fontSize: 12, color: '#15803d', fontWeight: '600', textAlign: 'center' },
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
   modalCard: {

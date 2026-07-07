@@ -1,6 +1,6 @@
 import { serverFetch } from '@/lib/server-api';
 import Link from 'next/link';
-import { Salad, Plus, Users, BookOpen, Target } from 'lucide-react';
+import { Salad, Plus, Users, BookOpen, Target, AlertTriangle, Apple } from 'lucide-react';
 
 interface Plan {
   id: string;
@@ -22,6 +22,18 @@ interface Stats {
   totalEntriesToday: number;
 }
 
+interface RiskAlert {
+  id: string;
+  pattern_detected: string;
+  created_at: string;
+  member: { id: string; first_name: string; last_name: string };
+}
+
+const RISK_PATTERN_LABELS: Record<string, string> = {
+  restriccion_extrema: 'Restricción calórica extrema (< 1,200 kcal/día)',
+  obsesion_registro: 'Registro obsesivo (muchos registros al día)',
+};
+
 const GOAL_LABELS: Record<string, { label: string; color: string }> = {
   WEIGHT_LOSS: { label: 'Pérdida de peso', color: 'bg-red-100 text-red-700' },
   MUSCLE_GAIN: { label: 'Ganancia muscular', color: 'bg-blue-100 text-blue-700' },
@@ -30,15 +42,46 @@ const GOAL_LABELS: Record<string, { label: string; color: string }> = {
 };
 
 export default async function NutritionPage() {
-  const [rawPlans, rawStats] = await Promise.all([
+  const [rawPlans, rawStats, rawAlerts] = await Promise.all([
     serverFetch<Plan[]>('/api/v1/nutrition-plans').catch(() => null),
     serverFetch<Stats>('/api/v1/nutrition/stats').catch(() => null),
+    serverFetch<RiskAlert[]>('/api/v1/nutrition/risk-alerts').catch(() => null),
   ]);
   const plans: Plan[] = rawPlans ?? [];
   const stats: Stats = rawStats ?? { totalPlans: 0, activePlans: 0, totalEntriesToday: 0 };
+  const riskAlerts: RiskAlert[] = rawAlerts ?? [];
 
   return (
     <div className="space-y-6">
+      {/* Alertas de riesgo alimentario (D-23) */}
+      {riskAlerts.length > 0 && (
+        <div className="rounded-xl border border-red-200 bg-red-50 p-4 space-y-2">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-red-600" />
+            <p className="text-sm font-semibold text-red-800">
+              {riskAlerts.length} alerta{riskAlerts.length > 1 ? 's' : ''} de seguimiento
+              nutricional pendiente{riskAlerts.length > 1 ? 's' : ''}
+            </p>
+          </div>
+          <div className="space-y-1.5">
+            {riskAlerts.map((a) => (
+              <Link
+                key={a.id}
+                href={`/members/${a.member.id}`}
+                className="flex items-center justify-between rounded-lg bg-white/60 px-3 py-2 text-xs hover:bg-white"
+              >
+                <span className="font-medium text-red-900">
+                  {a.member.first_name} {a.member.last_name}
+                </span>
+                <span className="text-red-600">
+                  {RISK_PATTERN_LABELS[a.pattern_detected] ?? a.pattern_detected}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -47,12 +90,20 @@ export default async function NutritionPage() {
             Planes nutricionales y diario alimenticio de miembros
           </p>
         </div>
-        <Link
-          href="/nutrition/plans/new"
-          className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-2 text-sm font-semibold text-white hover:bg-violet-700 transition-colors shadow-sm"
-        >
-          <Plus className="h-4 w-4" /> Nuevo plan
-        </Link>
+        <div className="flex gap-2">
+          <Link
+            href="/nutrition/food-library"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            <Apple className="h-4 w-4" /> Biblioteca de alimentos
+          </Link>
+          <Link
+            href="/nutrition/plans/new"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-2 text-sm font-semibold text-white hover:bg-violet-700 transition-colors shadow-sm"
+          >
+            <Plus className="h-4 w-4" /> Nuevo plan
+          </Link>
+        </div>
       </div>
 
       {/* Stats */}

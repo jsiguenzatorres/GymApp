@@ -104,3 +104,19 @@ Detecta si una URL ya NO contiene `wger.de` — esas las salta sin re-descargar.
 ### Tiempo
 
 30-60 minutos sin interrupciones (descarga + upload secuencial). Si una descarga falla, la conserva con la URL original y continúa con la siguiente.
+
+---
+
+## `seed-food-items.mjs`
+
+Pobla `food_items` (D-38) con ~148 alimentos comunes: proteínas, lácteos, carbohidratos base, legumbres, comidas típicas de El Salvador/CA (pupusas, tamales, casamiento, etc.), frutas, vegetales, frutos secos, aceites, bebidas, fast food y dulces. Macros por 100g aproximadas (USDA + tablas locales). Se insertan como alimentos **globales** (`gym_id = null`), visibles para todos los gyms.
+
+### Uso
+
+```bash
+# Probar sin escribir a la BD
+pnpm --filter api exec node scripts/seed-food-items.mjs --dry-run
+
+# Insertar (idempotente por nombre — re-correrlo no duplica nada)
+pnpm --filter api exec node scripts/seed-food-items.mjs
+```
