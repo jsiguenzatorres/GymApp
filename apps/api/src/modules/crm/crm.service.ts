@@ -486,9 +486,18 @@ export class CrmService {
   // â”€â”€â”€ ARIA STUB â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   async ariaChat(gymId: string, memberId: string, message: string) {
-    const [gym, riskAlerts, upcomingAppointments, ragContext, history] = await Promise.all([
+    const [gym, atRiskMembers, upcomingAppointments, ragContext, history] = await Promise.all([
       this.prisma.gym.findUnique({ where: { id: gymId }, select: { name: true, currency: true } }),
-      this.prisma.member.count({ where: { gym_id: gymId, risk_score: { gte: 70 } } }),
+      this.prisma.member.findMany({
+        where: {
+          gym_id: gymId,
+          risk_score: { gte: 70 },
+          status: { in: ['ACTIVE', 'TRIAL', 'FREEZE'] },
+        },
+        select: { first_name: true, last_name: true, risk_score: true },
+        orderBy: { risk_score: 'desc' },
+        take: 15,
+      }),
       this.prisma.appointment.count({
         where: {
           gym_id: gymId,
@@ -504,12 +513,19 @@ export class CrmService {
       where: { gym_id: gymId, status: { in: ['ACTIVE', 'TRIAL'] } },
     });
 
+    const atRiskList = atRiskMembers.length
+      ? atRiskMembers
+          .map((m) => `  - ${m.first_name} ${m.last_name} (score ${m.risk_score})`)
+          .join('\n')
+      : '  (ninguno)';
+
     const systemPrompt = `Eres ARIA, el Asistente Relacional Inteligente de ${gym?.name ?? 'el gym'}.
 Eres experta en retención de miembros, CRM deportivo y estrategias de fidelización para gimnasios en Latinoamérica.
 
 CONTEXTO ACTUAL DEL GYM:
 - Miembros activos: ${activeMembers}
-- Miembros en riesgo alto de cancelar (score ≥ 70): ${riskAlerts}
+- Miembros en riesgo alto de cancelar (score ≥ 70): ${atRiskMembers.length}
+${atRiskList}
 - Citas próximas (7 días): ${upcomingAppointments}
 - Moneda: ${gym?.currency ?? 'USD'}
 ${ragContext}
