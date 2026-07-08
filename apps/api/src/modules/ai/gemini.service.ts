@@ -108,6 +108,46 @@ export class GeminiService {
     return this.chat('', prompt, [], model);
   }
 
+  async embedText(text: string, model = 'text-embedding-004'): Promise<number[]> {
+    if (this.keys.length === 0) {
+      throw new Error('No Gemini API keys configured');
+    }
+
+    let attempts = 0;
+    const maxAttempts = this.keys.length;
+    let lastError = '';
+
+    while (attempts < maxAttempts) {
+      try {
+        const genAI = new GoogleGenerativeAI(this.keys[this.currentKeyIndex]);
+        const genModel = genAI.getGenerativeModel({ model }, { apiVersion: 'v1' });
+        const result = await genModel.embedContent(text);
+        return result.embedding.values;
+      } catch (err: unknown) {
+        const status = (err as { status?: number })?.status ?? 0;
+        const message = (err as Error)?.message ?? '';
+        lastError = `[key#${this.currentKeyIndex} status=${status}] ${message.slice(0, 200)}`;
+        const isQuota =
+          RETRYABLE_CODES.includes(status) ||
+          message.includes('quota') ||
+          message.includes('RESOURCE_EXHAUSTED');
+
+        if (isQuota && this.rotateKey()) {
+          attempts++;
+          this.logger.warn(
+            `Gemini embed quota/error (${status}) — retrying with next key (attempt ${attempts}/${maxAttempts})`,
+          );
+          continue;
+        }
+
+        this.logger.error(`Gemini embed error: ${message}`);
+        throw err;
+      }
+    }
+
+    throw new Error(`All Gemini API keys exhausted. Last: ${lastError}`);
+  }
+
   // Multimodal: image + text → text response
   async generateWithImage(
     imageBase64: string,

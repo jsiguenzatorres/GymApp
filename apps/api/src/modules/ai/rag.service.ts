@@ -1,7 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../database/prisma.service';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GeminiService } from './gemini.service';
 
 interface KnowledgeChunk {
   content: string;
@@ -13,29 +12,15 @@ interface KnowledgeChunk {
 @Injectable()
 export class RagService {
   private readonly logger = new Logger(RagService.name);
-  private readonly genAI: GoogleGenerativeAI | null = null;
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly config: ConfigService,
-  ) {
-    const key = this.config.get<string>('GEMINI_API_KEY1');
-    if (key) {
-      this.genAI = new GoogleGenerativeAI(key);
-    } else {
-      this.logger.warn('No GEMINI_API_KEY1 — RAG embeddings disabled');
-    }
-  }
+    private readonly gemini: GeminiService,
+  ) {}
 
   async embedText(text: string): Promise<number[] | null> {
-    if (!this.genAI) return null;
     try {
-      const model = this.genAI.getGenerativeModel(
-        { model: 'text-embedding-004' },
-        { apiVersion: 'v1' },
-      );
-      const result = await model.embedContent(text);
-      return result.embedding.values;
+      return await this.gemini.embedText(text);
     } catch (err) {
       this.logger.error(`Embedding error: ${(err as Error).message}`);
       return null;
