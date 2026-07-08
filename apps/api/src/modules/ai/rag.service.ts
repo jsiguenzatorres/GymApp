@@ -30,7 +30,10 @@ export class RagService {
   async embedText(text: string): Promise<number[] | null> {
     if (!this.genAI) return null;
     try {
-      const model = this.genAI.getGenerativeModel({ model: 'text-embedding-004' });
+      const model = this.genAI.getGenerativeModel(
+        { model: 'text-embedding-004' },
+        { apiVersion: 'v1' },
+      );
       const result = await model.embedContent(text);
       return result.embedding.values;
     } catch (err) {
