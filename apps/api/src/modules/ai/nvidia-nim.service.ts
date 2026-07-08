@@ -14,7 +14,10 @@ export class NvidiaNimService {
 
   constructor(private readonly config: ConfigService) {
     this.apiKey = this.config.get<string>('NVIDIA_NIM_API_KEY');
-    this.model = this.config.get<string>('NVIDIA_NIM_MODEL') ?? 'nvidia/nemotron-3-super-120b-a12b';
+    // gemma-4-31b-it: chat estandar (no "razonamiento"), ~600-1500ms al primer
+    // token vs 24-180s de los modelos Nemotron/MiniMax de razonamiento — la
+    // latencia importa aqui porque ARIA/Business Coach responden en vivo.
+    this.model = this.config.get<string>('NVIDIA_NIM_MODEL') ?? 'google/gemma-4-31b-it';
     if (!this.apiKey) {
       this.logger.warn('No NVIDIA_NIM_API_KEY — fallback a NVIDIA NIM deshabilitado');
     }
