@@ -8,10 +8,11 @@ import {
   ActivityIndicator,
   RefreshControl,
   Alert,
+  TextInput,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useAuthStore } from '@/store/auth.store';
-import { classesApi } from '@/lib/api-client';
+import { classesApi, ptSessionsApi, Trainer, PtSessionRequest } from '@/lib/api-client';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -119,7 +120,7 @@ function generate14Days(): Date[] {
 
 export default function ClassesScreen() {
   const accessToken = useAuthStore((s) => s.accessToken);
-  const [activeTab, setActiveTab] = useState<'schedule' | 'my-classes'>('schedule');
+  const [activeTab, setActiveTab] = useState<'schedule' | 'my-classes' | 'pt'>('schedule');
 
   return (
     <View style={styles.container}>
@@ -152,13 +153,23 @@ export default function ClassesScreen() {
             Mis Clases
           </Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tabPill, activeTab === 'pt' && styles.tabPillActive]}
+          onPress={() => setActiveTab('pt')}
+        >
+          <Text style={[styles.tabPillText, activeTab === 'pt' && styles.tabPillTextActive]}>
+            Sesión PT
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {/* Content */}
       {activeTab === 'schedule' ? (
         <ScheduleTab accessToken={accessToken} />
-      ) : (
+      ) : activeTab === 'my-classes' ? (
         <MyClassesTab accessToken={accessToken} />
+      ) : (
+        <PtSessionTab accessToken={accessToken} />
       )}
     </View>
   );
@@ -550,6 +561,334 @@ function MyClassesTab({ accessToken }: { accessToken: string | null }) {
     </ScrollView>
   );
 }
+
+// ─── Tab 3: Sesión PT (individual) ────────────────────────────────────────────
+
+const PT_STATUS_LABEL: Record<PtSessionRequest['status'], { label: string; color: string }> = {
+  PENDING: { label: 'Esperando confirmación', color: '#f59e0b' },
+  SCHEDULED: { label: 'Agendada', color: '#1d4ed8' },
+  CONFIRMED: { label: 'Confirmada', color: '#16a34a' },
+  REJECTED: { label: 'Rechazada', color: '#dc2626' },
+  COMPLETED: { label: 'Completada', color: '#6b7280' },
+  CANCELLED: { label: 'Cancelada', color: '#6b7280' },
+  NO_SHOW: { label: 'No asististe', color: '#dc2626' },
+};
+
+function PtSessionTab({ accessToken }: { accessToken: string | null }) {
+  const [trainers, setTrainers] = useState<Trainer[]>([]);
+  const [requests, setRequests] = useState<PtSessionRequest[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [selectedTrainer, setSelectedTrainer] = useState<string | null>(null);
+  const [date, setDate] = useState(''); // YYYY-MM-DD
+  const [time, setTime] = useState(''); // HH:MM
+  const [notes, setNotes] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const load = useCallback(async () => {
+    if (!accessToken) return;
+    setLoading(true);
+    try {
+      const [t, r] = await Promise.all([
+        ptSessionsApi.getTrainers(accessToken),
+        ptSessionsApi.getMine(accessToken),
+      ]);
+      setTrainers(t ?? []);
+      setRequests(r ?? []);
+    } catch (err) {
+      Alert.alert('Error', err instanceof Error ? err.message : 'No se pudo cargar la información');
+    } finally {
+      setLoading(false);
+    }
+  }, [accessToken]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const handleSubmit = async () => {
+    if (!accessToken || !selectedTrainer || !date || !time) {
+      Alert.alert('Faltan datos', 'Selecciona un entrenador, fecha y hora.');
+      return;
+    }
+    const requestedAt = new Date(`${date}T${time}:00`);
+    if (isNaN(requestedAt.getTime())) {
+      Alert.alert(
+        'Fecha inválida',
+        'Usa el formato AAAA-MM-DD para la fecha y HH:MM para la hora.',
+      );
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await ptSessionsApi.request(accessToken, {
+        trainerId: selectedTrainer,
+        requestedAt: requestedAt.toISOString(),
+        notes: notes || undefined,
+      });
+      setSelectedTrainer(null);
+      setDate('');
+      setTime('');
+      setNotes('');
+      Alert.alert('Solicitud enviada', 'Tu entrenador debe confirmarla — te avisaremos.');
+      load();
+    } catch (err) {
+      Alert.alert('Error', err instanceof Error ? err.message : 'No se pudo enviar la solicitud');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleCancel = async (id: string) => {
+    if (!accessToken) return;
+    try {
+      await ptSessionsApi.cancel(accessToken, id);
+      load();
+    } catch (err) {
+      Alert.alert('Error', err instanceof Error ? err.message : 'No se pudo cancelar');
+    }
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.centered}>
+        <ActivityIndicator size="large" color="#1d4ed8" />
+      </View>
+    );
+  }
+
+  return (
+    <ScrollView style={styles.flex1} contentContainerStyle={styles.listContent}>
+      {/* Explicación grupal vs individual */}
+      <View style={ptStyles.infoBox}>
+        <Text style={ptStyles.infoTitle}>¿Cuál es la diferencia?</Text>
+        <Text style={ptStyles.infoText}>
+          Las clases grupales (pestaña "Horario") tienen cupo y horario ya publicados — solo te
+          inscribes. Una sesión PT es 1 a 1 con el entrenador que elijas: tú propones el día y la
+          hora, y tu solicitud entra a una <Text style={ptStyles.infoBold}>sala de espera</Text>{' '}
+          hasta que el entrenador la confirme o la rechace.
+        </Text>
+      </View>
+
+      {/* Formulario de solicitud */}
+      <View style={ptStyles.formCard}>
+        <Text style={ptStyles.formLabel}>Entrenador</Text>
+        <View style={ptStyles.trainerRow}>
+          {trainers.length === 0 ? (
+            <Text style={styles.emptyText}>Sin entrenadores disponibles</Text>
+          ) : (
+            trainers.map((t) => (
+              <TouchableOpacity
+                key={t.id}
+                style={[
+                  ptStyles.trainerChip,
+                  selectedTrainer === t.id && ptStyles.trainerChipSelected,
+                ]}
+                onPress={() => setSelectedTrainer(t.id)}
+              >
+                <Text
+                  style={[
+                    ptStyles.trainerChipText,
+                    selectedTrainer === t.id && ptStyles.trainerChipTextSelected,
+                  ]}
+                >
+                  {t.first_name} {t.last_name}
+                </Text>
+              </TouchableOpacity>
+            ))
+          )}
+        </View>
+
+        <Text style={ptStyles.formLabel}>Fecha propuesta (AAAA-MM-DD)</Text>
+        <TextInput
+          style={ptStyles.input}
+          placeholder="2026-07-15"
+          value={date}
+          onChangeText={setDate}
+        />
+
+        <Text style={ptStyles.formLabel}>Hora propuesta (HH:MM)</Text>
+        <TextInput style={ptStyles.input} placeholder="17:30" value={time} onChangeText={setTime} />
+
+        <Text style={ptStyles.formLabel}>Notas (opcional)</Text>
+        <TextInput
+          style={[ptStyles.input, ptStyles.textArea]}
+          placeholder="Ej: quiero enfocarme en piernas"
+          value={notes}
+          onChangeText={setNotes}
+          multiline
+        />
+
+        <TouchableOpacity style={ptStyles.submitBtn} onPress={handleSubmit} disabled={submitting}>
+          {submitting ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <Text style={ptStyles.submitBtnText}>Solicitar sesión</Text>
+          )}
+        </TouchableOpacity>
+      </View>
+
+      {/* Mis solicitudes */}
+      <Text style={ptStyles.sectionTitle}>Mis solicitudes</Text>
+      {requests.length === 0 ? (
+        <Text style={styles.emptyText}>Aún no has solicitado ninguna sesión PT.</Text>
+      ) : (
+        requests.map((r) => {
+          const meta = PT_STATUS_LABEL[r.status];
+          const canCancel = r.status === 'PENDING' || r.status === 'CONFIRMED';
+          return (
+            <View key={r.id} style={ptStyles.requestCard}>
+              <View style={ptStyles.requestInfo}>
+                <Text style={ptStyles.requestTrainer}>
+                  {r.staff ? `${r.staff.first_name} ${r.staff.last_name}` : 'Entrenador'}
+                </Text>
+                <Text style={ptStyles.requestDate}>{formatFullDate(r.scheduled_at)}</Text>
+              </View>
+              <View style={[ptStyles.statusBadge, { backgroundColor: meta.color + '1A' }]}>
+                <Text style={[ptStyles.statusBadgeText, { color: meta.color }]}>{meta.label}</Text>
+              </View>
+              {canCancel && (
+                <TouchableOpacity onPress={() => handleCancel(r.id)} style={ptStyles.cancelLink}>
+                  <Text style={ptStyles.cancelLinkText}>Cancelar</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          );
+        })
+      )}
+    </ScrollView>
+  );
+}
+
+const ptStyles = StyleSheet.create({
+  infoBox: {
+    backgroundColor: '#eff6ff',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 14,
+  },
+  infoTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1d4ed8',
+    marginBottom: 4,
+  },
+  infoText: {
+    fontSize: 13,
+    color: '#374151',
+    lineHeight: 18,
+  },
+  infoBold: {
+    fontWeight: '700',
+  },
+  formCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 16,
+    gap: 4,
+  },
+  formLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6b7280',
+    marginTop: 8,
+  },
+  trainerRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  trainerChip: {
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#f3f4f6',
+  },
+  trainerChipSelected: {
+    backgroundColor: '#1d4ed8',
+  },
+  trainerChipText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#374151',
+  },
+  trainerChipTextSelected: {
+    color: '#fff',
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: 14,
+    color: '#111827',
+  },
+  textArea: {
+    minHeight: 60,
+    textAlignVertical: 'top',
+  },
+  submitBtn: {
+    marginTop: 14,
+    backgroundColor: '#1d4ed8',
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  submitBtnText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 8,
+  },
+  requestCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  requestInfo: {
+    flex: 1,
+    minWidth: 140,
+  },
+  requestTrainer: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  requestDate: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginTop: 2,
+  },
+  statusBadge: {
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  statusBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  cancelLink: {
+    width: '100%',
+  },
+  cancelLinkText: {
+    fontSize: 12,
+    color: '#dc2626',
+    fontWeight: '500',
+    marginTop: 4,
+  },
+});
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 

@@ -251,6 +251,7 @@ export default async function ClassesPage({
                   <th className="px-4 py-3">Sala</th>
                   <th className="px-4 py-3">Inscritos</th>
                   <th className="px-4 py-3">Estado</th>
+                  <th className="px-4 py-3"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -296,6 +297,14 @@ export default async function ClassesPage({
                         >
                           {s.status === 'SCHEDULED' ? 'Programada' : s.status}
                         </span>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <Link
+                          href={`/classes/sessions/${s.id}`}
+                          className="text-xs font-medium text-violet-600 hover:text-violet-800"
+                        >
+                          Ver asistencia
+                        </Link>
                       </td>
                     </tr>
                   );

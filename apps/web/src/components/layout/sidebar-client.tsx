@@ -29,6 +29,7 @@ import {
   Repeat,
   Webhook,
   Tag,
+  UserCheck,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -53,6 +54,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/leads', label: 'Pipeline de Leads', icon: UserPlus },
   { href: '/feedback', label: 'Feedback & NPS', icon: MessageSquare },
   { href: '/classes', label: 'Clases & Horarios', icon: Calendar },
+  { href: '/crm/pt-sessions', label: 'Sesiones PT', icon: UserCheck },
   { href: '/gamification', label: 'Gamificación', icon: Trophy },
   { href: '/challenges', label: 'Retos del gym', icon: Target },
   { href: '/rewards', label: 'Tienda recompensas', icon: Gift },

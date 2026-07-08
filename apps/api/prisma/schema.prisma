@@ -134,6 +134,7 @@ model Gym {
   nutrition_plan_history NutritionPlanHistory[]
   coupons                Coupon[]
   lab_results            LabResult[]
+  telegram_links         TelegramLink[]
   class_types         ClassType[]
   class_sessions      ClassSession[]
   class_enrollments   ClassEnrollment[]
@@ -275,6 +276,7 @@ model Member {
   nutrition_profile  MemberNutritionProfile?
   nutrition_risk_alerts NutritionRiskAlert[]
   lab_results        LabResult[]
+  telegram_link       TelegramLink?
   class_enrollments   ClassEnrollment[]
   points_transactions PointsTransaction[]
   member_badges         MemberBadge[]
@@ -697,6 +699,7 @@ model Appointment {
   duration_min     Int       @default(60)
   notes            String?
   cancelled_reason String?
+  checked_in_at    DateTime?
   created_at       DateTime  @default(now())
   updated_at       DateTime  @updatedAt
 
@@ -708,6 +711,26 @@ model Appointment {
   @@index([gym_id, member_id])
   @@index([gym_id, status])
   @@map("appointments")
+}
+
+// ─── TELEGRAM (vinculación de cuenta para chat con ARIA) ─────────────────────
+
+model TelegramLink {
+  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gym_id               String    @db.Uuid
+  member_id            String    @unique @db.Uuid
+  telegram_chat_id     String?   @unique @db.VarChar(50)
+  telegram_username    String?   @db.VarChar(100)
+  link_code            String?   @db.VarChar(10)
+  link_code_expires_at DateTime?
+  linked_at            DateTime?
+  created_at           DateTime  @default(now())
+
+  gym    Gym    @relation(fields: [gym_id], references: [id], onDelete: Cascade)
+  member Member @relation(fields: [member_id], references: [id], onDelete: Cascade)
+
+  @@index([gym_id])
+  @@map("telegram_links")
 }
 
 // ─── METRIC SNAPSHOTS (para histórico de KPIs) ───────────────────────────────
@@ -1089,13 +1112,14 @@ model ClassSession {
 }
 
 model ClassEnrollment {
-  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  gym_id       String    @db.Uuid
-  session_id   String    @db.Uuid
-  member_id    String    @db.Uuid
-  status       String    @default("ENROLLED")
-  enrolled_at  DateTime  @default(now())
-  cancelled_at DateTime?
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gym_id        String    @db.Uuid
+  session_id    String    @db.Uuid
+  member_id     String    @db.Uuid
+  status        String    @default("ENROLLED") // ENROLLED|WAITLIST|CANCELLED|ATTENDED|NO_SHOW
+  enrolled_at   DateTime  @default(now())
+  cancelled_at  DateTime?
+  checked_in_at DateTime?
 
   gym     Gym          @relation(fields: [gym_id], references: [id], onDelete: Cascade)
   session ClassSession @relation(fields: [session_id], references: [id], onDelete: Cascade)

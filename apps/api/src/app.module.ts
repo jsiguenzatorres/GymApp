@@ -40,6 +40,7 @@ import { BlogModule } from './modules/blog/blog.module';
 import { BillingEngineModule } from './modules/billing-engine/billing-engine.module';
 import { CouponsModule } from './modules/coupons/coupons.module';
 import { WhatsAppModule } from './modules/whatsapp/whatsapp.module';
+import { TelegramModule } from './modules/telegram/telegram.module';
 
 @Module({
   imports: [
@@ -94,6 +95,7 @@ import { WhatsAppModule } from './modules/whatsapp/whatsapp.module';
     BillingEngineModule,
     CouponsModule,
     WhatsAppModule,
+    TelegramModule,
     // Módulos de negocio se agregan aquí en cada sprint
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

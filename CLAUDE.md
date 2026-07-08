@@ -105,16 +105,16 @@ CREATE EXTENSION IF NOT EXISTS "pg_cron";       -- jobs dentro de Postgres
 
 ### IA y Servicios Externos
 
-| Servicio                | Uso                                   | Modelo/Plan                         |
-| ----------------------- | ------------------------------------- | ----------------------------------- |
-| Anthropic               | ARIA, ZEUS, Business Coach            | claude-sonnet-4-20250514 (primario) |
-| OpenAI                  | Fallback LLM + Vision foto productos  | GPT-4o                              |
-| ElevenLabs              | TTS para ARIA y ZEUS (voz)            | —                                   |
-| OpenAI Whisper          | STT — comandos de voz en ZEUS         | —                                   |
-| Google Vision API       | Reconocimiento de producto por foto   | —                                   |
-| Google Natural Language | Análisis de sentimiento interacciones | —                                   |
-| LangChain.js            | RAG pipeline para ARIA/ZEUS           | —                                   |
-| pgvector                | Almacén de embeddings RAG             | —                                   |
+| Servicio                | Uso                                                | Modelo/Plan                         |
+| ----------------------- | -------------------------------------------------- | ----------------------------------- |
+| Anthropic               | ARIA, ZEUS, Business Coach                         | claude-sonnet-4-20250514 (primario) |
+| OpenAI                  | Fallback LLM + Vision foto productos               | GPT-4o                              |
+| Amazon Polly            | TTS para ARIA y ZEUS (voz, neural, español latino) | —                                   |
+| OpenAI Whisper          | STT — comandos de voz en ZEUS                      | —                                   |
+| Google Vision API       | Reconocimiento de producto por foto                | —                                   |
+| Google Natural Language | Análisis de sentimiento interacciones              | —                                   |
+| LangChain.js            | RAG pipeline para ARIA/ZEUS                        | —                                   |
+| pgvector                | Almacén de embeddings RAG                          | —                                   |
 
 ### Pagos y Facturación
 
@@ -332,7 +332,7 @@ Detalle completo en `Diseño/Ver2/Estrategia_Comercial_GoToMarket.md`.
 - **LLM:** Claude claude-sonnet-4-20250514 primario / GPT-4o fallback
 - **RAG:** pgvector + LangChain.js con 4 capas de conocimiento
 - **Rate limit:** 50 queries/miembro/día
-- **TTS:** ElevenLabs (respuestas de voz)
+- **TTS:** Amazon Polly (respuestas de voz, neural, español latino)
 - **STT:** OpenAI Whisper
 
 **Contexto ARIA incluye:**
@@ -566,11 +566,11 @@ Los siguientes MCP servers son necesarios para el desarrollo de GymApp:
 
 ### MCPs de IA
 
-| MCP            | Propósito                               |
-| -------------- | --------------------------------------- |
-| Anthropic MCP  | Claude API — ARIA, ZEUS, Business Coach |
-| OpenAI MCP     | GPT-4o fallback + Whisper STT + Vision  |
-| ElevenLabs MCP | TTS para voz de ARIA y ZEUS             |
+| MCP           | Propósito                                                     |
+| ------------- | ------------------------------------------------------------- |
+| Anthropic MCP | Claude API — ARIA, ZEUS, Business Coach                       |
+| OpenAI MCP    | GPT-4o fallback + Whisper STT + Vision                        |
+| Amazon Polly  | TTS para voz de ARIA y ZEUS (vía REST firmado SigV4, sin MCP) |
 
 ### MCPs de Control de Acceso
 
@@ -753,7 +753,7 @@ Gestionadas con **Doppler** — NUNCA en `.env` commitado.
 **Rate limits IA:**
 
 - Anthropic (Claude): 50 queries/miembro/día
-- ElevenLabs TTS: 20 requests/miembro/día
+- Amazon Polly TTS: 20 requests/miembro/día
 
 ---
 

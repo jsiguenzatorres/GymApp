@@ -1,4 +1,5 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, Logger } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../database/prisma.service';
 import { NotificationService } from '../notifications/notification.service';
 import { ClassEnrollment, ClassSession, ClassType } from '@prisma/client';
@@ -32,6 +33,7 @@ export interface SessionEnrollment {
   id: string;
   status: string;
   enrolled_at: Date;
+  checked_in_at: Date | null;
   member: { id: string; first_name: string; last_name: string };
 }
 
@@ -84,6 +86,8 @@ export interface MyEnrollment {
 
 @Injectable()
 export class ScheduleService {
+  private readonly logger = new Logger(ScheduleService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly notif: NotificationService,
@@ -147,6 +151,7 @@ export class ScheduleService {
             status: true,
             enrolled_at: true,
             cancelled_at: true,
+            checked_in_at: true,
             gym_id: true,
             session_id: true,
           },
@@ -445,6 +450,25 @@ export class ScheduleService {
     });
   }
 
+  async getAdminSessionById(gymId: string, sessionId: string): Promise<AdminSessionView> {
+    const session = await this.prisma.classSession.findFirst({
+      where: { id: sessionId, gym_id: gymId },
+      include: {
+        class_type: { select: { name: true, color: true } },
+        trainer: { select: { first_name: true, last_name: true } },
+        enrollments: { select: { status: true } },
+      },
+    });
+    if (!session) throw new NotFoundException('Sesión no encontrada');
+
+    const { enrollments, ...rest } = session;
+    return {
+      ...rest,
+      enrolled_count: enrollments.filter((e) => e.status === 'ENROLLED').length,
+      waitlist_count: enrollments.filter((e) => e.status === 'WAITLIST').length,
+    };
+  }
+
   async getSessionEnrollments(gymId: string, sessionId: string): Promise<SessionEnrollment[]> {
     const session = await this.prisma.classSession.findFirst({
       where: { id: sessionId, gym_id: gymId },
@@ -452,7 +476,11 @@ export class ScheduleService {
     if (!session) throw new NotFoundException('Sesión no encontrada');
 
     const enrollments = await this.prisma.classEnrollment.findMany({
-      where: { session_id: sessionId, gym_id: gymId, status: { in: ['ENROLLED', 'WAITLIST'] } },
+      where: {
+        session_id: sessionId,
+        gym_id: gymId,
+        status: { in: ['ENROLLED', 'WAITLIST', 'ATTENDED', 'NO_SHOW'] },
+      },
       include: { member: { select: { id: true, first_name: true, last_name: true } } },
       orderBy: { enrolled_at: 'asc' },
     });
@@ -461,7 +489,107 @@ export class ScheduleService {
       id: e.id,
       status: e.status,
       enrolled_at: e.enrolled_at,
+      checked_in_at: e.checked_in_at,
       member: e.member,
     }));
+  }
+
+  // ─── Check-in / asistencia / no-show ────────────────────────────────────────
+
+  // FitCoins otorgados por asistir a una clase — mismo mecanismo que el bonus de
+  // cumpleaños en RetentionService (points_balance/points_lifetime + PointsTransaction).
+  private static readonly CLASS_ATTENDANCE_POINTS = 20;
+
+  async checkInMember(
+    gymId: string,
+    sessionId: string,
+    enrollmentId: string,
+  ): Promise<ClassEnrollment> {
+    const enrollment = await this.prisma.classEnrollment.findFirst({
+      where: { id: enrollmentId, session_id: sessionId, gym_id: gymId },
+    });
+    if (!enrollment) throw new NotFoundException('Inscripción no encontrada');
+    if (enrollment.status !== 'ENROLLED') {
+      throw new ConflictException('Solo se puede marcar asistencia de inscripciones confirmadas');
+    }
+
+    const [updated] = await this.prisma.$transaction([
+      this.prisma.classEnrollment.update({
+        where: { id: enrollmentId },
+        data: { status: 'ATTENDED', checked_in_at: new Date() },
+      }),
+      this.prisma.member.update({
+        where: { id: enrollment.member_id },
+        data: {
+          points_balance: { increment: ScheduleService.CLASS_ATTENDANCE_POINTS },
+          points_lifetime: { increment: ScheduleService.CLASS_ATTENDANCE_POINTS },
+        },
+      }),
+      this.prisma.pointsTransaction.create({
+        data: {
+          gym_id: gymId,
+          member_id: enrollment.member_id,
+          amount: ScheduleService.CLASS_ATTENDANCE_POINTS,
+          type: 'CLASS_ATTENDANCE',
+          description: 'Asistencia a clase',
+          reference_id: sessionId,
+        },
+      }),
+    ]);
+
+    return updated;
+  }
+
+  async markNoShow(
+    gymId: string,
+    sessionId: string,
+    enrollmentId: string,
+  ): Promise<ClassEnrollment> {
+    const enrollment = await this.prisma.classEnrollment.findFirst({
+      where: { id: enrollmentId, session_id: sessionId, gym_id: gymId },
+    });
+    if (!enrollment) throw new NotFoundException('Inscripción no encontrada');
+    if (enrollment.status !== 'ENROLLED') {
+      throw new ConflictException('Solo se puede marcar no-show de inscripciones confirmadas');
+    }
+
+    return this.prisma.classEnrollment.update({
+      where: { id: enrollmentId },
+      data: { status: 'NO_SHOW' },
+    });
+  }
+
+  // Barre sesiones ya finalizadas (con 1h de margen tras el fin) y marca como
+  // NO_SHOW a quien seguía ENROLLED sin check-in — evita que el staff tenga que
+  // cerrar manualmente cada sesión. Corre cada hora, igual que dunning.
+  @Cron(CronExpression.EVERY_HOUR)
+  async runNoShowSweep() {
+    const now = new Date();
+    const sessions = await this.prisma.classSession.findMany({
+      where: { status: 'SCHEDULED', scheduled_at: { lte: now } },
+      select: { id: true, gym_id: true, scheduled_at: true, duration_minutes: true },
+      take: 200,
+    });
+
+    const ended = sessions.filter(
+      (s) => new Date(s.scheduled_at.getTime() + s.duration_minutes * 60_000 + 60 * 60_000) <= now,
+    );
+    if (!ended.length) return;
+
+    for (const session of ended) {
+      try {
+        await this.prisma.classEnrollment.updateMany({
+          where: { session_id: session.id, gym_id: session.gym_id, status: 'ENROLLED' },
+          data: { status: 'NO_SHOW' },
+        });
+        await this.prisma.classSession.update({
+          where: { id: session.id },
+          data: { status: 'COMPLETED' },
+        });
+      } catch (err) {
+        this.logger.error(`Error cerrando sesión ${session.id}: ${(err as Error).message}`);
+      }
+    }
+    this.logger.log(`No-show sweep: ${ended.length} sesión(es) cerradas`);
   }
 }

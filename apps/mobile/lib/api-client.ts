@@ -1258,3 +1258,56 @@ export const classesApi = {
   cancelEnrollment: (token: string, sessionId: string) =>
     apiClient.delete<void>(`/api/v1/schedule/sessions/${sessionId}/enroll`, undefined, token),
 };
+
+export interface Trainer {
+  id: string;
+  first_name: string;
+  last_name: string;
+  specialties: string[];
+}
+
+export interface PtSessionRequest {
+  id: string;
+  scheduled_at: string;
+  duration_min: number;
+  notes: string | null;
+  status:
+    | 'PENDING'
+    | 'SCHEDULED'
+    | 'CONFIRMED'
+    | 'REJECTED'
+    | 'COMPLETED'
+    | 'CANCELLED'
+    | 'NO_SHOW';
+  staff?: { first_name: string; last_name: string } | null;
+}
+
+export const ptSessionsApi = {
+  getTrainers: (token: string) =>
+    apiClient.get<Trainer[]>('/api/v1/staff?role=TRAINER&isActive=true', token),
+  request: (
+    token: string,
+    dto: { trainerId: string; requestedAt: string; durationMinutes?: number; notes?: string },
+  ) => apiClient.post<PtSessionRequest>('/api/v1/me/pt-sessions', dto, token),
+  getMine: (token: string) => apiClient.get<PtSessionRequest[]>('/api/v1/me/pt-sessions', token),
+  cancel: (token: string, id: string) =>
+    apiClient.post<void>(`/api/v1/me/pt-sessions/${id}/cancel`, {}, token),
+};
+
+export interface TelegramLinkCode {
+  code: string;
+  expiresAt: string;
+  deepLink: string | null;
+}
+
+export interface TelegramStatus {
+  linked: boolean;
+  telegramUsername: string | null;
+}
+
+export const telegramApi = {
+  getStatus: (token: string) => apiClient.get<TelegramStatus>('/api/v1/me/telegram/status', token),
+  generateLinkCode: (token: string) =>
+    apiClient.post<TelegramLinkCode>('/api/v1/me/telegram/link-code', {}, token),
+  unlink: (token: string) => apiClient.post<void>('/api/v1/me/telegram/unlink', {}, token),
+};

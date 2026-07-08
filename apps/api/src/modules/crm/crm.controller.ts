@@ -16,6 +16,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { CreateInteractionDto } from './dto/create-interaction.dto';
 import { CreateAppointmentDto, UpdateAppointmentStatusDto } from './dto/create-appointment.dto';
+import { RequestPtSessionDto } from './dto/request-pt-session.dto';
 
 @UseGuards(JwtAuthGuard)
 @Controller()
@@ -83,6 +84,47 @@ export class CrmController {
     @CurrentUser() user: JwtPayload,
   ) {
     return this.crmService.updateAppointmentStatus(this.gymId(user), id, dto);
+  }
+
+  // ─── Sesiones PT individuales (member-facing) ──────────────────────────────
+
+  // POST /api/v1/me/pt-sessions
+  @Post('me/pt-sessions')
+  requestPtSession(@Body() dto: RequestPtSessionDto, @CurrentUser() user: JwtPayload) {
+    return this.crmService.requestPtSession(this.gymId(user), user.sub, dto);
+  }
+
+  // GET /api/v1/me/pt-sessions
+  @Get('me/pt-sessions')
+  getMyPtSessions(@CurrentUser() user: JwtPayload) {
+    return this.crmService.getMyPtSessions(this.gymId(user), user.sub);
+  }
+
+  // POST /api/v1/me/pt-sessions/:id/cancel
+  @Post('me/pt-sessions/:id/cancel')
+  cancelMyPtSession(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: JwtPayload) {
+    return this.crmService.cancelMyPtSession(this.gymId(user), user.sub, id);
+  }
+
+  // ─── Sesiones PT individuales (trainer/staff-facing) ───────────────────────
+
+  // GET /api/v1/pt-sessions/pending — cola de solicitudes del trainer autenticado
+  @Get('pt-sessions/pending')
+  getMyPendingPtRequests(@CurrentUser() user: JwtPayload) {
+    if (!user.staffId) throw new ForbiddenException('Solo staff puede ver solicitudes PT');
+    return this.crmService.getMyPendingPtRequests(this.gymId(user), user.staffId);
+  }
+
+  // PATCH /api/v1/pt-sessions/:id/check-in
+  @Patch('pt-sessions/:id/check-in')
+  checkInPtSession(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: JwtPayload) {
+    return this.crmService.checkInPtSession(this.gymId(user), id);
+  }
+
+  // PATCH /api/v1/pt-sessions/:id/no-show
+  @Patch('pt-sessions/:id/no-show')
+  markPtNoShow(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: JwtPayload) {
+    return this.crmService.markPtNoShow(this.gymId(user), id);
   }
 
   // POST /api/v1/aria/chat

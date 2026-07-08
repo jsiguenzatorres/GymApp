@@ -109,8 +109,31 @@ export class ScheduleController {
     );
   }
 
+  @Get('admin/sessions/:id')
+  getAdminSessionById(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.scheduleService.getAdminSessionById(this.gymId(user), id);
+  }
+
   @Get('admin/sessions/:id/enrollments')
   getSessionEnrollments(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
     return this.scheduleService.getSessionEnrollments(this.gymId(user), id);
+  }
+
+  @Patch('admin/sessions/:sessionId/enrollments/:enrollmentId/check-in')
+  checkInMember(
+    @CurrentUser() user: JwtPayload,
+    @Param('sessionId') sessionId: string,
+    @Param('enrollmentId') enrollmentId: string,
+  ) {
+    return this.scheduleService.checkInMember(this.gymId(user), sessionId, enrollmentId);
+  }
+
+  @Patch('admin/sessions/:sessionId/enrollments/:enrollmentId/no-show')
+  markNoShow(
+    @CurrentUser() user: JwtPayload,
+    @Param('sessionId') sessionId: string,
+    @Param('enrollmentId') enrollmentId: string,
+  ) {
+    return this.scheduleService.markNoShow(this.gymId(user), sessionId, enrollmentId);
   }
 }

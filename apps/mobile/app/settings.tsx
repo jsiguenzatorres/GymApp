@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,11 +10,12 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useAuthStore } from '@/store/auth.store';
-import { memberApi, profileApi, ApiError } from '@/lib/api-client';
+import { memberApi, profileApi, telegramApi, ApiError } from '@/lib/api-client';
 
 // ─── Section component ────────────────────────────────────────────────────────
 
@@ -72,6 +73,60 @@ export default function SettingsScreen() {
   const [phone, setPhone] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
+
+  const [tgLinked, setTgLinked] = useState(false);
+  const [tgUsername, setTgUsername] = useState<string | null>(null);
+  const [tgCode, setTgCode] = useState<string | null>(null);
+  const [tgDeepLink, setTgDeepLink] = useState<string | null>(null);
+  const [tgLoading, setTgLoading] = useState(false);
+
+  useEffect(() => {
+    if (!accessToken) return;
+    telegramApi
+      .getStatus(accessToken)
+      .then((s) => {
+        setTgLinked(s.linked);
+        setTgUsername(s.telegramUsername);
+      })
+      .catch(() => {});
+  }, [accessToken]);
+
+  const handleGenerateTelegramCode = async () => {
+    if (!accessToken) return;
+    setTgLoading(true);
+    try {
+      const result = await telegramApi.generateLinkCode(accessToken);
+      setTgCode(result.code);
+      setTgDeepLink(result.deepLink);
+      if (result.deepLink) {
+        Linking.openURL(result.deepLink).catch(() => {});
+      }
+    } catch {
+      Alert.alert('Error', 'No se pudo generar el código de vinculación.');
+    } finally {
+      setTgLoading(false);
+    }
+  };
+
+  const handleUnlinkTelegram = () => {
+    Alert.alert('Desvincular Telegram', '¿Seguro que quieres desvincular tu cuenta?', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Desvincular',
+        style: 'destructive',
+        onPress: async () => {
+          if (!accessToken) return;
+          try {
+            await telegramApi.unlink(accessToken);
+            setTgLinked(false);
+            setTgUsername(null);
+          } catch {
+            Alert.alert('Error', 'No se pudo desvincular.');
+          }
+        },
+      },
+    ]);
+  };
 
   // Load current values lazily when edit opens
   const openEdit = useCallback(async () => {
@@ -246,6 +301,40 @@ export default function SettingsScreen() {
             />
             <Divider />
             <Row label="Datos de salud" onPress={() => router.push('/health-data' as never)} />
+          </Section>
+
+          {/* ── Telegram ── */}
+          <Section title="Telegram">
+            {tgLinked ? (
+              <>
+                <Row label="Cuenta vinculada" value={tgUsername ? `@${tgUsername}` : 'Sí'} />
+                <Divider />
+                <Row label="Desvincular" onPress={handleUnlinkTelegram} destructive />
+              </>
+            ) : tgCode ? (
+              <View style={{ padding: 16, gap: 8 }}>
+                <Text style={styles.fieldLabel}>
+                  Abre Telegram y envía este código al bot con /start, o toca el botón:
+                </Text>
+                <Text style={{ fontSize: 24, fontWeight: '800', color: '#111827' }}>{tgCode}</Text>
+                {tgDeepLink && (
+                  <TouchableOpacity
+                    onPress={() => Linking.openURL(tgDeepLink).catch(() => {})}
+                    style={styles.saveBtn}
+                  >
+                    <Text style={styles.saveBtnText}>Abrir Telegram</Text>
+                  </TouchableOpacity>
+                )}
+                <Text style={{ fontSize: 12, color: '#9ca3af' }}>
+                  El código expira en 10 minutos.
+                </Text>
+              </View>
+            ) : (
+              <Row
+                label={tgLoading ? 'Generando...' : 'Vincular con Telegram'}
+                onPress={tgLoading ? undefined : handleGenerateTelegramCode}
+              />
+            )}
           </Section>
 
           {/* ── Comunidad y contenido ── */}

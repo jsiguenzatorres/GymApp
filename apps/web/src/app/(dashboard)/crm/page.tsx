@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { serverFetch } from '@/lib/server-api';
 import { RiskScoreBadge } from '@/components/crm/risk-score-badge';
 import { AppointmentStatus, InteractionType, INTERACTION_TYPE_LABELS } from '@gymapp/shared-types';
+import { SeedKnowledgeButton } from './seed-knowledge-button';
 
 interface RiskMember {
   id: string;
@@ -67,6 +68,7 @@ export default async function CrmPage() {
           <p className="text-sm text-gray-500">Gestión de relaciones y retención de miembros</p>
         </div>
         <div className="flex gap-3">
+          <SeedKnowledgeButton />
           <Link
             href="/crm/aria"
             className="rounded-lg border border-violet-200 bg-violet-50 px-4 py-2 text-sm font-medium text-violet-700 hover:bg-violet-100"

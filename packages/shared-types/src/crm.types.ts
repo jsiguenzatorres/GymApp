@@ -38,8 +38,10 @@ export enum AppointmentType {
 }
 
 export enum AppointmentStatus {
+  PENDING = 'PENDING', // solicitada por el miembro, esperando confirmación del trainer/staff
   SCHEDULED = 'SCHEDULED',
   CONFIRMED = 'CONFIRMED',
+  REJECTED = 'REJECTED', // el trainer/staff rechazó la solicitud del miembro
   COMPLETED = 'COMPLETED',
   CANCELLED = 'CANCELLED',
   NO_SHOW = 'NO_SHOW',
@@ -64,8 +66,10 @@ export const APPOINTMENT_TYPE_LABELS: Record<AppointmentType, string> = {
 };
 
 export const APPOINTMENT_STATUS_LABELS: Record<AppointmentStatus, string> = {
+  [AppointmentStatus.PENDING]: 'Esperando confirmación',
   [AppointmentStatus.SCHEDULED]: 'Agendada',
   [AppointmentStatus.CONFIRMED]: 'Confirmada',
+  [AppointmentStatus.REJECTED]: 'Rechazada',
   [AppointmentStatus.COMPLETED]: 'Completada',
   [AppointmentStatus.CANCELLED]: 'Cancelada',
   [AppointmentStatus.NO_SHOW]: 'No se presentó',

@@ -32,7 +32,8 @@ export class AiController {
     @CurrentUser() _user: JwtPayload,
   ) {
     if (!body.text?.trim()) return { error: 'text requerido' };
-    if (!this.tts.isAvailable) return { error: 'TTS no configurado — agrega ELEVENLABS_API_KEY' };
+    if (!this.tts.isAvailable)
+      return { error: 'TTS no configurado — agrega AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY' };
 
     const audio = await this.tts.synthesize(body.text.slice(0, 500), body.voiceId);
     if (!audio) return { error: 'Error al generar audio' };

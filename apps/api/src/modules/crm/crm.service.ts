@@ -1,10 +1,17 @@
-﻿import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+﻿import { Injectable, NotFoundException, ConflictException, Logger } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../database/prisma.service';
 import { GeminiService } from '../ai/gemini.service';
 import { RagService } from '../ai/rag.service';
 import { ConversationService } from '../ai/conversation.service';
+import { NotificationService } from '../notifications/notification.service';
 import { CreateInteractionDto } from './dto/create-interaction.dto';
 import { CreateAppointmentDto, UpdateAppointmentStatusDto } from './dto/create-appointment.dto';
+import { RequestPtSessionDto } from './dto/request-pt-session.dto';
+
+// FitCoins otorgados por asistir a una sesión PT — mismo mecanismo que
+// ScheduleService.CLASS_ATTENDANCE_POINTS para clases grupales.
+const PT_ATTENDANCE_POINTS = 25;
 
 @Injectable()
 export class CrmService {
@@ -15,6 +22,7 @@ export class CrmService {
     private readonly gemini: GeminiService,
     private readonly rag: RagService,
     private readonly conversation: ConversationService,
+    private readonly notification: NotificationService,
   ) {}
 
   // â”€â”€â”€ INTERACTIONS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -136,6 +144,195 @@ export class CrmService {
       },
       include: { member: { select: { id: true, first_name: true, last_name: true } } },
     });
+  }
+
+  // Sesiones PT individuales (1-a-1): reutiliza Appointment (appointment_type
+  // 'TRAINING') en vez de un modelo nuevo — el miembro propone trainer+horario
+  // (status PENDING = "sala de espera"), el trainer/staff confirma o rechaza
+  // vía updateAppointmentStatus (ya genérico, arriba).
+
+  private async resolveMemberId(gymId: string, userId: string): Promise<string> {
+    const member = await this.prisma.member.findFirst({
+      where: { user_id: userId, gym_id: gymId },
+      select: { id: true },
+    });
+    if (!member) throw new NotFoundException('Miembro no encontrado');
+    return member.id;
+  }
+
+  async requestPtSession(gymId: string, userId: string, dto: RequestPtSessionDto) {
+    const memberId = await this.resolveMemberId(gymId, userId);
+
+    const trainer = await this.prisma.staff.findFirst({
+      where: { id: dto.trainerId, gym_id: gymId, is_active: true },
+      select: { id: true, user_id: true, first_name: true, last_name: true },
+    });
+    if (!trainer) throw new NotFoundException('Entrenador no encontrado');
+
+    const member = await this.prisma.member.findFirst({
+      where: { id: memberId },
+      select: { first_name: true, last_name: true },
+    });
+
+    const appointment = await this.prisma.appointment.create({
+      data: {
+        gym_id: gymId,
+        member_id: memberId,
+        staff_id: trainer.id,
+        title: `Sesión PT — ${member?.first_name} ${member?.last_name}`,
+        appointment_type: 'TRAINING',
+        status: 'PENDING',
+        scheduled_at: new Date(dto.requestedAt),
+        duration_min: dto.durationMinutes ?? 60,
+        notes: dto.notes,
+      },
+      include: { staff: { select: { first_name: true, last_name: true } } },
+    });
+
+    await this.notification
+      .create({
+        gymId,
+        userId: trainer.user_id,
+        type: 'PT_SESSION_REQUESTED',
+        title: 'Nueva solicitud de sesión PT',
+        body: `${member?.first_name} ${member?.last_name} solicitó una sesión para el ${new Date(dto.requestedAt).toLocaleString('es-SV')}.`,
+        data: { appointmentId: appointment.id },
+      })
+      .catch(() => {
+        // fire-and-forget
+      });
+
+    return appointment;
+  }
+
+  async getMyPtSessions(gymId: string, userId: string) {
+    const memberId = await this.resolveMemberId(gymId, userId);
+    return this.prisma.appointment.findMany({
+      where: { gym_id: gymId, member_id: memberId, appointment_type: 'TRAINING' },
+      orderBy: { scheduled_at: 'desc' },
+      include: { staff: { select: { first_name: true, last_name: true } } },
+    });
+  }
+
+  async cancelMyPtSession(gymId: string, userId: string, appointmentId: string) {
+    const memberId = await this.resolveMemberId(gymId, userId);
+    const appointment = await this.prisma.appointment.findFirst({
+      where: {
+        id: appointmentId,
+        gym_id: gymId,
+        member_id: memberId,
+        appointment_type: 'TRAINING',
+      },
+    });
+    if (!appointment) throw new NotFoundException('Sesión no encontrada');
+    if (!['PENDING', 'CONFIRMED'].includes(appointment.status)) {
+      throw new ConflictException('Esta sesión ya no se puede cancelar');
+    }
+
+    return this.prisma.appointment.update({
+      where: { id: appointmentId },
+      data: { status: 'CANCELLED', cancelled_reason: 'Cancelada por el miembro' },
+    });
+  }
+
+  // Cola de solicitudes pendientes para el trainer autenticado ("sala de espera").
+  async getMyPendingPtRequests(gymId: string, staffId: string) {
+    return this.prisma.appointment.findMany({
+      where: { gym_id: gymId, staff_id: staffId, appointment_type: 'TRAINING', status: 'PENDING' },
+      orderBy: { scheduled_at: 'asc' },
+      include: { member: { select: { id: true, first_name: true, last_name: true } } },
+    });
+  }
+
+  async checkInPtSession(gymId: string, appointmentId: string) {
+    const appointment = await this.prisma.appointment.findFirst({
+      where: { id: appointmentId, gym_id: gymId, appointment_type: 'TRAINING' },
+    });
+    if (!appointment) throw new NotFoundException('Sesión no encontrada');
+    if (appointment.status !== 'CONFIRMED') {
+      throw new ConflictException('Solo se puede marcar asistencia de sesiones confirmadas');
+    }
+
+    const [updated] = await this.prisma.$transaction([
+      this.prisma.appointment.update({
+        where: { id: appointmentId },
+        data: { status: 'COMPLETED', checked_in_at: new Date() },
+      }),
+      this.prisma.member.update({
+        where: { id: appointment.member_id },
+        data: {
+          points_balance: { increment: PT_ATTENDANCE_POINTS },
+          points_lifetime: { increment: PT_ATTENDANCE_POINTS },
+        },
+      }),
+      this.prisma.pointsTransaction.create({
+        data: {
+          gym_id: gymId,
+          member_id: appointment.member_id,
+          amount: PT_ATTENDANCE_POINTS,
+          type: 'PT_ATTENDANCE',
+          description: 'Asistencia a sesión PT',
+          reference_id: appointmentId,
+        },
+      }),
+    ]);
+
+    return updated;
+  }
+
+  async markPtNoShow(gymId: string, appointmentId: string) {
+    const appointment = await this.prisma.appointment.findFirst({
+      where: { id: appointmentId, gym_id: gymId, appointment_type: 'TRAINING' },
+    });
+    if (!appointment) throw new NotFoundException('Sesión no encontrada');
+    if (appointment.status !== 'CONFIRMED') {
+      throw new ConflictException('Solo se puede marcar no-show de sesiones confirmadas');
+    }
+
+    return this.prisma.appointment.update({
+      where: { id: appointmentId },
+      data: { status: 'NO_SHOW' },
+    });
+  }
+
+  // Corre cada hora: cierra sesiones PT confirmadas cuyo horario ya pasó (con 1h
+  // de margen) sin check-in -> NO_SHOW; y cancela solicitudes PENDING que el
+  // trainer nunca respondió antes de la hora propuesta, para no dejar al
+  // miembro esperando indefinidamente.
+  @Cron(CronExpression.EVERY_HOUR)
+  async runPtSessionSweep() {
+    const now = new Date();
+    const graceMs = 60 * 60_000;
+
+    const candidates = await this.prisma.appointment.findMany({
+      where: {
+        appointment_type: 'TRAINING',
+        status: { in: ['CONFIRMED', 'PENDING'] },
+        scheduled_at: { lte: now },
+      },
+      select: { id: true, gym_id: true, status: true, scheduled_at: true, duration_min: true },
+      take: 200,
+    });
+
+    const ended = candidates.filter(
+      (a) => new Date(a.scheduled_at.getTime() + a.duration_min * 60_000 + graceMs) <= now,
+    );
+    if (!ended.length) return;
+
+    for (const a of ended) {
+      try {
+        await this.prisma.appointment.update({
+          where: { id: a.id },
+          data:
+            a.status === 'CONFIRMED'
+              ? { status: 'NO_SHOW' }
+              : { status: 'CANCELLED', cancelled_reason: 'El trainer no respondió a tiempo' },
+        });
+      } catch (err) {
+        this.logger.error(`Error cerrando sesión PT ${a.id}: ${(err as Error).message}`);
+      }
+    }
+    this.logger.log(`PT session sweep: ${ended.length} sesión(es) cerradas`);
   }
 
   // â”€â”€â”€ RISK SCORE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

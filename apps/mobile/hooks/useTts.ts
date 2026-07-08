@@ -6,10 +6,10 @@ import { Audio } from 'expo-av';
 const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000/api/v1';
 
 /**
- * TTS con fallback: intenta primero ElevenLabs via /ai/tts (voz natural y de
- * marca), y si no hay API key o falla, cae a expo-speech (TTS nativo del SO,
- * gratis pero más robótico). Esto permite que la app FUNCIONE sin contratar
- * ElevenLabs — la calidad mejora si se contrata.
+ * TTS con fallback: intenta primero Amazon Polly via /ai/tts (voz neuronal
+ * en español latino), y si no hay credenciales o falla, cae a expo-speech
+ * (TTS nativo del SO, gratis pero más robótico). Esto permite que la app
+ * FUNCIONE sin contratar Polly — la calidad mejora si se contrata.
  */
 export function useTts(accessToken: string | null) {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -34,7 +34,7 @@ export function useTts(accessToken: string | null) {
   const speak = async (text: string, voiceId?: string): Promise<void> => {
     if (!accessToken || !text.trim()) return;
 
-    // 1) Intentar ElevenLabs (mejor calidad)
+    // 1) Intentar Amazon Polly (mejor calidad)
     try {
       const res = await fetch(`${API_BASE}/ai/tts`, {
         method: 'POST',

@@ -448,6 +448,30 @@
 
 ---
 
+### Sprint Y — Billing Avanzado, WhatsApp y Scheduling Avanzado (transversal, 2026-07-06/07)
+
+> Gaps encontrados en la auditoría del módulo de Membresías/Billing y del módulo de Scheduling/Citas (`Diseño/Ver2/Modulo_Scheduling_Citas-1.md`). Se dejó pendiente explícitamente DTE El Salvador, firma de contrato digital y notificaciones SMS/Email — quedan para una entrega futura, a pedido del usuario.
+
+| ID   | Tarea                                                                                                                                                                                                                                                                                                                | Prioridad | Alcance            | Días |
+| ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | ------------------ | ---- |
+| Y-01 | ✅ **HECHO** (2026-07-06) — Checkout de MercadoPago habilitado en `me/billing/checkout` (Preference real, ya no stub)                                                                                                                                                                                                | 🟠 ALTA   | API                | 1    |
+| Y-02 | ✅ **HECHO** (2026-07-06) — Procesador de webhooks activa `BillingSubscription` + crea `Membership` automáticamente al confirmarse el pago (Stripe y MercadoPago)                                                                                                                                                    | 🟠 ALTA   | API                | 2    |
+| Y-03 | ✅ **HECHO** (2026-07-06) — Dunning: reintento real de cobro (tarjeta/token guardado) en días 3/5/7 antes de notificar fallo                                                                                                                                                                                         | 🟠 ALTA   | API                | 1.5  |
+| Y-04 | ✅ **HECHO** (2026-07-06) — Sistema de cupones/descuentos: CRUD + aplicación en checkout de autoservicio y asignación manual de membresía                                                                                                                                                                            | 🟡 MEDIA  | API + Web          | 3    |
+| Y-05 | ✅ **HECHO** (2026-07-06) — Auto-renovación de suscripciones de autoservicio (cron diario, cobra tarjeta guardada y extiende membresía; el fallo alimenta el flujo de dunning existente)                                                                                                                             | 🟡 MEDIA  | API                | 2    |
+| Y-06 | ✅ **HECHO** (2026-07-07) — Integración WhatsApp Business Cloud API (solo mensajería, sin llamadas de voz): envío de plantillas, webhook de verificación/recepción, firma HMAC                                                                                                                                       | 🟠 ALTA   | API                | 2    |
+| Y-07 | ✅ **HECHO** (2026-07-07) — WhatsApp conectado a recordatorios de cobro (dunning), retención (inactividad/renovación) y anuncios masivos (broadcast)                                                                                                                                                                 | 🟡 MEDIA  | API + Web          | 2    |
+| Y-08 | ✅ **HECHO** (2026-07-07) — Check-in/asistencia/no-show para clases grupales: roster con marcar asistencia, cron horario que cierra sesiones vencidas                                                                                                                                                                | 🟠 ALTA   | API + Web          | 2.5  |
+| Y-09 | ✅ **HECHO** (2026-07-07) — Gamificación: 20 FitCoins automáticos por asistencia a clase grupal                                                                                                                                                                                                                      | 🟢 BAJA   | API                | 0.5  |
+| Y-10 | ✅ **HECHO** (2026-07-07) — Sesiones PT individuales (1-a-1): reutiliza `Appointment` (`appointment_type=TRAINING`) — miembro solicita trainer+horario (PENDING = sala de espera), trainer confirma/rechaza; check-in/no-show + 25 FitCoins por asistencia; UI en mobile explica la diferencia grupal vs. individual | 🟡 MEDIA  | API + Web + Mobile | 4    |
+| Y-11 | ✅ **HECHO** (2026-07-07) — Canal Telegram: bot único compartido por la plataforma (`TELEGRAM_BOT_TOKEN`), vinculación de cuenta con código de 6 dígitos vía `/start CODIGO`, reutiliza `CrmService.ariaChat` para responder — el historial de conversación con ARIA es compartido entre web chat y Telegram         | 🟡 MEDIA  | API + Mobile       | 2.5  |
+
+> **Pendiente explícito (fuera de este batch, a pedido del usuario):** DTE El Salvador, firma de contrato digital, notificaciones SMS/Email.
+>
+> **Nota de despliegue:** ✅ migraciones `20260706120000_coupons`, `20260707100000_class_checkin` y `20260707120000_appointment_checkin` aplicadas en Supabase (2026-07-07, `npx prisma migrate deploy` corrido por el usuario). Pendiente: `20260707140000_telegram_links`.
+
+---
+
 ## FASE 3 — SCALE (Meses 8–16)
 
 ### Sprint 3.1 — Robustez y Performance Base (Meses 8–10)
