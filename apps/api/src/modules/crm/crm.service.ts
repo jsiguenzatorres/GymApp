@@ -4,6 +4,7 @@ import { PrismaService } from '../database/prisma.service';
 import { GeminiService } from '../ai/gemini.service';
 import { RagService } from '../ai/rag.service';
 import { ConversationService } from '../ai/conversation.service';
+import { NvidiaNimService } from '../ai/nvidia-nim.service';
 import { NotificationService } from '../notifications/notification.service';
 import { CreateInteractionDto } from './dto/create-interaction.dto';
 import { CreateAppointmentDto, UpdateAppointmentStatusDto } from './dto/create-appointment.dto';
@@ -23,6 +24,7 @@ export class CrmService {
     private readonly rag: RagService,
     private readonly conversation: ConversationService,
     private readonly notification: NotificationService,
+    private readonly nvidiaNim: NvidiaNimService,
   ) {}
 
   // â”€â”€â”€ INTERACTIONS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -520,14 +522,45 @@ INSTRUCCIONES:
 - Si el miembro pregunta algo personal (membresía, citas, horarios), responde con amabilidad
 - Máximo 3 párrafos por respuesta`;
 
+    const geminiHistory = this.conversation.toGeminiHistory(history);
+
     try {
-      const geminiHistory = this.conversation.toGeminiHistory(history);
       const response = await this.gemini.chat(systemPrompt, message, geminiHistory);
-      if (memberId) void this.conversation.addMessages(gymId, memberId, 'ARIA', message, response);
+      if (memberId)
+        void this.conversation.addMessages(
+          gymId,
+          memberId,
+          'ARIA',
+          message,
+          response,
+          'gemini-2.0-flash-lite',
+        );
       return { response, isStub: false };
     } catch (err) {
       const errMsg = (err as Error).message ?? String(err);
       this.logger.error(`ARIA Gemini error: ${errMsg}`);
+
+      // Las 10 keys de Gemini se agotaron (cuota) — intenta con NVIDIA NIM como
+      // respaldo de segundo nivel antes de rendirse. Solo aplica a este error
+      // especifico, no a fallos de red/timeout/contenido bloqueado.
+      if (errMsg.includes('All Gemini API keys exhausted') && this.nvidiaNim.isEnabled) {
+        try {
+          const response = await this.nvidiaNim.chat(systemPrompt, message, geminiHistory);
+          if (memberId)
+            void this.conversation.addMessages(
+              gymId,
+              memberId,
+              'ARIA',
+              message,
+              response,
+              'nvidia-nim-fallback',
+            );
+          return { response, isStub: false, fallbackModel: true };
+        } catch (nimErr) {
+          this.logger.error(`ARIA NVIDIA NIM fallback error: ${(nimErr as Error).message}`);
+        }
+      }
+
       return {
         response:
           'Lo siento, el servicio de IA no está disponible en este momento. Por favor intenta de nuevo en unos segundos.',

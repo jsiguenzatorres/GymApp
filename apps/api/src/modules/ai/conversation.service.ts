@@ -6,6 +6,8 @@ export interface ConvMessage {
   role: 'user' | 'model';
   content: string;
   ts: string;
+  /** Solo presente en mensajes role='model'. Trazabilidad de qué proveedor generó la respuesta. */
+  generatedBy?: string;
 }
 
 const MAX_HISTORY = 20;
@@ -41,6 +43,7 @@ export class ConversationService {
     agentType: 'ARIA' | 'ZEUS',
     userMsg: string,
     modelMsg: string,
+    generatedBy?: string,
   ): Promise<void> {
     if (!memberId) return;
     try {
@@ -49,7 +52,12 @@ export class ConversationService {
       const updated = [
         ...existing,
         { role: 'user' as const, content: userMsg, ts: now },
-        { role: 'model' as const, content: modelMsg, ts: now },
+        {
+          role: 'model' as const,
+          content: modelMsg,
+          ts: now,
+          ...(generatedBy ? { generatedBy } : {}),
+        },
       ].slice(-MAX_HISTORY) as unknown as Prisma.InputJsonValue;
 
       await this.prisma.conversationSession.upsert({

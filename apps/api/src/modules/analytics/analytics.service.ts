@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { GeminiService } from '../ai/gemini.service';
+import { NvidiaNimService } from '../ai/nvidia-nim.service';
 
 @Injectable()
 export class AnalyticsService {
@@ -9,6 +10,7 @@ export class AnalyticsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly gemini: GeminiService,
+    private readonly nvidiaNim: NvidiaNimService,
   ) {}
 
   // ─── DASHBOARD KPIs ──────────────────────────────────────────────────────────
@@ -391,7 +393,19 @@ INSTRUCCIONES:
     try {
       return await this.gemini.chat(systemPrompt, question);
     } catch (err) {
-      this.logger.error(`Business Coach error: ${(err as Error).message}`);
+      const errMsg = (err as Error).message ?? String(err);
+      this.logger.error(`Business Coach error: ${errMsg}`);
+
+      if (errMsg.includes('All Gemini API keys exhausted') && this.nvidiaNim.isEnabled) {
+        try {
+          return await this.nvidiaNim.chat(systemPrompt, question);
+        } catch (nimErr) {
+          this.logger.error(
+            `Business Coach NVIDIA NIM fallback error: ${(nimErr as Error).message}`,
+          );
+        }
+      }
+
       return 'El Business Coach no está disponible en este momento. Intenta de nuevo en unos segundos.';
     }
   }
