@@ -76,8 +76,14 @@ export default async function SettingsPage() {
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Configuración del Gym</h1>
-          <p className="text-sm text-gray-500">Perfil, horarios, redes sociales y datos fiscales</p>
+          <h1 className="text-2xl font-bold text-gray-900">
+            {profile ? 'Configuración del Gym' : 'Configuración'}
+          </h1>
+          <p className="text-sm text-gray-500">
+            {profile
+              ? 'Perfil, horarios, redes sociales y datos fiscales'
+              : 'Administración de la plataforma'}
+          </p>
         </div>
         {plan && (
           <span

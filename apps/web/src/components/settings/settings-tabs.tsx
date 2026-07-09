@@ -437,10 +437,20 @@ export function SettingsTabs({
   profile: GymProfile | null;
   isSuperAdmin?: boolean;
 }) {
-  const [activeTab, setActiveTab] = useState<TabId>('profile');
-  const tabs = isSuperAdmin ? [...BASE_TABS, ADMIN_TAB] : BASE_TABS;
+  // El SUPER_ADMIN no pertenece a ningún gym, así que /gym/profile siempre
+  // falla para esa cuenta — pero la pestaña "Gimnasios" no depende del
+  // perfil de un gym, así que no debe bloquearse por eso.
+  const tabs = profile
+    ? isSuperAdmin
+      ? [...BASE_TABS, ADMIN_TAB]
+      : BASE_TABS
+    : isSuperAdmin
+      ? [ADMIN_TAB]
+      : [];
 
-  if (!profile) {
+  const [activeTab, setActiveTab] = useState<TabId>(profile ? 'profile' : 'gyms');
+
+  if (tabs.length === 0) {
     return (
       <div className="rounded-xl border border-gray-100 bg-white p-12 text-center text-sm text-gray-400">
         No se pudo cargar el perfil del gym.
@@ -469,10 +479,10 @@ export function SettingsTabs({
 
       {/* Tab content */}
       <div className="p-6">
-        {activeTab === 'profile' && <ProfileTab profile={profile} />}
-        {activeTab === 'hours' && <HoursTab profile={profile} />}
-        {activeTab === 'social' && <SocialTab profile={profile} />}
-        {activeTab === 'fiscal' && <FiscalTab profile={profile} />}
+        {activeTab === 'profile' && profile && <ProfileTab profile={profile} />}
+        {activeTab === 'hours' && profile && <HoursTab profile={profile} />}
+        {activeTab === 'social' && profile && <SocialTab profile={profile} />}
+        {activeTab === 'fiscal' && profile && <FiscalTab profile={profile} />}
         {activeTab === 'gyms' && isSuperAdmin && <GymsTab />}
       </div>
     </div>
