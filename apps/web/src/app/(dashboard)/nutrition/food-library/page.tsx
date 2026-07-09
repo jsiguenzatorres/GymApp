@@ -1,8 +1,17 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Search, Plus, BadgeCheck, Pencil, Trash2 } from 'lucide-react';
+import {
+  ArrowLeft,
+  Search,
+  Plus,
+  BadgeCheck,
+  Pencil,
+  Trash2,
+  ImagePlus,
+  Utensils,
+} from 'lucide-react';
 
 interface FoodItem {
   id: string;
@@ -15,6 +24,7 @@ interface FoodItem {
   fat_per_100g: number;
   is_verified: boolean;
   source: string | null;
+  image_url: string | null;
 }
 
 type FoodForm = {
@@ -39,6 +49,63 @@ function inputCls(extra = '') {
   return `w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 ${extra}`;
 }
 
+function fileToDataUri(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function Thumb({ url }: { url: string | null }) {
+  if (url) {
+    return <img src={url} alt="" className="h-10 w-10 shrink-0 rounded-lg object-cover" />;
+  }
+  return (
+    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-300">
+      <Utensils className="h-4 w-4" />
+    </div>
+  );
+}
+
+function ImagePicker({
+  file,
+  onPick,
+  currentUrl,
+}: {
+  file: File | null;
+  onPick: (f: File | null) => void;
+  currentUrl?: string | null;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const previewUrl = file ? URL.createObjectURL(file) : currentUrl;
+
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        type="button"
+        onClick={() => inputRef.current?.click()}
+        className="flex items-center gap-1.5 rounded-lg border border-dashed border-gray-300 px-3 py-2 text-xs text-gray-500 hover:border-violet-400 hover:text-violet-600"
+      >
+        {previewUrl ? (
+          <img src={previewUrl} alt="" className="h-6 w-6 rounded object-cover" />
+        ) : (
+          <ImagePlus className="h-4 w-4" />
+        )}
+        {previewUrl ? 'Cambiar foto' : 'Agregar foto (opcional)'}
+      </button>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        className="hidden"
+        onChange={(e) => onPick(e.target.files?.[0] ?? null)}
+      />
+    </div>
+  );
+}
+
 export default function FoodLibraryPage() {
   const [search, setSearch] = useState('');
   const [items, setItems] = useState<FoodItem[]>([]);
@@ -47,10 +114,13 @@ export default function FoodLibraryPage() {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState<FoodForm>(EMPTY_FORM);
+  const [createImage, setCreateImage] = useState<File | null>(null);
 
-  // Edición / borrado (mejora D-35)
+  // Edición / borrado (mejora D-35) — incluye fork de alimentos globales
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingIsGlobal, setEditingIsGlobal] = useState(false);
   const [editForm, setEditForm] = useState<FoodForm>(EMPTY_FORM);
+  const [editImage, setEditImage] = useState<File | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -84,6 +154,7 @@ export default function FoodLibraryPage() {
     setCreating(true);
     setError(null);
     try {
+      const image = createImage ? await fileToDataUri(createImage) : undefined;
       const res = await fetch('/api/proxy/food-items', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -94,10 +165,12 @@ export default function FoodLibraryPage() {
           protein_per_100g: parseFloat(form.protein_per_100g) || 0,
           carbs_per_100g: parseFloat(form.carbs_per_100g) || 0,
           fat_per_100g: parseFloat(form.fat_per_100g) || 0,
+          image,
         }),
       });
       if (res.ok) {
         setForm(EMPTY_FORM);
+        setCreateImage(null);
         setShowCreate(false);
         await load(search);
       } else {
@@ -113,7 +186,9 @@ export default function FoodLibraryPage() {
 
   function startEdit(f: FoodItem) {
     setEditingId(f.id);
+    setEditingIsGlobal(f.gym_id === null);
     setEditError(null);
+    setEditImage(null);
     setEditForm({
       name: f.name,
       brand: f.brand ?? '',
@@ -129,6 +204,7 @@ export default function FoodLibraryPage() {
     setSavingEdit(true);
     setEditError(null);
     try {
+      const image = editImage ? await fileToDataUri(editImage) : undefined;
       const res = await fetch(`/api/proxy/food-items/${editingId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -139,6 +215,7 @@ export default function FoodLibraryPage() {
           protein_per_100g: parseFloat(editForm.protein_per_100g) || 0,
           carbs_per_100g: parseFloat(editForm.carbs_per_100g) || 0,
           fat_per_100g: parseFloat(editForm.fat_per_100g) || 0,
+          image,
         }),
       });
       if (res.ok) {
@@ -201,6 +278,7 @@ export default function FoodLibraryPage() {
       {showCreate && (
         <form onSubmit={createFood} className="rounded-xl border bg-white p-5 shadow-sm space-y-3">
           <p className="text-sm font-semibold text-gray-900">Nuevo alimento</p>
+          <ImagePicker file={createImage} onPick={setCreateImage} />
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <label className="text-[10px] text-gray-500">Nombre *</label>
@@ -306,6 +384,13 @@ export default function FoodLibraryPage() {
           items.map((f) =>
             editingId === f.id ? (
               <div key={f.id} className="px-5 py-3 space-y-2 bg-violet-50">
+                {editingIsGlobal && (
+                  <p className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-[11px] text-amber-700">
+                    Este alimento es compartido con todos los gyms. Guardar aquí crea{' '}
+                    <strong>tu propia copia editable</strong> — el original no se modifica.
+                  </p>
+                )}
+                <ImagePicker file={editImage} onPick={setEditImage} currentUrl={f.image_url} />
                 <div className="grid grid-cols-2 gap-2">
                   <input
                     value={editForm.name}
@@ -348,7 +433,7 @@ export default function FoodLibraryPage() {
                     disabled={savingEdit}
                     className="rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-violet-700 disabled:opacity-50"
                   >
-                    {savingEdit ? 'Guardando...' : 'Guardar'}
+                    {savingEdit ? 'Guardando...' : editingIsGlobal ? 'Crear mi copia' : 'Guardar'}
                   </button>
                   <button
                     onClick={() => setEditingId(null)}
@@ -360,20 +445,29 @@ export default function FoodLibraryPage() {
               </div>
             ) : (
               <div key={f.id} className="flex items-center justify-between px-5 py-3">
-                <div>
-                  <p className="flex items-center gap-1.5 text-sm font-medium text-gray-800">
-                    {f.name}
-                    {f.is_verified && <BadgeCheck className="h-3.5 w-3.5 text-blue-500" />}
-                    {f.gym_id === null && (
-                      <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[9px] font-medium text-gray-500">
-                        Global
-                      </span>
-                    )}
-                  </p>
-                  <p className="text-xs text-gray-400">
-                    {f.brand && `${f.brand} · `}
-                    {f.source ?? 'manual'}
-                  </p>
+                <div className="flex items-center gap-3">
+                  <Thumb url={f.image_url} />
+                  <div>
+                    <p className="flex items-center gap-1.5 text-sm font-medium text-gray-800">
+                      {f.name}
+                      {f.is_verified && <BadgeCheck className="h-3.5 w-3.5 text-blue-500" />}
+                      {f.gym_id === null ? (
+                        <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[9px] font-medium text-gray-500">
+                          Global
+                        </span>
+                      ) : (
+                        f.source === 'gym_custom' && (
+                          <span className="rounded-full bg-violet-100 px-1.5 py-0.5 text-[9px] font-medium text-violet-600">
+                            Tu copia
+                          </span>
+                        )
+                      )}
+                    </p>
+                    <p className="text-xs text-gray-400">
+                      {f.brand && `${f.brand} · `}
+                      {f.source ?? 'manual'}
+                    </p>
+                  </div>
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="text-right text-xs text-gray-500">
@@ -382,15 +476,15 @@ export default function FoodLibraryPage() {
                       P:{f.protein_per_100g} C:{f.carbs_per_100g} G:{f.fat_per_100g}
                     </p>
                   </div>
-                  {f.gym_id !== null && (
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        onClick={() => startEdit(f)}
-                        className="flex h-7 w-7 items-center justify-center rounded text-gray-300 hover:text-violet-600"
-                        title="Editar"
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </button>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      onClick={() => startEdit(f)}
+                      className="flex h-7 w-7 items-center justify-center rounded text-gray-300 hover:text-violet-600"
+                      title={f.gym_id === null ? 'Editar (crea tu copia)' : 'Editar'}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                    {f.gym_id !== null && (
                       <button
                         onClick={() => removeFood(f.id)}
                         disabled={deletingId === f.id}
@@ -399,8 +493,8 @@ export default function FoodLibraryPage() {
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               </div>
             ),

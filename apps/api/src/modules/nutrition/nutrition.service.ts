@@ -145,21 +145,50 @@ export class NutritionService {
   }
 
   async createFoodItem(gymId: string, dto: CreateFoodItemDto) {
-    return this.prisma.foodItem.create({ data: { gym_id: gymId, ...dto } });
+    const { image, ...rest } = dto;
+    const image_url = image
+      ? (await this.storage.uploadFoodItemImage(gymId, image)).url
+      : undefined;
+    return this.prisma.foodItem.create({ data: { gym_id: gymId, ...rest, image_url } });
   }
 
   // Editar es seguro incluso con historial: logFood copia kcal/macros al momento de
   // registrar, no los vuelve a leer del FoodItem — editar no reescribe el pasado.
-  // Solo se puede editar/eliminar alimentos propios del gym, nunca los globales
-  // (gym_id=null) que comparten todos los gyms.
+  //
+  // Alimentos propios del gym: se editan directo. Alimentos GLOBALES (gym_id=null,
+  // compartidos por todos los gyms): editar crea una COPIA privada de este gym con
+  // los cambios — el original compartido nunca se toca, así un gym no puede romper
+  // los datos que ve otro. deleteFoodItem sigue bloqueado para globales: no hay
+  // "copia" que borrar, y borrar el compartido afectaría a todos.
   async updateFoodItem(gymId: string, id: string, dto: UpdateFoodItemDto) {
-    const item = await this.prisma.foodItem.findFirst({ where: { id, gym_id: gymId } });
-    if (!item) {
-      throw new NotFoundException(
-        'Alimento no encontrado o es un alimento global (no editable desde este gym)',
-      );
+    const item = await this.prisma.foodItem.findFirst({
+      where: { id, OR: [{ gym_id: gymId }, { gym_id: null }] },
+    });
+    if (!item) throw new NotFoundException('Alimento no encontrado');
+
+    const { image, ...rest } = dto;
+    const image_url = image
+      ? (await this.storage.uploadFoodItemImage(gymId, image)).url
+      : undefined;
+
+    if (item.gym_id === gymId) {
+      return this.prisma.foodItem.update({ where: { id }, data: { ...rest, image_url } });
     }
-    return this.prisma.foodItem.update({ where: { id }, data: dto });
+
+    // Alimento global — fork: nueva copia propia del gym, el original no se toca.
+    return this.prisma.foodItem.create({
+      data: {
+        gym_id: gymId,
+        name: dto.name ?? item.name,
+        brand: dto.brand ?? item.brand,
+        kcal_per_100g: dto.kcal_per_100g ?? item.kcal_per_100g,
+        protein_per_100g: dto.protein_per_100g ?? item.protein_per_100g,
+        carbs_per_100g: dto.carbs_per_100g ?? item.carbs_per_100g,
+        fat_per_100g: dto.fat_per_100g ?? item.fat_per_100g,
+        image_url: image_url ?? item.image_url,
+        source: 'gym_custom',
+      },
+    });
   }
 
   async deleteFoodItem(gymId: string, id: string) {

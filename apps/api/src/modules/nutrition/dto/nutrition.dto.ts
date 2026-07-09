@@ -87,6 +87,7 @@ export class CreateFoodItemDto {
   @IsNumber() @Min(0) protein_per_100g: number;
   @IsNumber() @Min(0) carbs_per_100g: number;
   @IsNumber() @Min(0) fat_per_100g: number;
+  @IsOptional() @IsString() image?: string; // data:image/{jpeg|png|webp};base64,...
 }
 
 export class UpdateFoodItemDto {
@@ -96,6 +97,7 @@ export class UpdateFoodItemDto {
   @IsOptional() @IsNumber() @Min(0) protein_per_100g?: number;
   @IsOptional() @IsNumber() @Min(0) carbs_per_100g?: number;
   @IsOptional() @IsNumber() @Min(0) fat_per_100g?: number;
+  @IsOptional() @IsString() image?: string; // data:image/{jpeg|png|webp};base64,...
 }
 
 export class LogFoodDto {

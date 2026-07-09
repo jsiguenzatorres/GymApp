@@ -115,6 +115,12 @@ export class StorageService {
     return this.uploadImage(bucket, gymId, dataUri);
   }
 
+  // Sube foto de un alimento de la biblioteca de nutrición al bucket
+  // 'food-images' — público, no es dato sensible (igual que product-images).
+  uploadFoodItemImage(gymId: string, dataUri: string) {
+    return this.uploadImage('food-images', gymId, dataUri);
+  }
+
   // Decodifica un data-URI base64 de imagen O PDF y retorna { buffer, mimeType }.
   private parseDocumentDataUri(dataUri: string): { buffer: Buffer; mimeType: string } {
     const match = /^data:(image\/(?:jpeg|png|webp)|application\/pdf);base64,(.+)$/i.exec(

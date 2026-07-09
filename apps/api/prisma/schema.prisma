@@ -1055,7 +1055,8 @@ model FoodItem {
   carbs_per_100g  Float
   fat_per_100g    Float
   is_verified     Boolean @default(false)
-  source          String? @db.VarChar(30)  // 'manual' | 'openfoodfacts' | 'usda'
+  source          String? @db.VarChar(30)  // 'manual' | 'openfoodfacts' | 'usda' | 'gym_custom'
+  image_url       String?  // opcional — bucket público 'food-images'
   created_at      DateTime @default(now())
 
   gym               Gym?             @relation(fields: [gym_id], references: [id], onDelete: Cascade)
