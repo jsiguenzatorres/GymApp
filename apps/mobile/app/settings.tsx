@@ -358,6 +358,13 @@ export default function SettingsScreen() {
             <Row label="Política de privacidad" onPress={() => {}} />
           </Section>
 
+          {/* Atribución CC-BY-SA — requerida por la licencia de wger.de para
+              la biblioteca de ejercicios importada (ver apps/api/scripts/README.md) */}
+          <Text style={styles.attributionText}>
+            Catálogo de ejercicios basado en free-exercise-db (dominio público) y wger.de (CC-BY-SA
+            4.0).
+          </Text>
+
           {/* ── Danger zone ── */}
           <Section title="">
             <Row label="Cerrar sesión" onPress={handleLogout} destructive />
@@ -419,6 +426,16 @@ const styles = StyleSheet.create({
   rowChevron: { fontSize: 18, color: '#9ca3af', fontWeight: '300' },
 
   divider: { height: 0.5, backgroundColor: '#f3f4f6', marginHorizontal: 16 },
+
+  attributionText: {
+    fontSize: 11,
+    color: '#9ca3af',
+    textAlign: 'center',
+    marginTop: -8,
+    marginBottom: 16,
+    paddingHorizontal: 32,
+    lineHeight: 15,
+  },
 
   errorBox: { margin: 12, borderRadius: 8, padding: 10, backgroundColor: '#fee2e2' },
   errorText: { fontSize: 13, color: '#dc2626' },
