@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { CreateGymForm } from './create-gym-form';
 
 interface GymProfile {
   id: string;
@@ -399,19 +400,45 @@ function FiscalTab({ profile }: { profile: GymProfile }) {
   );
 }
 
+// ─── TAB: GIMNASIOS (solo SUPER_ADMIN) ─────────────────────────────────────────
+
+function GymsTab() {
+  return (
+    <div className="space-y-4">
+      <div>
+        <h3 className="text-sm font-semibold text-gray-900">Crear nuevo gimnasio</h3>
+        <p className="mt-0.5 text-xs text-gray-500">
+          Provisiona un gym nuevo y su cuenta de dueño. Solo el administrador de la plataforma puede
+          hacer esto — el dueño del gym no tiene acceso a esta opción.
+        </p>
+      </div>
+      <CreateGymForm />
+    </div>
+  );
+}
+
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 
-const TABS = [
+const BASE_TABS = [
   { id: 'profile', label: 'Perfil' },
   { id: 'hours', label: 'Horarios' },
   { id: 'social', label: 'Redes sociales' },
   { id: 'fiscal', label: 'Datos fiscales' },
 ] as const;
 
-type TabId = (typeof TABS)[number]['id'];
+const ADMIN_TAB = { id: 'gyms', label: 'Gimnasios' } as const;
 
-export function SettingsTabs({ profile }: { profile: GymProfile | null }) {
+type TabId = (typeof BASE_TABS)[number]['id'] | typeof ADMIN_TAB.id;
+
+export function SettingsTabs({
+  profile,
+  isSuperAdmin = false,
+}: {
+  profile: GymProfile | null;
+  isSuperAdmin?: boolean;
+}) {
   const [activeTab, setActiveTab] = useState<TabId>('profile');
+  const tabs = isSuperAdmin ? [...BASE_TABS, ADMIN_TAB] : BASE_TABS;
 
   if (!profile) {
     return (
@@ -425,7 +452,7 @@ export function SettingsTabs({ profile }: { profile: GymProfile | null }) {
     <div className="rounded-xl border border-gray-100 bg-white shadow-sm">
       {/* Tab nav */}
       <div className="flex border-b border-gray-100">
-        {TABS.map((tab) => (
+        {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
@@ -446,6 +473,7 @@ export function SettingsTabs({ profile }: { profile: GymProfile | null }) {
         {activeTab === 'hours' && <HoursTab profile={profile} />}
         {activeTab === 'social' && <SocialTab profile={profile} />}
         {activeTab === 'fiscal' && <FiscalTab profile={profile} />}
+        {activeTab === 'gyms' && isSuperAdmin && <GymsTab />}
       </div>
     </div>
   );

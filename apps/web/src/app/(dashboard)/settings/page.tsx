@@ -1,3 +1,4 @@
+import { auth } from '@/auth';
 import { serverFetch } from '@/lib/server-api';
 import { SettingsTabs } from '@/components/settings/settings-tabs';
 
@@ -62,11 +63,13 @@ interface FounderStatus {
 }
 
 export default async function SettingsPage() {
-  const [profile, plan, founder] = await Promise.all([
+  const [session, profile, plan, founder] = await Promise.all([
+    auth(),
     serverFetch<GymProfile>('/api/v1/gym/profile'),
     serverFetch<PlanInfo>('/api/v1/gym/plan'),
     serverFetch<FounderStatus>('/api/v1/founder-offer/my-status'),
   ]);
+  const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN';
 
   return (
     <div className="space-y-6 p-6">
@@ -171,7 +174,7 @@ export default async function SettingsPage() {
       )}
 
       {/* Tabs client component */}
-      <SettingsTabs profile={profile} />
+      <SettingsTabs profile={profile} isSuperAdmin={isSuperAdmin} />
     </div>
   );
 }

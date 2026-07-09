@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import type { Request } from 'express';
+import { UserRole } from '@gymapp/shared-types';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterGymDto } from './dto/register-gym.dto';
@@ -20,6 +21,8 @@ import { RequestPasswordResetDto, ResetPasswordDto } from './dto/reset-password.
 import { Public } from '../../common/decorators/public.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RefreshJwtGuard } from '../../common/guards/refresh-jwt.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { JwtPayload } from './interfaces/jwt-payload.interface';
 import type { RefreshUser } from './strategies/refresh-jwt.strategy';
@@ -38,9 +41,14 @@ export class AuthController {
     return this.authService.login(dto, fingerprint);
   }
 
-  @Public()
+  // Provisión de gyms nuevos: SOLO el SUPER_ADMIN de la plataforma puede
+  // crearlos (ni siquiera GYM_OWNER) — ya no es un flujo público de
+  // autoregistro, se hace desde Configuración en el panel admin.
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN)
   @Post('register')
-  @ApiOperation({ summary: 'Registrar nuevo gym + owner (onboarding)' })
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Crear nuevo gym + owner (solo SUPER_ADMIN)' })
   register(@Body() dto: RegisterGymDto) {
     return this.authService.registerGym(dto);
   }

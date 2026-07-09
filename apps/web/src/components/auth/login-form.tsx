@@ -217,17 +217,6 @@ export function LoginForm() {
         {isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
         {isLoading ? 'Ingresando...' : 'Ingresar'}
       </button>
-
-      {/* Link registro */}
-      <p className="text-center text-sm text-muted-foreground">
-        ¿Eres nuevo?{' '}
-        <a
-          href="/setup"
-          className="text-primary hover:text-primary/80 font-medium transition-colors"
-        >
-          Crea tu gimnasio
-        </a>
-      </p>
     </form>
   );
 }

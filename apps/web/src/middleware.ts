@@ -2,7 +2,7 @@ import { auth } from '@/auth';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-const PUBLIC_PATHS = ['/login', '/setup', '/api/auth'];
+const PUBLIC_PATHS = ['/login', '/api/auth'];
 const ADMIN_ROLES = [
   'SUPER_ADMIN',
   'GYM_OWNER',
