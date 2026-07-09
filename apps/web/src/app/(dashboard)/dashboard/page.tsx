@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { serverFetch } from '@/lib/server-api';
 import { formatCurrency } from '@/lib/utils';
+import { DashboardExportButton } from './export-button';
 
 export const metadata: Metadata = { title: 'Dashboard — GymApp' };
 
@@ -96,6 +97,35 @@ interface ExpiringMembership {
   end_date: string;
   member: { id: string; first_name: string; last_name: string };
   type: { name: string };
+}
+
+interface AtRiskMember {
+  id: string;
+  first_name: string;
+  last_name: string;
+  risk_score: number;
+  status: string;
+  user?: { email?: string | null } | null;
+}
+
+interface NewLead {
+  id: string;
+  first_name: string;
+  last_name: string;
+  phone: string | null;
+  email: string | null;
+  status: string;
+  created_at: string;
+  assignee: { first_name: string; last_name: string } | null;
+}
+
+interface MarketplaceOrderRow {
+  id: string;
+  status: string;
+  total: string | number;
+  created_at: string;
+  member: { first_name: string; last_name: string } | null;
+  items: { product: { name: string } | null; quantity: number }[];
 }
 
 const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
@@ -189,6 +219,9 @@ export default async function DashboardPage() {
     leads,
     pendingPt,
     expiringMemberships,
+    atRiskMembersRes,
+    newLeadsList,
+    pendingOrdersByStatus,
   ] = await Promise.all([
     serverFetch<DashboardData>('/api/v1/analytics/dashboard'),
     serverFetch<AccessStats>('/api/v1/access/stats'),
@@ -199,6 +232,15 @@ export default async function DashboardPage() {
     serverFetch<LeadsStats>('/api/v1/leads/stats'),
     serverFetch<PendingPtRequest[]>('/api/v1/pt-sessions/pending/gym'),
     serverFetch<ExpiringMembership[]>('/api/v1/members/expiring-soon?days=7'),
+    serverFetch<{ data: AtRiskMember[] }>('/api/v1/members?minRiskScore=70&limit=100'),
+    serverFetch<NewLead[]>('/api/v1/leads?status=NEW'),
+    Promise.all(
+      ['PENDING', 'CONFIRMED', 'READY'].map((status) =>
+        serverFetch<{ data: MarketplaceOrderRow[] }>(
+          `/api/v1/marketplace-orders?status=${status}&limit=100`,
+        ),
+      ),
+    ),
   ]);
 
   const kpis = dashboard?.kpis;
@@ -206,16 +248,30 @@ export default async function DashboardPage() {
   const recentWins = (transactions ?? [])
     .filter((t) => t.type === 'PR_ACHIEVED' || t.type === 'BADGE_UNLOCKED')
     .slice(0, 5);
+  const atRiskMembers = atRiskMembersRes?.data ?? [];
+  const pendingOrders = pendingOrdersByStatus.flatMap((r) => r?.data ?? []);
 
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div>
-        <p className="mb-1 text-[0.68rem] font-bold uppercase tracking-widest text-[#ff5a1f]">
-          GymApp · Operación diaria
-        </p>
-        <h1 className="text-2xl font-bold tracking-tight text-gray-900">Panel de Control</h1>
-        <p className="text-sm text-gray-500">Qué necesita tu atención hoy en el gym</p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p className="mb-1 text-[0.68rem] font-bold uppercase tracking-widest text-[#ff5a1f]">
+            GymApp · Operación diaria
+          </p>
+          <h1 className="text-2xl font-bold tracking-tight text-gray-900">Panel de Control</h1>
+          <p className="text-sm text-gray-500">Qué necesita tu atención hoy en el gym</p>
+        </div>
+        <DashboardExportButton
+          atRiskMembers={atRiskMembers}
+          pendingPt={pendingPt ?? []}
+          expiringMemberships={expiringMemberships ?? []}
+          complaints={complaints ?? []}
+          newLeads={newLeadsList ?? []}
+          pendingOrders={pendingOrders}
+          todaySessions={todaySessions ?? []}
+          recentWins={recentWins}
+        />
       </div>
 
       {/* Scoreboard — pulso general */}

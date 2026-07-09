@@ -23,4 +23,12 @@ export class ListMembersDto {
   @Min(1)
   @Max(100)
   limit?: number;
+
+  // Filtro para listas de riesgo de fuga (ej. exportar a Excel desde el Dashboard)
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  minRiskScore?: number;
 }

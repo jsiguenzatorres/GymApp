@@ -2,6 +2,7 @@ import { ShoppingBag, AlertTriangle, TrendingUp, Users, CreditCard } from 'lucid
 import { serverFetch } from '@/lib/server-api';
 import { AnalyticsCharts } from '@/components/analytics/analytics-charts';
 import { BusinessCoach } from './business-coach';
+import { AnalyticsExportButton } from './export-button';
 
 interface DashboardKpis {
   activeMembers: number;
@@ -388,12 +389,20 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
             Ingresos, deuda y salud del negocio — en tiempo real
           </p>
         </div>
-        <PeriodFilterForm
-          year={params.year}
-          month={params.month}
-          from={params.from}
-          to={params.to}
-        />
+        <div className="flex flex-wrap items-end gap-3">
+          <PeriodFilterForm
+            year={params.year}
+            month={params.month}
+            from={params.from}
+            to={params.to}
+          />
+          <AnalyticsExportButton
+            finance={finance}
+            revenueTrend={revenueTrend ?? []}
+            membershipBreakdown={membershipBreakdown ?? []}
+            memberStatusDistribution={dashboard?.memberStatusDistribution ?? []}
+          />
+        </div>
       </div>
 
       {/* Scoreboard — pulso financiero del período seleccionado */}

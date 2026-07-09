@@ -179,12 +179,16 @@ export class MembersService {
       ];
     }
 
+    if (query.minRiskScore !== undefined) {
+      where['risk_score'] = { gte: query.minRiskScore };
+    }
+
     const [members, total] = await Promise.all([
       this.prisma.member.findMany({
         where,
         skip,
         take: limit,
-        orderBy: { created_at: 'desc' },
+        orderBy: query.minRiskScore !== undefined ? { risk_score: 'desc' } : { created_at: 'desc' },
         include: {
           user: { select: { email: true, is_active: true, last_login_at: true } },
           memberships: {
