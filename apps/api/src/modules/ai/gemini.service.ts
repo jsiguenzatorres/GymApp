@@ -28,7 +28,7 @@ export class GeminiService {
     this.logger.log(`GeminiService initialized with ${keys.length} API key(s)`);
   }
 
-  private getModel(modelName = 'gemini-2.0-flash-lite', systemPrompt?: string): GenerativeModel {
+  private getModel(modelName = 'gemini-2.5-flash-lite', systemPrompt?: string): GenerativeModel {
     const key = this.keys[this.currentKeyIndex];
     const genAI = new GoogleGenerativeAI(key);
     return genAI.getGenerativeModel({
@@ -60,7 +60,7 @@ export class GeminiService {
     systemPrompt: string,
     userMessage: string,
     history: { role: 'user' | 'model'; parts: { text: string }[] }[] = [],
-    model = 'gemini-2.0-flash-lite',
+    model = 'gemini-2.5-flash-lite',
   ): Promise<string> {
     if (this.keys.length === 0) {
       throw new Error('No Gemini API keys configured');
@@ -104,7 +104,7 @@ export class GeminiService {
     throw new Error(`All Gemini API keys exhausted. Last: ${lastError}`);
   }
 
-  async generate(prompt: string, model = 'gemini-2.0-flash-lite'): Promise<string> {
+  async generate(prompt: string, model = 'gemini-2.5-flash-lite'): Promise<string> {
     return this.chat('', prompt, [], model);
   }
 
@@ -153,7 +153,7 @@ export class GeminiService {
     imageBase64: string,
     mimeType: string,
     prompt: string,
-    model = 'gemini-2.0-flash-lite',
+    model = 'gemini-2.5-flash-lite',
   ): Promise<string> {
     if (this.keys.length === 0) throw new Error('No Gemini API keys configured');
 

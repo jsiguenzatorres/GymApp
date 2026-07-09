@@ -549,7 +549,7 @@ INSTRUCCIONES:
           'ARIA',
           message,
           response,
-          'gemini-2.0-flash-lite',
+          'gemini-2.5-flash-lite',
         );
       return { response, isStub: false };
     } catch (err) {
