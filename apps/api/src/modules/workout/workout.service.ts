@@ -757,7 +757,7 @@ export class WorkoutService {
           }),
       this.prisma.exercise.findMany({
         where: { gym_id: gymId },
-        select: { name: true, muscle_groups: true, equipment: true },
+        select: { id: true, name: true, muscle_groups: true, equipment: true, video_url: true },
         take: 30,
       }),
       this.rag.buildContext(gymId, message),
@@ -789,7 +789,13 @@ export class WorkoutService {
         : 'Sin PRs registrados aún.';
 
     const exerciseContext = exercises.length
-      ? `Ejercicios disponibles en el gym: ${exercises.map((e) => e.name).join(', ')}`
+      ? `Ejercicios disponibles en el gym (nombre | id | tiene video):
+${exercises.map((e) => `- ${e.name} | ${e.id} | ${e.video_url ? 'sí' : 'no'}`).join('\n')}
+
+Cuando menciones un ejercicio de esta lista, incluye un link markdown así:
+[${exercises[0].name}](/workouts/exercises/${exercises[0].id}) — usa el id
+real de la lista, no inventes uno. Así el usuario puede ver el detalle
+completo y el video (si tiene) con un clic.`
       : '';
 
     const systemPrompt = `Eres ZEUS (Zone Expert Universal Support), el coach de workout en tiempo real de GymApp.

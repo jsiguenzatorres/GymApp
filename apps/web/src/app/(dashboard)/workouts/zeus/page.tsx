@@ -20,6 +20,36 @@ function fmtTime(ts: number) {
   return new Date(ts).toLocaleTimeString('es-SV', { hour: '2-digit', minute: '2-digit' });
 }
 
+// ZEUS puede referir a un ejercicio de la biblioteca con un link markdown
+// simple, ej: [Sentadilla](/workouts/exercises/abc-123) — se convierte aquí
+// en un <Link> clicable en vez de mostrarse como texto plano. No se usa una
+// librería de markdown completa porque este es el único formato que ZEUS
+// genera (no hay negritas, listas, etc. que renderizar).
+const MARKDOWN_LINK = /\[([^\]]+)\]\((\/workouts\/exercises\/[^)\s]+)\)/g;
+
+function renderZeusContent(content: string) {
+  const parts = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  MARKDOWN_LINK.lastIndex = 0;
+
+  while ((match = MARKDOWN_LINK.exec(content)) !== null) {
+    if (match.index > lastIndex) parts.push(content.slice(lastIndex, match.index));
+    parts.push(
+      <Link
+        key={match.index}
+        href={match[2]}
+        className="font-medium text-amber-700 underline decoration-amber-300 underline-offset-2 hover:text-amber-800"
+      >
+        {match[1]}
+      </Link>,
+    );
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < content.length) parts.push(content.slice(lastIndex));
+  return parts;
+}
+
 const SUGGESTIONS = [
   '¿Cómo ejecuto correctamente el peso muerto?',
   '¿Qué músculo trabaja el press de banca?',
@@ -237,7 +267,7 @@ export default function ZeusPage() {
                     : 'bg-amber-500 text-white rounded-tr-sm'
                 }`}
               >
-                {msg.content}
+                {msg.role === 'zeus' ? renderZeusContent(msg.content) : msg.content}
               </div>
               <span className="text-[10px] text-gray-400 px-1">{fmtTime(msg.ts)}</span>
             </div>
