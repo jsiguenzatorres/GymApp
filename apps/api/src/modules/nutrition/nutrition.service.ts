@@ -1305,7 +1305,7 @@ INSTRUCCIONES:
     });
     if (!member) throw new NotFoundException('Miembro no encontrado');
 
-    const { url } = await this.storage.uploadDocument(
+    const { path } = await this.storage.uploadDocument(
       'lab-results',
       `${gymId}/${dto.memberId}`,
       dto.document,
@@ -1348,30 +1348,40 @@ Si no puedes leer el documento, devuelve { "markers": [], "note": "explicación"
         'No se pudo extraer automáticamente. El nutricionista puede leer el documento directamente.';
     }
 
-    return this.prisma.labResult.create({
+    const created = await this.prisma.labResult.create({
       data: {
         gym_id: gymId,
         member_id: dto.memberId,
         uploaded_by: staffId,
-        document_url: url,
+        document_path: path,
         lab_date: dto.lab_date ? new Date(dto.lab_date) : undefined,
         extracted_markers: markers as Prisma.InputJsonValue,
         ai_note: note,
       },
     });
+    return this.withDocumentUrl(created);
+  }
+
+  // Bucket 'lab-results' es privado (datos médicos) — la URL de lectura se
+  // genera on-demand, firmada y con expiración, nunca se guarda permanente.
+  private async withDocumentUrl<T extends { document_path: string }>(r: T) {
+    const { document_path, ...rest } = r;
+    const document_url = await this.storage.getSignedUrl('lab-results', document_path, 3600);
+    return { ...rest, document_url };
   }
 
   async listLabResults(gymId: string, memberId: string) {
-    return this.prisma.labResult.findMany({
+    const results = await this.prisma.labResult.findMany({
       where: { gym_id: gymId, member_id: memberId },
       orderBy: { created_at: 'desc' },
     });
+    return Promise.all(results.map((r) => this.withDocumentUrl(r)));
   }
 
   async getLabResult(gymId: string, id: string) {
     const result = await this.prisma.labResult.findFirst({ where: { id, gym_id: gymId } });
     if (!result) throw new NotFoundException('Examen de laboratorio no encontrado');
-    return result;
+    return this.withDocumentUrl(result);
   }
 
   async reviewLabResult(

@@ -43,6 +43,7 @@ enum SaasPlan {
 }
 
 enum PaymentStatus {
+  DRAFT // creado por extracción IA de un comprobante, pendiente de revisión del staff
   PENDING
   PROCESSING
   SUCCEEDED
@@ -242,6 +243,13 @@ model Member {
   birthdate     DateTime?    @db.Date
   gender        String?      @db.VarChar(10) // M|F|X
   avatar_url    String?
+  // Identidad y facturación (El Salvador) — usados al registrar pagos con DTE-lite
+  dui             String?   @db.VarChar(15) // Documento Único de Identidad, ej. 01234567-8
+  dui_expiration  DateTime? @db.Date
+  address         String?
+  is_taxpayer     Boolean   @default(false) // true si requiere Crédito Fiscal (CCF)
+  nit             String?   @db.VarChar(20)
+  nrc             String?   @db.VarChar(20)
   // Estado del ciclo de vida
   status        MemberStatus @default(LEAD)
   // CRM
@@ -456,6 +464,20 @@ model Payment {
   dte_codigo         String?      @db.VarChar(100)
   dte_numero_control String?      @db.VarChar(100)
   dte_sello          String?      @db.VarChar(200)
+
+  // Comprobante manual (previo a integración DTE real) — desglose de impuestos
+  voucher_number String?  @db.VarChar(100) // # de comprobante/recibo físico
+  subtotal       Decimal? @db.Decimal(10, 2) // valor sin impuestos
+  tax_amount     Decimal? @db.Decimal(10, 2) // IVA 13%
+
+  // Comprobante subido (foto/PDF) + extracción por IA
+  // voucher_path guarda la RUTA dentro del bucket privado, no una URL pública —
+  // el bucket 'payment-vouchers' es privado (datos sensibles: DUI, NIT, montos),
+  // así que la URL se genera on-demand (firmada, expira) al leer el pago.
+  voucher_path            String?
+  voucher_extracted_data  Json?
+  voucher_ai_note         String?
+  voucher_reviewed_by_staff Boolean @default(false)
 
   // Reintentos (dunning)
   attempt_number    Int           @default(1)
@@ -956,7 +978,9 @@ model LabResult {
   gym_id                    String    @db.Uuid
   member_id                 String    @db.Uuid
   uploaded_by               String?   @db.Uuid
-  document_url              String
+  // Ruta dentro del bucket privado 'lab-results' (datos médicos sensibles) — la
+  // URL se genera on-demand (firmada, expira) al leer el examen, no se guarda.
+  document_path             String
   lab_date                  DateTime? @db.Date
   extracted_markers         Json?
   ai_note                   String?

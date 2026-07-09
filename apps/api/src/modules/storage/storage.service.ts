@@ -136,12 +136,15 @@ export class StorageService {
     return { buffer, mimeType };
   }
 
-  // Sube una imagen O PDF (ej. examen de laboratorio, D-29) a un bucket.
+  // Sube una imagen O PDF (ej. examen de laboratorio, comprobante de pago) a
+  // un bucket PRIVADO — devuelve la ruta interna, no una URL. Estos buckets
+  // guardan datos sensibles (médicos, financieros/NIT/DUI), así que la URL de
+  // lectura se genera aparte, firmada y con expiración (ver getSignedUrl).
   async uploadDocument(
     bucket: string,
     pathPrefix: string,
     dataUri: string,
-  ): Promise<{ url: string; sizeBytes: number; mimeType: string }> {
+  ): Promise<{ path: string; sizeBytes: number; mimeType: string }> {
     if (!this.supabaseUrl || !this.serviceRoleKey) {
       throw new InternalServerErrorException(
         'Storage no configurado (faltan SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)',
@@ -169,7 +172,6 @@ export class StorageService {
         Authorization: `Bearer ${this.serviceRoleKey}`,
         'Content-Type': mimeType,
         'x-upsert': 'true',
-        'Cache-Control': 'public, max-age=86400',
       },
       body: buffer,
     });
@@ -182,8 +184,35 @@ export class StorageService {
       throw new InternalServerErrorException(`Storage upload failed (${res.status})`);
     }
 
-    const publicUrl = `${this.supabaseUrl}/storage/v1/object/public/${bucket}/${path}`;
-    return { url: publicUrl, sizeBytes: buffer.length, mimeType };
+    return { path, sizeBytes: buffer.length, mimeType };
+  }
+
+  // Genera una URL firmada y temporal (expira en `expiresInSeconds`) para leer
+  // un archivo de un bucket privado — usar en cada lectura, nunca guardar la
+  // URL resultante de forma permanente.
+  async getSignedUrl(
+    bucket: string,
+    path: string,
+    expiresInSeconds = 3600,
+  ): Promise<string | null> {
+    if (!this.supabaseUrl || !this.serviceRoleKey) return null;
+
+    const res = await fetch(`${this.supabaseUrl}/storage/v1/object/sign/${bucket}/${path}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.serviceRoleKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ expiresIn: expiresInSeconds }),
+    });
+
+    if (!res.ok) {
+      this.logger.error(`No se pudo firmar URL de ${bucket}/${path} (${res.status})`);
+      return null;
+    }
+
+    const body = (await res.json()) as { signedURL: string };
+    return `${this.supabaseUrl}/storage/v1${body.signedURL}`;
   }
 
   // Decodifica un data-URI base64 de VIDEO y retorna { buffer, mimeType }.

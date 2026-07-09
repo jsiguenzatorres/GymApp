@@ -2,7 +2,8 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { serverFetch } from '@/lib/server-api';
 import { PaymentStatusBadge } from '@/components/billing/payment-status-badge';
-import { Plus } from 'lucide-react';
+import { PaymentsExportButton } from './export-button';
+import { Plus, Upload } from 'lucide-react';
 
 export const metadata: Metadata = { title: 'Pagos — GymApp' };
 
@@ -14,6 +15,9 @@ interface Payment {
   payment_type: string;
   description: string | null;
   invoice_type: string | null;
+  voucher_number: string | null;
+  subtotal: number | null;
+  tax_amount: number | null;
   paid_at: string | null;
   created_at: string;
   member: {
@@ -36,7 +40,26 @@ interface BillingSummary {
   lastMonth: { total: number; count: number };
   pending: { total: number; count: number };
   failedThisMonth: number;
+  pendingReview: number;
   growth: number | null;
+}
+
+// Reune todo el conjunto filtrado (no solo la pagina actual) para exportar a
+// Excel — pagina internamente contra el mismo endpoint, con un tope razonable
+// para no colgar la request si el filtro devuelve miles de filas.
+async function fetchAllFilteredPayments(baseQs: URLSearchParams): Promise<Payment[]> {
+  const all: Payment[] = [];
+  const MAX_PAGES = 20;
+  for (let page = 1; page <= MAX_PAGES; page++) {
+    const qs = new URLSearchParams(baseQs);
+    qs.set('page', String(page));
+    qs.set('limit', '100');
+    const result = await serverFetch<PaymentsResponse>(`/api/v1/payments?${qs.toString()}`);
+    if (!result?.data?.length) break;
+    all.push(...result.data);
+    if (page >= result.meta.totalPages) break;
+  }
+  return all;
 }
 
 interface PageProps {
@@ -83,14 +106,22 @@ export default async function PaymentsPage({ searchParams }: PageProps) {
   if (params.page) qs.set('page', params.page);
   qs.set('limit', '25');
 
-  const [result, summary] = await Promise.all([
+  const exportQs = new URLSearchParams();
+  if (params.status) exportQs.set('status', params.status);
+  if (params.paymentType) exportQs.set('paymentType', params.paymentType);
+  if (params.startDate) exportQs.set('startDate', params.startDate);
+  if (params.endDate) exportQs.set('endDate', params.endDate);
+
+  const [result, summary, exportPayments] = await Promise.all([
     serverFetch<PaymentsResponse>(`/api/v1/payments?${qs.toString()}`),
     serverFetch<BillingSummary>('/api/v1/billing/summary'),
+    fetchAllFilteredPayments(exportQs),
   ]);
 
   const payments = result?.data ?? [];
   const meta = result?.meta ?? { total: 0, page: 1, limit: 25, totalPages: 1 };
   const hasFilters = !!(params.status || params.paymentType || params.startDate || params.endDate);
+  const exportLabel = hasFilters ? 'filtrado' : new Date().toISOString().slice(0, 10);
 
   return (
     <div className="space-y-6">
@@ -100,18 +131,28 @@ export default async function PaymentsPage({ searchParams }: PageProps) {
           <h1 className="text-2xl font-bold tracking-tight">Pagos</h1>
           <p className="text-sm text-muted-foreground">Historial de cobros y transacciones</p>
         </div>
-        <Link
-          href="/payments/new"
-          className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors"
-        >
-          <Plus className="h-4 w-4" />
-          Registrar pago
-        </Link>
+        <div className="flex items-center gap-2">
+          <PaymentsExportButton payments={exportPayments} filterLabel={exportLabel} />
+          <Link
+            href="/payments/upload-voucher"
+            className="flex items-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-medium hover:bg-muted transition-colors"
+          >
+            <Upload className="h-4 w-4" />
+            Subir comprobante
+          </Link>
+          <Link
+            href="/payments/new"
+            className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors"
+          >
+            <Plus className="h-4 w-4" />
+            Registrar pago
+          </Link>
+        </div>
       </div>
 
       {/* Summary cards */}
       {summary && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
           <SummaryCard
             label="Cobrado este mes"
             value={formatCurrency(summary.thisMonth.total)}
@@ -134,6 +175,12 @@ export default async function PaymentsPage({ searchParams }: PageProps) {
             value={String(summary.failedThisMonth)}
             sub="requieren seguimiento"
             warn={summary.failedThisMonth > 0}
+          />
+          <SummaryCard
+            label="Comprobantes por revisar"
+            value={String(summary.pendingReview)}
+            sub="extraídos por IA"
+            warn={summary.pendingReview > 0}
           />
         </div>
       )}
@@ -317,6 +364,7 @@ function PaymentsFilter({
 }) {
   const statuses = [
     { value: '', label: 'Todos' },
+    { value: 'DRAFT', label: 'Borrador (IA)' },
     { value: 'SUCCEEDED', label: 'Exitoso' },
     { value: 'PENDING', label: 'Pendiente' },
     { value: 'FAILED', label: 'Fallido' },

@@ -3,6 +3,7 @@ import {
   IsEmail,
   IsOptional,
   IsDateString,
+  IsBoolean,
   MinLength,
   MaxLength,
   IsIn,
@@ -46,7 +47,37 @@ export class CreateMemberDto {
   notes?: string;
 }
 
-export class UpdateMemberDto {
+// Identidad y facturación (El Salvador) — capturados al registrar pagos con DTE-lite
+export class MemberFiscalInfoDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(15)
+  dui?: string;
+
+  @IsOptional()
+  @IsDateString()
+  duiExpiration?: string;
+
+  @IsOptional()
+  @IsString()
+  address?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isTaxpayer?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  nit?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  nrc?: string;
+}
+
+export class UpdateMemberDto extends MemberFiscalInfoDto {
   @IsOptional()
   @IsString()
   @MinLength(1)

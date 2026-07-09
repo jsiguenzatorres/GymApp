@@ -5,9 +5,10 @@ import { BillingService } from './billing.service';
 import { StripeService } from './stripe.service';
 import { MercadoPagoService } from './mercadopago.service';
 import { DatabaseModule } from '../database/database.module';
+import { StorageModule } from '../storage/storage.module';
 
 @Module({
-  imports: [DatabaseModule, ConfigModule],
+  imports: [DatabaseModule, ConfigModule, StorageModule],
   controllers: [BillingController, WebhooksController],
   providers: [BillingService, StripeService, MercadoPagoService],
   exports: [BillingService, StripeService, MercadoPagoService],

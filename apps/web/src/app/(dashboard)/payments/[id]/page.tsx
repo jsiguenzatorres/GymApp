@@ -5,6 +5,7 @@ import { ArrowLeft, CreditCard, User, Calendar, FileText, Tag } from 'lucide-rea
 import { serverFetch } from '@/lib/server-api';
 import { PaymentStatusBadge } from '@/components/billing/payment-status-badge';
 import { RefundButton } from '@/components/billing/refund-button';
+import { PaymentDraftReview } from '@/components/billing/payment-draft-review';
 
 export const metadata: Metadata = { title: 'Detalle de Pago — GymApp' };
 
@@ -17,7 +18,12 @@ interface PaymentDetail {
   description: string | null;
   notes: string | null;
   invoice_type: string | null;
-  gateway_reference: string | null;
+  gateway_payment_id: string | null;
+  voucher_number: string | null;
+  subtotal: number | null;
+  tax_amount: number | null;
+  voucher_url: string | null;
+  voucher_ai_note: string | null;
   paid_at: string | null;
   created_at: string;
   updated_at: string;
@@ -134,35 +140,7 @@ export default async function PaymentDetailPage({ params }: { params: Promise<{ 
         </div>
       </div>
 
-      {/* Payment info */}
-      <Section title="Información del pago" icon={CreditCard}>
-        <InfoRow label="Monto">{fmtCurrency(payment.amount, payment.currency)}</InfoRow>
-        <InfoRow label="Estado">
-          <PaymentStatusBadge status={payment.status} />
-        </InfoRow>
-        <InfoRow label="Método">
-          {PAYMENT_TYPE_LABELS[payment.payment_type] ?? payment.payment_type}
-        </InfoRow>
-        {payment.invoice_type && (
-          <InfoRow label="Tipo de factura">
-            {INVOICE_LABELS[payment.invoice_type] ?? payment.invoice_type}
-          </InfoRow>
-        )}
-        {payment.gateway_reference && (
-          <InfoRow label="Referencia gateway">
-            <span className="font-mono text-xs">{payment.gateway_reference}</span>
-          </InfoRow>
-        )}
-        {payment.payment_method && (
-          <InfoRow label="Tarjeta">
-            {payment.payment_method.card_brand ?? payment.payment_method.gateway}
-            {payment.payment_method.last_four && ` •••• ${payment.payment_method.last_four}`}
-          </InfoRow>
-        )}
-        {payment.description && <InfoRow label="Descripción">{payment.description}</InfoRow>}
-      </Section>
-
-      {/* Member */}
+      {/* Member — siempre visible, incluso en borrador */}
       <Section title="Miembro" icon={User}>
         <InfoRow label="Nombre">
           <Link href={`/members/${payment.member.id}`} className="text-primary hover:underline">
@@ -181,32 +159,89 @@ export default async function PaymentDetailPage({ params }: { params: Promise<{ 
         )}
       </Section>
 
-      {/* Dates */}
-      <Section title="Fechas" icon={Calendar}>
-        <InfoRow label="Fecha de pago">{fmtDate(payment.paid_at)}</InfoRow>
-        <InfoRow label="Registrado">{fmtDate(payment.created_at)}</InfoRow>
-        <InfoRow label="Última actualización">{fmtDate(payment.updated_at)}</InfoRow>
-      </Section>
+      {payment.status === 'DRAFT' ? (
+        <PaymentDraftReview payment={payment} />
+      ) : (
+        <>
+          {/* Payment info */}
+          <Section title="Información del pago" icon={CreditCard}>
+            <InfoRow label="Monto">{fmtCurrency(payment.amount, payment.currency)}</InfoRow>
+            <InfoRow label="Estado">
+              <PaymentStatusBadge status={payment.status} />
+            </InfoRow>
+            <InfoRow label="Método">
+              {PAYMENT_TYPE_LABELS[payment.payment_type] ?? payment.payment_type}
+            </InfoRow>
+            {payment.subtotal !== null && (
+              <InfoRow label="Subtotal">{fmtCurrency(payment.subtotal, payment.currency)}</InfoRow>
+            )}
+            {payment.tax_amount !== null && (
+              <InfoRow label="IVA (13%)">
+                {fmtCurrency(payment.tax_amount, payment.currency)}
+              </InfoRow>
+            )}
+            {payment.voucher_number && (
+              <InfoRow label="N° de comprobante">{payment.voucher_number}</InfoRow>
+            )}
+            {payment.invoice_type && (
+              <InfoRow label="Tipo de factura">
+                {INVOICE_LABELS[payment.invoice_type] ?? payment.invoice_type}
+              </InfoRow>
+            )}
+            {payment.gateway_payment_id && (
+              <InfoRow label="Referencia gateway">
+                <span className="font-mono text-xs">{payment.gateway_payment_id}</span>
+              </InfoRow>
+            )}
+            {payment.payment_method && (
+              <InfoRow label="Tarjeta">
+                {payment.payment_method.card_brand ?? payment.payment_method.gateway}
+                {payment.payment_method.last_four && ` •••• ${payment.payment_method.last_four}`}
+              </InfoRow>
+            )}
+            {payment.description && <InfoRow label="Descripción">{payment.description}</InfoRow>}
+            {payment.voucher_url && (
+              <InfoRow label="Comprobante">
+                <a
+                  href={payment.voucher_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline"
+                >
+                  Ver archivo
+                </a>
+              </InfoRow>
+            )}
+          </Section>
 
-      {/* Notes */}
-      {payment.notes && (
-        <Section title="Notas internas" icon={FileText}>
-          <p className="text-sm text-foreground whitespace-pre-wrap">{payment.notes}</p>
-        </Section>
-      )}
+          {/* Dates */}
+          <Section title="Fechas" icon={Calendar}>
+            <InfoRow label="Fecha de pago">{fmtDate(payment.paid_at)}</InfoRow>
+            <InfoRow label="Registrado">{fmtDate(payment.created_at)}</InfoRow>
+            <InfoRow label="Última actualización">{fmtDate(payment.updated_at)}</InfoRow>
+          </Section>
 
-      {/* Invoice type tag */}
-      {payment.invoice_type && (
-        <Section title="Facturación" icon={Tag}>
-          <div className="flex items-center gap-2">
-            <span className="rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-xs font-medium text-violet-700">
-              {INVOICE_LABELS[payment.invoice_type] ?? payment.invoice_type}
-            </span>
-            <span className="text-xs text-muted-foreground">
-              Factura DTE (integración con Ministerio de Hacienda — Fase 2)
-            </span>
-          </div>
-        </Section>
+          {/* Notes */}
+          {payment.notes && (
+            <Section title="Notas internas" icon={FileText}>
+              <p className="text-sm text-foreground whitespace-pre-wrap">{payment.notes}</p>
+            </Section>
+          )}
+
+          {/* Invoice type tag */}
+          {payment.invoice_type && (
+            <Section title="Facturación" icon={Tag}>
+              <div className="flex items-center gap-2">
+                <span className="rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-xs font-medium text-violet-700">
+                  {INVOICE_LABELS[payment.invoice_type] ?? payment.invoice_type}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  Factura DTE (integración con Ministerio de Hacienda — Fase 2)
+                </span>
+              </div>
+            </Section>
+          )}
+        </>
       )}
     </div>
   );

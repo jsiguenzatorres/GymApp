@@ -540,6 +540,12 @@ export class MembersService {
         ...(dto.birthdate !== undefined && { birthdate: new Date(dto.birthdate) }),
         ...(dto.gender !== undefined && { gender: dto.gender }),
         ...(dto.notes !== undefined && { notes: dto.notes }),
+        ...(dto.dui !== undefined && { dui: dto.dui }),
+        ...(dto.duiExpiration !== undefined && { dui_expiration: new Date(dto.duiExpiration) }),
+        ...(dto.address !== undefined && { address: dto.address }),
+        ...(dto.isTaxpayer !== undefined && { is_taxpayer: dto.isTaxpayer }),
+        ...(dto.nit !== undefined && { nit: dto.nit }),
+        ...(dto.nrc !== undefined && { nrc: dto.nrc }),
       },
     });
   }

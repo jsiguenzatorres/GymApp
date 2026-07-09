@@ -48,4 +48,89 @@ export class CreatePaymentDto {
   @IsOptional()
   @IsDateString()
   paidAt?: string;
+
+  // Comprobante manual — desglose de impuestos (DTE-lite)
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  voucherNumber?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  subtotal?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  taxAmount?: number;
+}
+
+export class UploadPaymentVoucherDto {
+  @IsUUID()
+  memberId: string;
+
+  @IsOptional()
+  @IsUUID()
+  membershipId?: string;
+
+  @IsString()
+  document: string; // data:image/{jpeg|png|webp}|application/pdf;base64,...
+}
+
+export class ConfirmPaymentDraftDto {
+  @IsOptional()
+  @IsUUID()
+  membershipId?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0.01)
+  amount?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  subtotal?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  taxAmount?: number;
+
+  @IsOptional()
+  @IsEnum(PaymentType)
+  paymentType?: PaymentType;
+
+  @IsOptional()
+  @IsIn(['CF', 'CCF'])
+  invoiceType?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  voucherNumber?: string;
+
+  @IsOptional()
+  @IsDateString()
+  paidAt?: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
+
+export class RejectPaymentDraftDto {
+  @IsOptional()
+  @IsString()
+  reason?: string;
 }

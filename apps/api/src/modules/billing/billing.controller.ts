@@ -20,7 +20,12 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { BillingService } from './billing.service';
 import { MercadoPagoService } from './mercadopago.service';
-import { CreatePaymentDto } from './dto/create-payment.dto';
+import {
+  CreatePaymentDto,
+  UploadPaymentVoucherDto,
+  ConfirmPaymentDraftDto,
+  RejectPaymentDraftDto,
+} from './dto/create-payment.dto';
 import { ListPaymentsDto } from './dto/list-payments.dto';
 
 @UseGuards(JwtAuthGuard)
@@ -70,6 +75,34 @@ export class BillingController {
     @Param('memberId', ParseUUIDPipe) memberId: string,
   ) {
     return this.billingService.getMemberPayments(this.gymId(user), memberId);
+  }
+
+  // ─── COMPROBANTE + EXTRACCIÓN IA ─────────────────────────────────────────────
+
+  @Post('payments/upload-voucher')
+  @HttpCode(HttpStatus.CREATED)
+  uploadPaymentVoucher(@CurrentUser() user: JwtPayload, @Body() dto: UploadPaymentVoucherDto) {
+    return this.billingService.uploadPaymentVoucher(this.gymId(user), dto);
+  }
+
+  @Post('payments/:id/confirm-draft')
+  @HttpCode(HttpStatus.OK)
+  confirmPaymentDraft(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ConfirmPaymentDraftDto,
+  ) {
+    return this.billingService.confirmPaymentDraft(this.gymId(user), id, dto);
+  }
+
+  @Post('payments/:id/reject-draft')
+  @HttpCode(HttpStatus.OK)
+  rejectPaymentDraft(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: RejectPaymentDraftDto,
+  ) {
+    return this.billingService.rejectPaymentDraft(this.gymId(user), id, dto);
   }
 
   // ─── BILLING SUMMARY ─────────────────────────────────────────────────────────

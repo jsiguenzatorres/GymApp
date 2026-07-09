@@ -1,6 +1,10 @@
 import { cn } from '@/lib/utils';
 
 const STATUS_CONFIG = {
+  DRAFT: {
+    label: 'Borrador (IA)',
+    className: 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300',
+  },
   PENDING: {
     label: 'Pendiente',
     className: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
