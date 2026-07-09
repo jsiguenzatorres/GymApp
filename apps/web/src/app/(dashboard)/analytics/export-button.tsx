@@ -66,6 +66,10 @@ const PAYMENT_METHOD_LABELS: Record<string, string> = {
   OTHER: 'Otro',
 };
 
+function fmtMoney(n: number) {
+  return `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
 const STATUS_LABELS: Record<string, string> = {
   ACTIVE: 'Activo',
   TRIAL: 'Trial',
@@ -92,92 +96,136 @@ export function AnalyticsExportButton({
   const sheets: ExcelSheet[] = [
     {
       name: 'Resumen',
+      columns: [
+        { header: 'Métrica', key: 'metrica', format: 'text', width: 32 },
+        { header: 'Valor', key: 'valor', format: 'text', width: 28 },
+      ],
       rows: [
-        { Métrica: 'Período', Valor: `${finance.period.start} a ${finance.period.end}` },
-        { Métrica: 'Ingresos del período', Valor: finance.total_revenue },
-        { Métrica: 'Ingresos período anterior', Valor: finance.total_prev_revenue },
-        { Métrica: 'Crecimiento %', Valor: finance.growth_pct ?? 'N/A' },
-        { Métrica: 'ARPU', Valor: finance.insights.arpu },
-        { Métrica: 'Miembros activos considerados', Valor: finance.insights.active_members },
-        { Métrica: 'Ingreso mensual en riesgo', Valor: finance.insights.revenue_at_risk },
-        { Métrica: 'Miembros en riesgo alto', Valor: finance.insights.at_risk_member_count },
-        { Métrica: 'Deuda total', Valor: finance.debt.total },
+        { metrica: 'Período', valor: `${finance.period.start} a ${finance.period.end}` },
+        { metrica: 'Ingresos del período', valor: fmtMoney(finance.total_revenue) },
+        { metrica: 'Ingresos período anterior', valor: fmtMoney(finance.total_prev_revenue) },
+        {
+          metrica: 'Crecimiento %',
+          valor: finance.growth_pct !== null ? `${finance.growth_pct}%` : 'N/A',
+        },
+        { metrica: 'ARPU', valor: fmtMoney(finance.insights.arpu) },
+        { metrica: 'Miembros activos considerados', valor: finance.insights.active_members },
+        { metrica: 'Ingreso mensual en riesgo', valor: fmtMoney(finance.insights.revenue_at_risk) },
+        { metrica: 'Miembros en riesgo alto', valor: finance.insights.at_risk_member_count },
+        { metrica: 'Deuda total', valor: fmtMoney(finance.debt.total) },
       ],
     },
     {
       name: 'Ingresos por categoria',
+      columns: [
+        { header: 'Categoría', key: 'categoria', format: 'text', width: 26 },
+        { header: 'Monto', key: 'monto', format: 'currency' },
+      ],
       rows: [
-        { Categoría: 'Membresías', Monto: finance.revenue.memberships },
-        { Categoría: 'Planes nutricionales', Monto: finance.revenue.nutrition_plans },
-        { Categoría: 'Otros add-ons', Monto: finance.revenue.other_addons },
-        { Categoría: 'Marketplace', Monto: finance.revenue.marketplace },
-        { Categoría: 'Otros pagos', Monto: finance.revenue.other },
+        { categoria: 'Membresías', monto: finance.revenue.memberships },
+        { categoria: 'Planes nutricionales', monto: finance.revenue.nutrition_plans },
+        { categoria: 'Otros add-ons', monto: finance.revenue.other_addons },
+        { categoria: 'Marketplace', monto: finance.revenue.marketplace },
+        { categoria: 'Otros pagos', monto: finance.revenue.other },
       ],
     },
     {
       name: 'Deuda por categoria',
+      columns: [
+        { header: 'Categoría', key: 'categoria', format: 'text', width: 26 },
+        { header: 'Monto', key: 'monto', format: 'currency' },
+        { header: 'Pagos', key: 'pagos', format: 'integer' },
+      ],
       rows: [
         {
-          Categoría: 'Membresías pendientes',
-          Monto: finance.debt.memberships_pending,
-          Pagos: finance.debt.memberships_pending_count,
+          categoria: 'Membresías pendientes',
+          monto: finance.debt.memberships_pending,
+          pagos: finance.debt.memberships_pending_count,
         },
         {
-          Categoría: 'Otros pagos pendientes',
-          Monto: finance.debt.other_pending,
-          Pagos: finance.debt.other_pending_count,
+          categoria: 'Otros pagos pendientes',
+          monto: finance.debt.other_pending,
+          pagos: finance.debt.other_pending_count,
         },
         {
-          Categoría: 'Crédito de tienda',
-          Monto: finance.debt.store_credit,
-          Pagos: finance.debt.store_credit_debtor_count,
+          categoria: 'Crédito de tienda',
+          monto: finance.debt.store_credit,
+          pagos: finance.debt.store_credit_debtor_count,
         },
       ],
     },
     {
       name: 'Top productos',
+      columns: [
+        { header: 'Producto', key: 'producto', format: 'text', width: 32 },
+        { header: 'Cantidad', key: 'cantidad', format: 'integer' },
+        { header: 'Ingreso', key: 'ingreso', format: 'currency' },
+      ],
       rows: finance.top_products.map((p) => ({
-        Producto: p.name,
-        Cantidad: p.quantity,
-        Ingreso: p.revenue,
+        producto: p.name,
+        cantidad: p.quantity,
+        ingreso: p.revenue,
       })),
     },
     {
       name: 'Metodos de pago',
+      columns: [
+        { header: 'Método', key: 'metodo', format: 'text', width: 22 },
+        { header: 'Monto', key: 'monto', format: 'currency' },
+      ],
       rows: finance.payment_methods.map((pm) => ({
-        Método: PAYMENT_METHOD_LABELS[pm.type] ?? pm.type,
-        Monto: pm.amount,
+        metodo: PAYMENT_METHOD_LABELS[pm.type] ?? pm.type,
+        monto: pm.amount,
       })),
     },
     {
       name: 'Marketplace por categoria',
+      columns: [
+        { header: 'Categoría', key: 'categoria', format: 'text', width: 26 },
+        { header: 'Ingreso', key: 'ingreso', format: 'currency' },
+      ],
       rows: finance.marketplace.by_category.map((c) => ({
-        Categoría: c.name,
-        Ingreso: c.revenue,
+        categoria: c.name,
+        ingreso: c.revenue,
       })),
     },
     {
       name: 'Tendencia mensual',
+      columns: [
+        { header: 'Mes', key: 'mes', format: 'text', width: 14 },
+        { header: 'Ingresos', key: 'ingresos', format: 'currency' },
+        { header: 'Transacciones', key: 'transacciones', format: 'integer' },
+        { header: 'Nuevos miembros', key: 'nuevos', format: 'integer' },
+      ],
       rows: revenueTrend.map((r) => ({
-        Mes: r.month,
-        Ingresos: r.revenue,
-        Transacciones: r.transactions,
-        'Nuevos miembros': r.newMembers,
+        mes: r.month,
+        ingresos: r.revenue,
+        transacciones: r.transactions,
+        nuevos: r.newMembers,
       })),
     },
     {
       name: 'Membresias por plan',
+      columns: [
+        { header: 'Plan', key: 'plan', format: 'text', width: 24 },
+        { header: 'Miembros', key: 'miembros', format: 'integer' },
+        { header: 'Precio', key: 'precio', format: 'currency' },
+      ],
       rows: membershipBreakdown.map((m) => ({
-        Plan: m.name,
-        Miembros: m.count,
-        Precio: m.price,
+        plan: m.name,
+        miembros: m.count,
+        precio: m.price,
       })),
     },
     {
       name: 'Miembros por estado',
+      columns: [
+        { header: 'Estado', key: 'estado', format: 'text', width: 20 },
+        { header: 'Cantidad', key: 'cantidad', format: 'integer' },
+      ],
       rows: memberStatusDistribution.map((s) => ({
-        Estado: STATUS_LABELS[s.status] ?? s.status,
-        Cantidad: s.count,
+        estado: STATUS_LABELS[s.status] ?? s.status,
+        cantidad: s.count,
       })),
     },
   ];
