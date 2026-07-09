@@ -1,14 +1,4 @@
-import {
-  Wallet,
-  Apple,
-  Layers,
-  ShoppingBag,
-  Receipt,
-  AlertTriangle,
-  TrendingUp,
-  Users,
-  CreditCard,
-} from 'lucide-react';
+import { ShoppingBag, AlertTriangle, TrendingUp, Users, CreditCard } from 'lucide-react';
 import { serverFetch } from '@/lib/server-api';
 import { AnalyticsCharts } from '@/components/analytics/analytics-charts';
 import { BusinessCoach } from './business-coach';
@@ -116,6 +106,17 @@ const MONTHS = [
   'Diciembre',
 ];
 
+// Paleta de categorías — consistente entre la barra de composición, la
+// leyenda y la dona de marketplace. El naranja queda reservado como acento
+// de marca (marketplace); el resto usa tonos estructurales/semánticos.
+const CATEGORY_STYLE = {
+  memberships: { bar: 'bg-[#0b3b5c]', dot: 'bg-[#0b3b5c]' },
+  nutrition: { bar: 'bg-emerald-600', dot: 'bg-emerald-600' },
+  addons: { bar: 'bg-violet-500', dot: 'bg-violet-500' },
+  marketplace: { bar: 'bg-[#ff5a1f]', dot: 'bg-[#ff5a1f]' },
+  other: { bar: 'bg-gray-400', dot: 'bg-gray-400' },
+} as const;
+
 function GrowthBadge({ value }: { value: number }) {
   if (value === 0) return <span className="text-xs text-gray-400">Sin cambio</span>;
   const isPos = value > 0;
@@ -126,65 +127,62 @@ function GrowthBadge({ value }: { value: number }) {
   );
 }
 
-function KpiCard({
-  label,
-  value,
-  sub,
-  badge,
-  accent,
-}: {
-  label: string;
-  value: string | number;
-  sub?: string;
-  badge?: React.ReactNode;
-  accent?: string;
-}) {
+function StatChip({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
   return (
-    <div className={`rounded-xl border bg-white p-5 shadow-sm ${accent ?? 'border-gray-100'}`}>
-      <p className="text-sm text-gray-500">{label}</p>
-      <p className="mt-1 text-3xl font-bold text-gray-900">{value}</p>
-      <div className="mt-1 flex items-center gap-2">
-        {badge}
-        {sub && <span className="text-xs text-gray-400">{sub}</span>}
-      </div>
+    <div className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
+      <p className="text-xs text-gray-500">{label}</p>
+      <p className="mt-1 text-xl font-bold text-gray-900">{value}</p>
+      {sub && <p className="mt-0.5 text-xs text-gray-400">{sub}</p>}
     </div>
   );
 }
 
-function CategoryCard({
-  icon: Icon,
-  label,
-  value,
-  sub,
-  total,
-  iconBg,
-  iconColor,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
+interface Category {
+  key: keyof typeof CATEGORY_STYLE;
   label: string;
   value: number;
   sub?: string;
-  total: number;
-  iconBg: string;
-  iconColor: string;
-}) {
-  const pct = total > 0 ? Math.round((value / total) * 1000) / 10 : 0;
+}
+
+// Barra de composición + leyenda, reutilizada tanto para ingresos como deuda
+// (mismo lenguaje visual — cambia solo la paleta según el contexto).
+function CompositionBreakdown({ categories, total }: { categories: Category[]; total: number }) {
+  const visible = categories.filter((c) => c.value > 0 || total === 0);
   return (
-    <div className="rounded-lg border border-gray-100 bg-gray-50/60 p-4">
-      <div className="flex items-center gap-2">
-        <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${iconBg}`}>
-          <Icon className={`h-4 w-4 ${iconColor}`} />
-        </div>
-        <p className="text-xs font-semibold uppercase tracking-wide text-gray-600">{label}</p>
+    <div>
+      <div className="mb-4 flex h-3.5 w-full overflow-hidden rounded-full bg-gray-100">
+        {categories.map((c) => {
+          const pct = total > 0 ? (c.value / total) * 100 : 0;
+          if (pct <= 0) return null;
+          return (
+            <div
+              key={c.key}
+              className={CATEGORY_STYLE[c.key].bar}
+              style={{ width: `${pct}%` }}
+              title={`${c.label}: ${fmtCurrency(c.value)}`}
+            />
+          );
+        })}
       </div>
-      <p className="mt-3 text-xl font-bold text-gray-900">{fmtCurrency(value)}</p>
-      <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-gray-200">
-        <div
-          className={`h-full rounded-full ${iconColor.replace('text-', 'bg-')}`}
-          style={{ width: `${Math.min(pct, 100)}%` }}
-        />
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+        {(visible.length > 0 ? visible : categories).map((c) => {
+          const pct = total > 0 ? Math.round((c.value / total) * 1000) / 10 : 0;
+          return (
+            <div key={c.key} className="rounded-lg bg-gray-50 p-3.5">
+              <div className="flex items-center gap-1.5">
+                <span className={`h-2 w-2 rounded-full ${CATEGORY_STYLE[c.key].dot}`} />
+                <p className="text-[0.68rem] font-semibold uppercase tracking-wide text-gray-500">
+                  {c.label}
+                </p>
+              </div>
+              <p className="mt-2 text-lg font-bold tabular-nums text-gray-900">
+                {fmtCurrency(c.value)}
+              </p>
+              <p className="text-xs text-gray-400">{c.sub ?? `${pct}% del total`}</p>
+            </div>
+          );
+        })}
       </div>
-      <p className="mt-1.5 text-xs text-gray-400">{sub ?? `${pct}% del total`}</p>
     </div>
   );
 }
@@ -214,7 +212,7 @@ function PeriodFilterForm({
         <select
           name="year"
           defaultValue={year ?? String(currentYear)}
-          className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-800 outline-none focus:border-violet-400"
+          className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-800 outline-none focus:border-[#ff5a1f]"
         >
           {years.map((y) => (
             <option key={y} value={y}>
@@ -228,7 +226,7 @@ function PeriodFilterForm({
         <select
           name="month"
           defaultValue={month ?? String(new Date().getMonth() + 1)}
-          className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-800 outline-none focus:border-violet-400"
+          className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-800 outline-none focus:border-[#ff5a1f]"
         >
           <option value="">Todo el año</option>
           {MONTHS.map((m, i) => (
@@ -245,7 +243,7 @@ function PeriodFilterForm({
           type="date"
           name="from"
           defaultValue={from}
-          className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-800 outline-none focus:border-violet-400"
+          className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-800 outline-none focus:border-[#ff5a1f]"
         />
       </div>
       <div className="flex flex-col gap-1">
@@ -254,12 +252,12 @@ function PeriodFilterForm({
           type="date"
           name="to"
           defaultValue={to}
-          className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-800 outline-none focus:border-violet-400"
+          className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-800 outline-none focus:border-[#ff5a1f]"
         />
       </div>
       <button
         type="submit"
-        className="h-9 rounded-lg bg-violet-600 px-4 text-sm font-medium text-white transition-colors hover:bg-violet-700"
+        className="h-9 rounded-lg bg-[#ff5a1f] px-4 text-sm font-medium text-white transition-colors hover:bg-[#e64f18]"
       >
         Aplicar
       </button>
@@ -309,13 +307,86 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
         : '')
     : '';
 
+  const revenueCategories: Category[] = finance
+    ? [
+        { key: 'memberships', label: 'Membresías', value: finance.revenue.memberships },
+        { key: 'nutrition', label: 'Planes nutricionales', value: finance.revenue.nutrition_plans },
+        { key: 'addons', label: 'Otros add-ons', value: finance.revenue.other_addons },
+        {
+          key: 'marketplace',
+          label: 'Marketplace',
+          value: finance.revenue.marketplace,
+          sub: `${finance.marketplace.orders_count} órdenes`,
+        },
+        {
+          key: 'other',
+          label: 'Otros pagos',
+          value: finance.revenue.other,
+          sub: 'Day-passes, recargos, etc.',
+        },
+      ]
+    : [];
+
+  const debtCategories: Category[] = finance
+    ? [
+        {
+          key: 'memberships',
+          label: 'Membresías pendientes',
+          value: finance.debt.memberships_pending,
+          sub: `${finance.debt.memberships_pending_count} pago(s)`,
+        },
+        {
+          key: 'other',
+          label: 'Otros pagos pendientes',
+          value: finance.debt.other_pending,
+          sub: `${finance.debt.other_pending_count} pago(s)`,
+        },
+        {
+          key: 'marketplace',
+          label: 'Crédito de tienda',
+          value: finance.debt.store_credit,
+          sub: `${finance.debt.store_credit_debtor_count} miembro(s) con saldo negativo`,
+        },
+      ]
+    : [];
+
+  // Dona de marketplace por categoría — stops de conic-gradient calculados
+  // a partir de los porcentajes reales.
+  const donutColors = ['#ff5a1f', '#0b3b5c', '#059669', '#a78bfa', '#9ca3af'];
+  let donutCursor = 0;
+  const donutStops = finance
+    ? finance.marketplace.by_category.map((c, i) => {
+        const pct =
+          finance.marketplace.revenue > 0 ? (c.revenue / finance.marketplace.revenue) * 100 : 0;
+        const from = donutCursor;
+        donutCursor += pct;
+        return {
+          ...c,
+          color: donutColors[i % donutColors.length],
+          from,
+          to: donutCursor,
+        };
+      })
+    : [];
+  const donutGradient = donutStops.length
+    ? `conic-gradient(${donutStops.map((s) => `${s.color} ${s.from}% ${s.to}%`).join(', ')})`
+    : undefined;
+  const maxPaymentAmount = finance
+    ? Math.max(...finance.payment_methods.map((p) => p.amount), 1)
+    : 1;
+
   return (
     <div className="space-y-8 p-6">
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Panel Ejecutivo</h1>
-          <p className="text-sm text-gray-500">KPIs y tendencias de tu gym en tiempo real</p>
+          <p className="mb-1 text-[0.68rem] font-bold uppercase tracking-widest text-[#ff5a1f]">
+            GymApp · Panel Ejecutivo
+          </p>
+          <h1 className="text-2xl font-bold text-gray-900">Rendimiento financiero</h1>
+          <p className="text-sm text-gray-500">
+            Ingresos, deuda y salud del negocio — en tiempo real
+          </p>
         </div>
         <PeriodFilterForm
           year={params.year}
@@ -325,66 +396,95 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
         />
       </div>
 
-      {/* KPI Cards — Row 1 (snapshot actual, no depende del filtro de período) */}
+      {/* Scoreboard — pulso financiero del período seleccionado */}
+      <div className="grid grid-cols-2 divide-x divide-white/10 overflow-hidden rounded-2xl bg-[#15171c] shadow-sm lg:grid-cols-4">
+        <div className="p-5">
+          <p className="text-[0.65rem] font-bold uppercase tracking-widest text-white/45">
+            Ingresos del período
+          </p>
+          <p className="mt-2 font-mono text-2xl font-semibold tabular-nums text-white">
+            {finance ? fmtCurrency(finance.total_revenue) : '—'}
+          </p>
+          <p className="mt-1.5 flex items-center gap-1.5 text-xs text-white/50">
+            {finance?.growth_pct !== null && finance?.growth_pct !== undefined && (
+              <span
+                className={
+                  finance.growth_pct >= 0
+                    ? 'font-semibold text-emerald-400'
+                    : 'font-semibold text-red-300'
+                }
+              >
+                {finance.growth_pct >= 0 ? '▲' : '▼'} {Math.abs(finance.growth_pct)}%
+              </span>
+            )}
+            vs período anterior
+          </p>
+        </div>
+        <div className="p-5">
+          <p className="text-[0.65rem] font-bold uppercase tracking-widest text-white/45">
+            Miembros activos
+          </p>
+          <p className="mt-2 font-mono text-2xl font-semibold tabular-nums text-white">
+            {kpis?.activeMembers ?? '—'}
+          </p>
+          <p className="mt-1.5 text-xs text-white/50">
+            {kpis ? `${kpis.retentionRate}% retención` : ''}
+          </p>
+        </div>
+        <div className="p-5">
+          <p className="text-[0.65rem] font-bold uppercase tracking-widest text-white/45">ARPU</p>
+          <p className="mt-2 font-mono text-2xl font-semibold tabular-nums text-white">
+            {finance ? fmtCurrency(finance.insights.arpu) : '—'}
+          </p>
+          <p className="mt-1.5 text-xs text-white/50">ingreso por miembro activo</p>
+        </div>
+        <div className="p-5">
+          <p className="text-[0.65rem] font-bold uppercase tracking-widest text-white/45">
+            Riesgo de churn alto
+          </p>
+          <p className="mt-2 font-mono text-2xl font-semibold tabular-nums text-white">
+            {kpis?.highRiskCount ?? '—'}
+          </p>
+          <p className="mt-1.5 text-xs text-red-300">
+            {finance ? `${fmtCurrency(finance.insights.revenue_at_risk)} en riesgo/mes` : ''}
+          </p>
+        </div>
+      </div>
+
+      {/* Stats secundarios */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <KpiCard
-          label="Ingresos este mes"
-          value={kpis ? fmtCurrency(kpis.revenueThisMonth) : '—'}
-          badge={kpis && <GrowthBadge value={kpis.revenueGrowth} />}
-          sub={kpis ? `${kpis.transactions} cobros` : undefined}
-          accent="border-violet-100"
-        />
-        <KpiCard
-          label="Miembros activos"
-          value={kpis?.activeMembers ?? '—'}
-          badge={kpis && <GrowthBadge value={0} />}
-          sub={kpis ? `${kpis.retentionRate}% retención` : undefined}
-        />
-        <KpiCard
+        <StatChip
           label="Nuevos este mes"
           value={kpis?.newMembersThisMonth ?? '—'}
-          badge={kpis && <GrowthBadge value={kpis.memberGrowth} />}
           sub={kpis ? `Total: ${kpis.totalMembers}` : undefined}
         />
-        <KpiCard
+        <StatChip
           label="Sesiones workout (7d)"
           value={kpis?.workoutSessionsWeek ?? '—'}
           sub={kpis ? `${kpis.appointmentsNextWeek} citas próx.` : undefined}
         />
-      </div>
-
-      {/* KPI Cards — Row 2 */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <KpiCard
-          label="Pendiente de cobro"
-          value={kpis ? fmtCurrency(kpis.pendingRevenue) : '—'}
-          sub={kpis ? `${kpis.pendingCount} pagos pendientes` : undefined}
-          accent="border-amber-100"
-        />
-        <KpiCard
-          label="Riesgo de churn alto"
-          value={kpis?.highRiskCount ?? '—'}
-          sub="miembros con score ≥ 70"
-          accent={kpis && kpis.highRiskCount > 0 ? 'border-red-100' : 'border-gray-100'}
-        />
-        <KpiCard
+        <StatChip
           label="Score riesgo prom."
           value={kpis ? `${kpis.avgRiskScore}/100` : '—'}
           sub="miembros activos + trial"
         />
-        <KpiCard label="Total miembros" value={kpis?.totalMembers ?? '—'} sub="todos los estados" />
+        <StatChip
+          label="Total miembros"
+          value={kpis?.totalMembers ?? '—'}
+          sub="todos los estados"
+        />
       </div>
 
-      {/* Desglose financiero por categoría — con filtro de período */}
+      {/* Ingresos por categoría */}
       {finance && (
-        <div className="rounded-xl border border-violet-100 bg-white p-6 shadow-sm">
+        <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm">
           <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-lg font-bold text-gray-900">Ingresos por categoría</h2>
               <p className="text-xs capitalize text-gray-500">{periodLabel}</p>
             </div>
             <div className="text-right">
-              <p className="text-3xl font-bold text-violet-600">
+              <p className="font-mono text-3xl font-bold tabular-nums text-[#ff5a1f]">
                 {fmtCurrency(finance.total_revenue)}
               </p>
               {finance.growth_pct !== null && (
@@ -396,58 +496,15 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-            <CategoryCard
-              icon={Wallet}
-              label="Membresías"
-              value={finance.revenue.memberships}
-              total={finance.total_revenue}
-              iconBg="bg-blue-100"
-              iconColor="text-blue-600"
-            />
-            <CategoryCard
-              icon={Apple}
-              label="Planes nutricionales"
-              value={finance.revenue.nutrition_plans}
-              total={finance.total_revenue}
-              iconBg="bg-emerald-100"
-              iconColor="text-emerald-600"
-            />
-            <CategoryCard
-              icon={Layers}
-              label="Otros add-ons"
-              value={finance.revenue.other_addons}
-              total={finance.total_revenue}
-              iconBg="bg-indigo-100"
-              iconColor="text-indigo-600"
-            />
-            <CategoryCard
-              icon={ShoppingBag}
-              label="Marketplace"
-              value={finance.revenue.marketplace}
-              total={finance.total_revenue}
-              sub={`${finance.marketplace.orders_count} órdenes`}
-              iconBg="bg-amber-100"
-              iconColor="text-amber-600"
-            />
-            <CategoryCard
-              icon={Receipt}
-              label="Otros pagos"
-              value={finance.revenue.other}
-              total={finance.total_revenue}
-              sub="Day-passes, recargos, etc."
-              iconBg="bg-gray-200"
-              iconColor="text-gray-600"
-            />
-          </div>
+          <CompositionBreakdown categories={revenueCategories} total={finance.total_revenue} />
 
           {/* Insights */}
           <div className="mt-5 grid grid-cols-1 gap-3 border-t border-gray-100 pt-5 sm:grid-cols-3">
-            <div className="flex items-center gap-3 rounded-lg bg-violet-50/60 p-3">
-              <TrendingUp className="h-5 w-5 shrink-0 text-violet-500" />
+            <div className="flex items-center gap-3 rounded-lg bg-orange-50/60 p-3">
+              <TrendingUp className="h-5 w-5 shrink-0 text-[#ff5a1f]" />
               <div>
                 <p className="text-xs text-gray-500">ARPU (ingreso por miembro)</p>
-                <p className="text-sm font-bold text-gray-900">
+                <p className="text-sm font-bold tabular-nums text-gray-900">
                   {fmtCurrency(finance.insights.arpu)}
                 </p>
               </div>
@@ -456,7 +513,7 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
               <AlertTriangle className="h-5 w-5 shrink-0 text-red-500" />
               <div>
                 <p className="text-xs text-gray-500">Ingreso mensual en riesgo</p>
-                <p className="text-sm font-bold text-gray-900">
+                <p className="text-sm font-bold tabular-nums text-gray-900">
                   {fmtCurrency(finance.insights.revenue_at_risk)}{' '}
                   <span className="font-normal text-gray-400">
                     ({finance.insights.at_risk_member_count} miembros)
@@ -468,7 +525,9 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
               <Users className="h-5 w-5 shrink-0 text-gray-500" />
               <div>
                 <p className="text-xs text-gray-500">Miembros activos considerados</p>
-                <p className="text-sm font-bold text-gray-900">{finance.insights.active_members}</p>
+                <p className="text-sm font-bold tabular-nums text-gray-900">
+                  {finance.insights.active_members}
+                </p>
               </div>
             </div>
           </div>
@@ -477,16 +536,37 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
           <div className="mt-6 grid grid-cols-1 gap-6 border-t border-gray-100 pt-6 lg:grid-cols-3">
             {finance.marketplace.by_category.length > 0 && (
               <div>
-                <h3 className="mb-3 text-sm font-semibold text-gray-700">
-                  Marketplace por categoría
+                <h3 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-gray-700">
+                  <ShoppingBag className="h-4 w-4" /> Marketplace por categoría
                 </h3>
-                <div className="space-y-2">
-                  {finance.marketplace.by_category.map((c) => (
-                    <div key={c.name} className="flex items-center justify-between text-sm">
-                      <span className="text-gray-600">{c.name}</span>
-                      <span className="font-semibold text-gray-900">{fmtCurrency(c.revenue)}</span>
+                <div className="flex items-center gap-5">
+                  <div
+                    className="flex h-28 w-28 shrink-0 items-center justify-center rounded-full"
+                    style={{ background: donutGradient }}
+                  >
+                    <div className="flex h-16 w-16 flex-col items-center justify-center rounded-full bg-white text-center">
+                      <strong className="font-mono text-sm font-bold text-gray-900">
+                        {fmtCurrency(finance.marketplace.revenue)}
+                      </strong>
+                      <span className="text-[0.6rem] uppercase tracking-wide text-gray-400">
+                        total
+                      </span>
                     </div>
-                  ))}
+                  </div>
+                  <div className="min-w-0 flex-1 space-y-1.5">
+                    {donutStops.map((s) => (
+                      <div key={s.name} className="flex items-center gap-2 text-xs">
+                        <span
+                          className="h-2 w-2 shrink-0 rounded-full"
+                          style={{ background: s.color }}
+                        />
+                        <span className="min-w-0 flex-1 truncate text-gray-500">{s.name}</span>
+                        <span className="font-mono font-semibold text-gray-900">
+                          {fmtCurrency(s.revenue)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
             )}
@@ -498,7 +578,7 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
                   {finance.top_products.map((p, i) => (
                     <div key={p.id} className="flex items-center justify-between py-2">
                       <div className="flex items-center gap-2.5">
-                        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-violet-100 text-xs font-bold text-violet-700">
+                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#dfe9ef] text-xs font-bold text-[#0b3b5c]">
                           {i + 1}
                         </span>
                         <div>
@@ -506,7 +586,9 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
                           <p className="text-xs text-gray-500">{p.quantity} unidades</p>
                         </div>
                       </div>
-                      <p className="text-sm font-bold text-gray-900">{fmtCurrency(p.revenue)}</p>
+                      <p className="font-mono text-sm font-bold tabular-nums text-gray-900">
+                        {fmtCurrency(p.revenue)}
+                      </p>
                     </div>
                   ))}
                 </div>
@@ -518,13 +600,21 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
                 <h3 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-gray-700">
                   <CreditCard className="h-4 w-4" /> Métodos de pago
                 </h3>
-                <div className="space-y-2">
+                <div className="space-y-2.5">
                   {finance.payment_methods.map((pm) => (
-                    <div key={pm.type} className="flex items-center justify-between text-sm">
-                      <span className="text-gray-600">
+                    <div key={pm.type} className="flex items-center gap-3">
+                      <span className="w-24 shrink-0 text-xs text-gray-500">
                         {PAYMENT_METHOD_LABELS[pm.type] ?? pm.type}
                       </span>
-                      <span className="font-semibold text-gray-900">{fmtCurrency(pm.amount)}</span>
+                      <div className="h-2 flex-1 overflow-hidden rounded-full bg-gray-100">
+                        <div
+                          className="h-full rounded-full bg-[#0b3b5c]"
+                          style={{ width: `${(pm.amount / maxPaymentAmount) * 100}%` }}
+                        />
+                      </div>
+                      <span className="w-20 shrink-0 text-right font-mono text-xs font-semibold tabular-nums text-gray-900">
+                        {fmtCurrency(pm.amount)}
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -534,46 +624,20 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
         </div>
       )}
 
-      {/* Deuda acumulada por categoría — mismo período */}
+      {/* Deuda acumulada */}
       {finance && (
-        <div className="rounded-xl border border-red-100 bg-white p-6 shadow-sm">
+        <div className="rounded-xl border border-red-100 bg-gradient-to-b from-red-50/50 to-white p-6 shadow-sm">
           <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-lg font-bold text-gray-900">Deuda acumulada</h2>
               <p className="text-xs text-gray-500">Pagos pendientes/fallidos + crédito de tienda</p>
             </div>
-            <p className="text-3xl font-bold text-red-500">{fmtCurrency(finance.debt.total)}</p>
+            <p className="font-mono text-3xl font-bold tabular-nums text-red-500">
+              {fmtCurrency(finance.debt.total)}
+            </p>
           </div>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <CategoryCard
-              icon={Wallet}
-              label="Membresías pendientes"
-              value={finance.debt.memberships_pending}
-              sub={`${finance.debt.memberships_pending_count} pago(s)`}
-              total={finance.debt.total}
-              iconBg="bg-blue-100"
-              iconColor="text-blue-600"
-            />
-            <CategoryCard
-              icon={Receipt}
-              label="Otros pagos pendientes"
-              value={finance.debt.other_pending}
-              sub={`${finance.debt.other_pending_count} pago(s)`}
-              total={finance.debt.total}
-              iconBg="bg-gray-200"
-              iconColor="text-gray-600"
-            />
-            <CategoryCard
-              icon={ShoppingBag}
-              label="Crédito de tienda"
-              value={finance.debt.store_credit}
-              sub={`${finance.debt.store_credit_debtor_count} miembro(s) con saldo negativo`}
-              total={finance.debt.total}
-              iconBg="bg-amber-100"
-              iconColor="text-amber-600"
-            />
-          </div>
+          <CompositionBreakdown categories={debtCategories} total={finance.debt.total} />
         </div>
       )}
 

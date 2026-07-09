@@ -41,7 +41,7 @@ interface AnalyticsChartsProps {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  ACTIVE: '#7c3aed',
+  ACTIVE: '#ff5a1f',
   TRIAL: '#2563eb',
   FROZEN: '#0891b2',
   EXPIRED: '#9ca3af',
@@ -60,7 +60,7 @@ const STATUS_LABELS: Record<string, string> = {
   LEAD: 'Lead',
 };
 
-const PIE_COLORS = ['#7c3aed', '#2563eb', '#0891b2', '#059669', '#f59e0b', '#ef4444', '#a78bfa'];
+const PIE_COLORS = ['#ff5a1f', '#2563eb', '#0891b2', '#059669', '#f59e0b', '#ef4444', '#a78bfa'];
 
 function formatCurrency(value: number) {
   return `$${value.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
@@ -103,8 +103,8 @@ export function AnalyticsCharts({
           <AreaChart data={revenueTrend} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
             <defs>
               <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#7c3aed" stopOpacity={0.15} />
-                <stop offset="95%" stopColor="#7c3aed" stopOpacity={0} />
+                <stop offset="5%" stopColor="#ff5a1f" stopOpacity={0.15} />
+                <stop offset="95%" stopColor="#ff5a1f" stopOpacity={0} />
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -127,10 +127,10 @@ export function AnalyticsCharts({
             <Area
               type="monotone"
               dataKey="revenue"
-              stroke="#7c3aed"
+              stroke="#ff5a1f"
               strokeWidth={2}
               fill="url(#colorRevenue)"
-              dot={{ r: 4, fill: '#7c3aed', strokeWidth: 0 }}
+              dot={{ r: 4, fill: '#ff5a1f', strokeWidth: 0 }}
               activeDot={{ r: 6 }}
             />
           </AreaChart>
@@ -157,7 +157,7 @@ export function AnalyticsCharts({
                 allowDecimals={false}
               />
               <Tooltip formatter={(v: number) => [v, 'Nuevos miembros']} />
-              <Bar dataKey="newMembers" fill="#7c3aed" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="newMembers" fill="#ff5a1f" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
