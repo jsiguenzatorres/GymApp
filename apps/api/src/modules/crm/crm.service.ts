@@ -491,68 +491,90 @@ export class CrmService {
     message: string,
     clientHistory?: { role: 'user' | 'aria'; content: string }[],
   ) {
-    const [gym, atRiskMembers, upcomingAppointments, ragContext, dbHistory, mentionedMember] =
-      await Promise.all([
-        this.prisma.gym.findUnique({
-          where: { id: gymId },
-          select: { name: true, currency: true },
-        }),
-        this.prisma.member.findMany({
-          where: {
-            gym_id: gymId,
-            risk_score: { gte: 70 },
-            status: { in: ['ACTIVE', 'TRIAL', 'FREEZE'] },
-          },
-          select: { first_name: true, last_name: true, risk_score: true },
-          orderBy: { risk_score: 'desc' },
-          take: 15,
-        }),
-        this.prisma.appointment.count({
-          where: {
-            gym_id: gymId,
-            scheduled_at: { gte: new Date(), lte: new Date(Date.now() + 7 * 86_400_000) },
-            status: { in: ['SCHEDULED', 'CONFIRMED'] },
-          },
-        }),
-        this.rag.buildContext(gymId, message),
-        // Solo se usa como respaldo si el cliente no manda su propio historial
-        // (clientHistory) — ver comentario mas abajo.
-        memberId && !clientHistory?.length
-          ? this.conversation.getHistory(gymId, memberId, 'ARIA')
-          : Promise.resolve([]),
-        this.findMentionedMemberContext(gymId, message),
-      ]);
+    // Modo staff/admin (sin memberId, uso del panel web): contexto amplio del
+    // negocio (agregados de todo el gym + busqueda de un miembro mencionado).
+    // Modo miembro (memberId real, uso de la app movil): SOLO datos propios —
+    // nunca se le pasa informacion de otros miembros (antes esto se filtraba
+    // sin querer via atRiskMembers, que se cargaba siempre sin importar el modo).
+    const isAdminMode = !memberId;
 
-    const activeMembers = await this.prisma.member.count({
-      where: { gym_id: gymId, status: { in: ['ACTIVE', 'TRIAL'] } },
-    });
+    const [gym, ragContext, dbHistory] = await Promise.all([
+      this.prisma.gym.findUnique({ where: { id: gymId }, select: { name: true, currency: true } }),
+      this.rag.buildContext(gymId, message),
+      // Solo se usa como respaldo si el cliente no manda su propio historial
+      // (clientHistory) — ver comentario mas abajo.
+      memberId && !clientHistory?.length
+        ? this.conversation.getHistory(gymId, memberId, 'ARIA')
+        : Promise.resolve([]),
+    ]);
 
-    const atRiskList = atRiskMembers.length
-      ? atRiskMembers
-          .map((m) => `  - ${m.first_name} ${m.last_name} (score ${m.risk_score})`)
-          .join('\n')
-      : '  (ninguno)';
+    let businessContext: string;
+    if (isAdminMode) {
+      const [activeMembers, atRiskMembers, debtorMembers, upcomingAppointments, mentionedMember] =
+        await Promise.all([
+          this.prisma.member.count({
+            where: { gym_id: gymId, status: { in: ['ACTIVE', 'TRIAL'] } },
+          }),
+          this.prisma.member.findMany({
+            where: {
+              gym_id: gymId,
+              risk_score: { gte: 70 },
+              status: { in: ['ACTIVE', 'TRIAL', 'FREEZE'] },
+            },
+            select: { first_name: true, last_name: true, risk_score: true },
+            orderBy: { risk_score: 'desc' },
+            take: 15,
+          }),
+          this.findDebtorMembers(gymId),
+          this.prisma.appointment.count({
+            where: {
+              gym_id: gymId,
+              scheduled_at: { gte: new Date(), lte: new Date(Date.now() + 7 * 86_400_000) },
+              status: { in: ['SCHEDULED', 'CONFIRMED'] },
+            },
+          }),
+          this.findMentionedMemberContext(gymId, message),
+        ]);
+
+      const atRiskList = atRiskMembers.length
+        ? atRiskMembers
+            .map((m) => `  - ${m.first_name} ${m.last_name} (score ${m.risk_score})`)
+            .join('\n')
+        : '  (ninguno)';
+
+      businessContext = `CONTEXTO ACTUAL DEL GYM:
+- Miembros activos: ${activeMembers}
+- Miembros en riesgo alto de cancelar (score ≥ 70): ${atRiskMembers.length}
+${atRiskList}
+- Miembros con pagos pendientes/fallidos: ${debtorMembers}
+- Citas próximas (7 días): ${upcomingAppointments}
+- Moneda: ${gym?.currency ?? 'USD'}
+${mentionedMember ?? ''}`;
+    } else {
+      businessContext = await this.buildSelfMemberContext(gymId, memberId!);
+    }
 
     const systemPrompt = `Eres ARIA, el Asistente Relacional Inteligente de ${gym?.name ?? 'el gym'}.
 Eres experta en retención de miembros, CRM deportivo y estrategias de fidelización para gimnasios en Latinoamérica.
 
-CONTEXTO ACTUAL DEL GYM:
-- Miembros activos: ${activeMembers}
-- Miembros en riesgo alto de cancelar (score ≥ 70): ${atRiskMembers.length}
-${atRiskList}
-- Citas próximas (7 días): ${upcomingAppointments}
-- Moneda: ${gym?.currency ?? 'USD'}
-${mentionedMember ?? ''}
+${businessContext}
 ${ragContext}
 INSTRUCCIONES:
 - Responde siempre en español, de forma concisa y accionable
-- Si el admin pregunta sobre miembros en riesgo, sugiere acciones concretas de retención
+${
+  isAdminMode
+    ? `- Estás hablando con STAFF/ADMIN del gym: puedes discutir datos de cualquier miembro (riesgo, pagos, asistencia, entrenamiento)
+- Si el admin pregunta sobre miembros en riesgo o que deben dinero, sugiere acciones concretas
 - Si pregunta sobre citas o interacciones, da recomendaciones de seguimiento
 - Puedes sugerir workflows de retención, estrategias de re-engagement, o análisis de datos
 - Sé directa y profesional, como un consultor de negocio especializado en gimnasios
-- Si el miembro pregunta algo personal (membresía, citas, horarios), responde con amabilidad
-- Si preguntas sobre un miembro especifico no tienen datos en "DATOS DEL MIEMBRO MENCIONADO",
-  dilo claramente en vez de inventar — sugiere revisar su perfil completo en el panel
+- Si preguntan sobre un miembro específico y no tienes datos en "DATOS DEL MIEMBRO MENCIONADO",
+  dilo claramente en vez de inventar — sugiere revisar su perfil completo en el panel`
+    : `- Estás hablando DIRECTAMENTE con un miembro del gym sobre SU PROPIA información — nunca
+  reveles ni discutas datos de otros miembros aunque los mencionen por nombre
+- Responde sobre su membresía, pagos, asistencia o entrenamiento con los datos en "TUS DATOS"
+- Si pregunta algo personal (membresía, citas, horarios), responde con amabilidad`
+}
 - Máximo 3 párrafos por respuesta`;
 
     // El cliente (panel web) ya mantiene el historial completo en pantalla —
@@ -624,8 +646,9 @@ INSTRUCCIONES:
   }
 
   // Si el mensaje del staff menciona el nombre completo de un miembro real del
-  // gym, busca su membresia actual para que ARIA pueda responder preguntas
-  // especificas ("que plan tiene Juan Campos") en vez de solo tener acceso a
+  // gym, arma su expediente completo (plan, pagos, asistencia, entrenamiento)
+  // para que ARIA pueda responder preguntas especificas ("cuanto debe Juan
+  // Campos", "ha asistido esta semana") en vez de solo tener acceso a
   // conteos agregados. Match simple por substring (case-insensitive) — el
   // volumen de miembros por gym es bajo (cientos, no miles), asi que no
   // justifica un parser de NLP para esto.
@@ -641,16 +664,101 @@ INSTRUCCIONES:
     );
     if (!mentioned) return null;
 
-    const membership = await this.prisma.membership.findFirst({
-      where: { member_id: mentioned.id, gym_id: gymId },
-      orderBy: { created_at: 'desc' },
-      include: { type: { select: { name: true, price: true, currency: true } } },
-    });
+    const dossier = await this.buildMemberDossier(gymId, mentioned.id);
+    return `\nDATOS DEL MIEMBRO MENCIONADO (${mentioned.first_name} ${mentioned.last_name}):\n${dossier}`;
+  }
+
+  // Contexto para el modo miembro (app movil, memberId real) — SOLO datos
+  // propios, nunca de otros miembros.
+  private async buildSelfMemberContext(gymId: string, memberId: string): Promise<string> {
+    const dossier = await this.buildMemberDossier(gymId, memberId);
+    return `TUS DATOS:\n${dossier}`;
+  }
+
+  // Expediente compartido: plan actual, pagos pendientes, asistencia reciente
+  // y entrenamiento reciente de UN miembro. Lo usan tanto la busqueda por
+  // nombre (staff) como el contexto propio (miembro en la app movil).
+  private async buildMemberDossier(gymId: string, memberId: string): Promise<string> {
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 86_400_000);
+    const fourteenDaysAgo = new Date(Date.now() - 14 * 86_400_000);
+
+    const [membership, debt, lastCheckIn, checkInsLast30d, lastWorkout, workoutsLast14d, upcoming] =
+      await Promise.all([
+        this.prisma.membership.findFirst({
+          where: { member_id: memberId, gym_id: gymId },
+          orderBy: { created_at: 'desc' },
+          include: { type: { select: { name: true, price: true, currency: true } } },
+        }),
+        this.prisma.payment.aggregate({
+          where: { member_id: memberId, gym_id: gymId, status: { in: ['PENDING', 'FAILED'] } },
+          _sum: { amount: true },
+          _count: true,
+        }),
+        this.prisma.accessLog.findFirst({
+          where: { member_id: memberId, gym_id: gymId, result: 'GRANTED' },
+          orderBy: { occurred_at: 'desc' },
+        }),
+        this.prisma.accessLog.count({
+          where: {
+            member_id: memberId,
+            gym_id: gymId,
+            result: 'GRANTED',
+            occurred_at: { gte: thirtyDaysAgo },
+          },
+        }),
+        this.prisma.workoutSession.findFirst({
+          where: { member_id: memberId, gym_id: gymId },
+          orderBy: { started_at: 'desc' },
+        }),
+        this.prisma.workoutSession.count({
+          where: { member_id: memberId, gym_id: gymId, started_at: { gte: fourteenDaysAgo } },
+        }),
+        this.prisma.appointment.findMany({
+          where: {
+            member_id: memberId,
+            gym_id: gymId,
+            scheduled_at: { gte: new Date() },
+            status: { in: ['SCHEDULED', 'CONFIRMED'] },
+          },
+          orderBy: { scheduled_at: 'asc' },
+          take: 5,
+          select: { title: true, scheduled_at: true },
+        }),
+      ]);
 
     const planLine = membership
       ? `Plan: ${membership.type.name} (${membership.type.currency} ${membership.type.price}) — Estado: ${membership.status} — Vigencia: ${membership.start_date.toLocaleDateString('es-SV')} a ${membership.end_date.toLocaleDateString('es-SV')}`
       : 'Sin membresía registrada';
 
-    return `\nDATOS DEL MIEMBRO MENCIONADO (${mentioned.first_name} ${mentioned.last_name}):\n- ${planLine}\n`;
+    const debtAmount = Number(debt._sum.amount ?? 0);
+    const debtLine =
+      debtAmount > 0
+        ? `Debe $${debtAmount.toFixed(2)} (${debt._count} pago(s) pendiente/fallido)`
+        : 'Sin pagos pendientes';
+
+    const attendanceLine = lastCheckIn
+      ? `Última asistencia: ${lastCheckIn.occurred_at.toLocaleDateString('es-SV')} — ${checkInsLast30d} check-in(s) en los últimos 30 días`
+      : 'Sin registro de asistencia';
+
+    const workoutLine = lastWorkout
+      ? `Último entrenamiento: ${lastWorkout.started_at.toLocaleDateString('es-SV')}${lastWorkout.finished_at ? ' (completado)' : ' (sin terminar)'} — ${workoutsLast14d} sesión(es) en los últimos 14 días`
+      : 'Sin entrenamientos registrados';
+
+    const apptLine = upcoming.length
+      ? upcoming.map((a) => `${a.title} (${a.scheduled_at.toLocaleString('es-SV')})`).join(', ')
+      : 'Ninguna';
+
+    return `- ${planLine}\n- Pagos: ${debtLine}\n- Asistencia: ${attendanceLine}\n- Entrenamiento: ${workoutLine}\n- Próximas citas: ${apptLine}\n`;
+  }
+
+  // Cuenta miembros con al menos un pago PENDING/FAILED — para que ARIA pueda
+  // responder "quien debe" en modo staff sin necesitar que se mencione un
+  // nombre especifico.
+  private async findDebtorMembers(gymId: string): Promise<number> {
+    const debtors = await this.prisma.payment.groupBy({
+      by: ['member_id'],
+      where: { gym_id: gymId, status: { in: ['PENDING', 'FAILED'] } },
+    });
+    return debtors.length;
   }
 }

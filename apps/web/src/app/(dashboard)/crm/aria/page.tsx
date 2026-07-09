@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, Loader2 } from 'lucide-react';
+import Link from 'next/link';
+import { Send, Bot, User, Loader2, X } from 'lucide-react';
 
 interface Message {
   role: 'user' | 'aria';
@@ -105,6 +106,15 @@ export default function AriaPage() {
           <span className="h-2 w-2 rounded-full bg-emerald-500" />
           <span className="text-xs text-gray-500">Activa</span>
         </div>
+
+        <Link
+          href="/crm"
+          className="ml-1 flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700"
+          aria-label="Cerrar ARIA"
+          title="Cerrar"
+        >
+          <X className="h-4 w-4" />
+        </Link>
       </div>
 
       {/* Messages */}
