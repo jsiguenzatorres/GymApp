@@ -35,10 +35,17 @@ export class AnalyticsController {
     return this.analyticsService.getRevenueTrend(this.gymId(user), months ? parseInt(months) : 6);
   }
 
-  // GET /api/v1/analytics/revenue-breakdown — D-32: ingresos por categoría
+  // GET /api/v1/analytics/revenue-breakdown?year=2026&month=7
+  // GET /api/v1/analytics/revenue-breakdown?from=2026-01-01&to=2026-06-30
   @Get('revenue-breakdown')
-  getRevenueBreakdown(@CurrentUser() user: JwtPayload) {
-    return this.analyticsService.getRevenueBreakdown(this.gymId(user));
+  getRevenueBreakdown(
+    @CurrentUser() user: JwtPayload,
+    @Query('year') year?: string,
+    @Query('month') month?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.analyticsService.getRevenueBreakdown(this.gymId(user), { year, month, from, to });
   }
 
   // GET /api/v1/analytics/memberships

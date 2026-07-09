@@ -184,132 +184,248 @@ export class AnalyticsService {
       .filter((t) => t.count > 0);
   }
 
-  // ─── REVENUE BREAKDOWN POR CATEGORÍA (D-32) ───────────────────────────────
-  async getRevenueBreakdown(gymId: string) {
-    const now = new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
-    const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const prevMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+  // ─── PERÍODO (año / mes / rango custom) ──────────────────────────────────
+  // Resuelve year+month, year solo, from+to, o el mes actual por defecto.
+  // El período previo se calcula desplazando hacia atrás la misma duración
+  // (funciona igual para un mes, un año, o un rango arbitrario).
+  private resolvePeriod(query: { year?: string; month?: string; from?: string; to?: string }) {
+    let start: Date;
+    let end: Date;
+
+    if (query.from && query.to) {
+      start = new Date(query.from);
+      end = new Date(query.to);
+      end.setHours(23, 59, 59, 999);
+    } else if (query.year && query.month) {
+      const y = parseInt(query.year, 10);
+      const m = parseInt(query.month, 10) - 1;
+      start = new Date(y, m, 1);
+      end = new Date(y, m + 1, 0, 23, 59, 59, 999);
+    } else if (query.year) {
+      const y = parseInt(query.year, 10);
+      start = new Date(y, 0, 1);
+      end = new Date(y, 11, 31, 23, 59, 59, 999);
+    } else {
+      const now = new Date();
+      start = new Date(now.getFullYear(), now.getMonth(), 1);
+      end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    }
+
+    const durationMs = end.getTime() - start.getTime();
+    const prevEnd = new Date(start.getTime() - 1);
+    const prevStart = new Date(prevEnd.getTime() - durationMs);
+
+    return { start, end, prevStart, prevEnd };
+  }
+
+  // ─── DESGLOSE FINANCIERO POR CATEGORÍA (ingresos + deuda, con filtro de período) ──
+  async getRevenueBreakdown(
+    gymId: string,
+    periodQuery: { year?: string; month?: string; from?: string; to?: string } = {},
+  ) {
+    const { start, end, prevStart, prevEnd } = this.resolvePeriod(periodQuery);
 
     const [
-      paymentsThisMonth,
-      paymentsPrevMonth,
-      activeAddons,
-      mkOrdersThisMonth,
-      mkOrdersPrevMonth,
-      topProducts,
+      paymentsInPeriod,
+      paymentsPrevPeriod,
+      addonsInPeriod,
+      mkOrdersInPeriod,
+      mkOrdersPrevPeriod,
+      orderItemsInPeriod,
+      pendingMemberships,
+      pendingOther,
+      storeCreditDebt,
+      activeMembers,
+      atRiskMemberships,
     ] = await Promise.all([
       this.prisma.payment.findMany({
-        where: {
-          gym_id: gymId,
-          status: 'SUCCEEDED',
-          created_at: { gte: monthStart, lte: monthEnd },
-        },
-        select: { amount: true, membership_id: true },
+        where: { gym_id: gymId, status: 'SUCCEEDED', created_at: { gte: start, lte: end } },
+        select: { amount: true, membership_id: true, payment_type: true },
       }),
       this.prisma.payment.aggregate({
-        where: {
-          gym_id: gymId,
-          status: 'SUCCEEDED',
-          created_at: { gte: prevMonthStart, lte: prevMonthEnd },
-        },
+        where: { gym_id: gymId, status: 'SUCCEEDED', created_at: { gte: prevStart, lte: prevEnd } },
         _sum: { amount: true },
       }),
       this.prisma.memberAddon.findMany({
-        where: { status: 'ACTIVE', member: { gym_id: gymId } },
-        select: { tier: true, price_paid: true },
+        where: { member: { gym_id: gymId }, starts_at: { gte: start, lte: end } },
+        select: { type: true, price_paid: true },
       }),
       this.prisma.marketplaceOrder.aggregate({
-        where: {
-          gym_id: gymId,
-          status: 'DELIVERED',
-          created_at: { gte: monthStart, lte: monthEnd },
-        },
+        where: { gym_id: gymId, status: 'DELIVERED', created_at: { gte: start, lte: end } },
         _sum: { total: true },
         _count: true,
       }),
       this.prisma.marketplaceOrder.aggregate({
-        where: {
-          gym_id: gymId,
-          status: 'DELIVERED',
-          created_at: { gte: prevMonthStart, lte: prevMonthEnd },
-        },
+        where: { gym_id: gymId, status: 'DELIVERED', created_at: { gte: prevStart, lte: prevEnd } },
         _sum: { total: true },
       }),
-      this.prisma.orderItem.groupBy({
-        by: ['product_id'],
+      this.prisma.orderItem.findMany({
         where: {
-          order: {
-            gym_id: gymId,
-            status: 'DELIVERED',
-            created_at: { gte: monthStart, lte: monthEnd },
+          order: { gym_id: gymId, status: 'DELIVERED', created_at: { gte: start, lte: end } },
+        },
+        select: {
+          subtotal: true,
+          quantity: true,
+          product: { select: { id: true, name: true, category: { select: { name: true } } } },
+        },
+      }),
+      this.prisma.payment.aggregate({
+        where: {
+          gym_id: gymId,
+          status: { in: ['PENDING', 'FAILED'] },
+          membership_id: { not: null },
+          created_at: { gte: start, lte: end },
+        },
+        _sum: { amount: true },
+        _count: true,
+      }),
+      this.prisma.payment.aggregate({
+        where: {
+          gym_id: gymId,
+          status: { in: ['PENDING', 'FAILED'] },
+          membership_id: null,
+          created_at: { gte: start, lte: end },
+        },
+        _sum: { amount: true },
+        _count: true,
+      }),
+      this.prisma.member.aggregate({
+        where: { gym_id: gymId, credit_balance_usd: { lt: 0 } },
+        _sum: { credit_balance_usd: true },
+        _count: true,
+      }),
+      this.prisma.member.count({ where: { gym_id: gymId, status: { in: ['ACTIVE', 'TRIAL'] } } }),
+      this.prisma.member.findMany({
+        where: {
+          gym_id: gymId,
+          risk_score: { gte: 70 },
+          status: { in: ['ACTIVE', 'TRIAL', 'FREEZE'] },
+        },
+        select: {
+          memberships: {
+            where: { status: 'ACTIVE' },
+            orderBy: { created_at: 'desc' },
+            take: 1,
+            select: { type: { select: { price: true } } },
           },
         },
-        _sum: { subtotal: true, quantity: true },
-        orderBy: { _sum: { subtotal: 'desc' } },
-        take: 5,
       }),
     ]);
 
-    // Categorizar payments (memberships vs otros)
+    // Ingresos: categorizar payments (membresías vs otros pagos manuales/day-pass)
     let membershipRev = 0;
     let otherRev = 0;
-    for (const p of paymentsThisMonth) {
+    const byPaymentMethod = new Map<string, number>();
+    for (const p of paymentsInPeriod) {
       const amt = Number(p.amount);
       if (p.membership_id) membershipRev += amt;
       else otherRev += amt;
+      byPaymentMethod.set(p.payment_type, (byPaymentMethod.get(p.payment_type) ?? 0) + amt);
     }
-    const marketplaceRev = Number(mkOrdersThisMonth._sum.total ?? 0);
 
-    // Addons recurrentes (ingreso mensual proyectado)
-    const addonsMonthly = activeAddons.reduce((acc, a) => acc + Number(a.price_paid ?? 0), 0);
+    // Add-ons: separar NUTRITION del resto (coaching, etc.) — son eventos de
+    // facturación reales (price_paid), no un conteo de "activos ahora mismo".
+    let nutritionRev = 0;
+    let otherAddonsRev = 0;
+    for (const a of addonsInPeriod) {
+      const amt = Number(a.price_paid ?? 0);
+      if (a.type === 'NUTRITION') nutritionRev += amt;
+      else otherAddonsRev += amt;
+    }
 
-    // Top productos con nombres
-    const topProductIds = topProducts.map((p) => p.product_id);
-    const productInfo =
-      topProductIds.length > 0
-        ? await this.prisma.product.findMany({
-            where: { id: { in: topProductIds } },
-            select: { id: true, name: true },
-          })
-        : [];
-    const productMap = new Map(productInfo.map((p) => [p.id, p.name]));
-    const topProductsNamed = topProducts.map((p) => ({
-      id: p.product_id,
-      name: productMap.get(p.product_id) ?? 'Producto',
-      revenue: Number(p._sum.subtotal ?? 0),
-      quantity: Number(p._sum.quantity ?? 0),
-    }));
+    const marketplaceRev = Number(mkOrdersInPeriod._sum.total ?? 0);
 
-    const totalThisMonth = membershipRev + marketplaceRev + otherRev + addonsMonthly;
-    const totalPrevMonth =
-      Number(paymentsPrevMonth._sum.amount ?? 0) + Number(mkOrdersPrevMonth._sum.total ?? 0);
-    const momGrowthPct =
-      totalPrevMonth > 0
-        ? Math.round(((totalThisMonth - totalPrevMonth) / totalPrevMonth) * 1000) / 10
+    // Marketplace: top productos + totales por categoría de producto
+    const productAgg = new Map<string, { name: string; revenue: number; quantity: number }>();
+    const categoryAgg = new Map<string, number>();
+    for (const item of orderItemsInPeriod) {
+      const subtotal = Number(item.subtotal);
+      const existing = productAgg.get(item.product.id);
+      if (existing) {
+        existing.revenue += subtotal;
+        existing.quantity += item.quantity;
+      } else {
+        productAgg.set(item.product.id, {
+          name: item.product.name,
+          revenue: subtotal,
+          quantity: item.quantity,
+        });
+      }
+      const catName = item.product.category?.name ?? 'Sin categoría';
+      categoryAgg.set(catName, (categoryAgg.get(catName) ?? 0) + subtotal);
+    }
+    const topProductsNamed = Array.from(productAgg.entries())
+      .map(([id, v]) => ({ id, ...v }))
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 5);
+    const marketplaceByCategory = Array.from(categoryAgg.entries())
+      .map(([name, revenue]) => ({ name, revenue: Math.round(revenue * 100) / 100 }))
+      .sort((a, b) => b.revenue - a.revenue);
+
+    const totalRevenue = membershipRev + nutritionRev + otherAddonsRev + marketplaceRev + otherRev;
+    const totalPrevRevenue =
+      Number(paymentsPrevPeriod._sum.amount ?? 0) + Number(mkOrdersPrevPeriod._sum.total ?? 0);
+    const growthPct =
+      totalPrevRevenue > 0
+        ? Math.round(((totalRevenue - totalPrevRevenue) / totalPrevRevenue) * 1000) / 10
         : null;
+
+    // Deuda: mismas categorías que ingresos, más el crédito de tienda (saldo
+    // negativo real del miembro, distinto de un pago PENDING de membresía).
+    const pendingMembershipAmt = Number(pendingMemberships._sum.amount ?? 0);
+    const pendingOtherAmt = Number(pendingOther._sum.amount ?? 0);
+    const storeCreditAmt = Math.abs(Number(storeCreditDebt._sum.credit_balance_usd ?? 0));
+    const totalDebt = pendingMembershipAmt + pendingOtherAmt + storeCreditAmt;
+
+    // Ingreso en riesgo: valor mensual de la membresía activa de cada miembro
+    // con score de riesgo alto — cuánto se perdería si cancelan.
+    const revenueAtRisk = atRiskMemberships.reduce((acc, m) => {
+      const price = m.memberships[0]?.type.price;
+      return acc + (price ? Number(price) : 0);
+    }, 0);
+
+    const arpu = activeMembers > 0 ? totalRevenue / activeMembers : 0;
 
     return {
       period: {
-        month_start: monthStart.toISOString().slice(0, 10),
-        month_end: monthEnd.toISOString().slice(0, 10),
+        start: start.toISOString().slice(0, 10),
+        end: end.toISOString().slice(0, 10),
       },
-      total_this_month: Math.round(totalThisMonth * 100) / 100,
-      total_prev_month: Math.round(totalPrevMonth * 100) / 100,
-      mom_growth_pct: momGrowthPct,
-      breakdown: {
+      total_revenue: Math.round(totalRevenue * 100) / 100,
+      total_prev_revenue: Math.round(totalPrevRevenue * 100) / 100,
+      growth_pct: growthPct,
+      revenue: {
         memberships: Math.round(membershipRev * 100) / 100,
-        addons_recurring: Math.round(addonsMonthly * 100) / 100,
+        nutrition_plans: Math.round(nutritionRev * 100) / 100,
+        other_addons: Math.round(otherAddonsRev * 100) / 100,
         marketplace: Math.round(marketplaceRev * 100) / 100,
         other: Math.round(otherRev * 100) / 100,
       },
-      addon_active_count: activeAddons.length,
       marketplace: {
-        orders_count: mkOrdersThisMonth._count,
-        revenue: marketplaceRev,
+        orders_count: mkOrdersInPeriod._count,
+        revenue: Math.round(marketplaceRev * 100) / 100,
+        by_category: marketplaceByCategory,
       },
       top_products: topProductsNamed,
+      payment_methods: Array.from(byPaymentMethod.entries()).map(([type, amount]) => ({
+        type,
+        amount: Math.round(amount * 100) / 100,
+      })),
+      debt: {
+        total: Math.round(totalDebt * 100) / 100,
+        memberships_pending: Math.round(pendingMembershipAmt * 100) / 100,
+        memberships_pending_count: pendingMemberships._count,
+        other_pending: Math.round(pendingOtherAmt * 100) / 100,
+        other_pending_count: pendingOther._count,
+        store_credit: Math.round(storeCreditAmt * 100) / 100,
+        store_credit_debtor_count: storeCreditDebt._count,
+      },
+      insights: {
+        arpu: Math.round(arpu * 100) / 100,
+        active_members: activeMembers,
+        revenue_at_risk: Math.round(revenueAtRisk * 100) / 100,
+        at_risk_member_count: atRiskMemberships.length,
+      },
     };
   }
 
