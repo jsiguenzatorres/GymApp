@@ -1,5 +1,12 @@
 import type { HealthSyncModule, HealthSyncResult } from './health-sync.types';
 import { healthDataApi, HealthKind } from './api-client';
+// Import solo de tipos — el módulo nativo se carga perezosamente via
+// loadNativeModule() más abajo, para no cargarlo en entornos donde no está
+// linkeado (ej. Expo Go).
+import type {
+  HKQuantityTypeIdentifier,
+  HKCategoryTypeIdentifier,
+} from '@kingstinct/react-native-healthkit';
 
 // D-19 — Apple HealthKit via @kingstinct/react-native-healthkit@8.7.2.
 // Fijado en 8.7.2 (no la última) porque las versiones 9+ migraron a Nitro
@@ -28,9 +35,12 @@ async function loadNativeModule() {
   return import('@kingstinct/react-native-healthkit');
 }
 
-const WEIGHT_ID = 'HKQuantityTypeIdentifierBodyMass';
-const WATER_ID = 'HKQuantityTypeIdentifierDietaryWater';
-const SLEEP_ID = 'HKCategoryTypeIdentifierSleepAnalysis';
+// HKQuantityTypeIdentifier/HKCategoryTypeIdentifier son enums de string —
+// el valor en runtime es exactamente este literal, pero TS exige el tipo
+// del enum (no un string suelto) para pasarlo a queryQuantitySamples/etc.
+const WEIGHT_ID = 'HKQuantityTypeIdentifierBodyMass' as HKQuantityTypeIdentifier;
+const WATER_ID = 'HKQuantityTypeIdentifierDietaryWater' as HKQuantityTypeIdentifier;
+const SLEEP_ID = 'HKCategoryTypeIdentifierSleepAnalysis' as HKCategoryTypeIdentifier;
 
 async function readRecentSamples(sinceDate: Date): Promise<NormalizedEntry[]> {
   const HealthKit = await loadNativeModule();

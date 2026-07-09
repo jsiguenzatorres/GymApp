@@ -1,13 +1,10 @@
 import type { HealthSyncModule, HealthSyncResult } from './health-sync.types';
 import { healthDataApi, HealthKind } from './api-client';
 
-// D-19 — Android Health Connect via react-native-health-connect@3.5.3.
-// API verificada contra los tipos publicados de esa versión exacta
-// (unpkg.com/react-native-health-connect@3.5.3/lib/typescript/): initialize(),
-// requestPermission({accessType,recordType}[]), readRecords(type, {timeRangeFilter}).
-// Los records crudos devuelven Mass/Volume como {value, unit} — NO traen
-// campos ".inKilograms"/".inLiters" (esos son de un tipo *Result* separado
-// usado solo por las funciones de agregación) — por eso convertimos a mano.
+// D-19 — Android Health Connect via react-native-health-connect@3.5.6.
+// Los records de readRecords() devuelven Mass/Volume ya como *Result*
+// (ej. { inKilograms, inGrams, ... }), con las conversiones de unidad ya
+// resueltas por la librería — no hace falta convertir a mano.
 //
 // ⚠️ Aun así, esto no se probó en un dispositivo Android real — no hay forma
 // de hacerlo desde este entorno de desarrollo. Confirma en dispositivo antes
@@ -24,38 +21,6 @@ async function loadNativeModule() {
   return import('react-native-health-connect');
 }
 
-function massToKg(m: { value: number; unit: string }): number {
-  switch (m.unit) {
-    case 'kilograms':
-      return m.value;
-    case 'grams':
-      return m.value / 1000;
-    case 'milligrams':
-      return m.value / 1_000_000;
-    case 'micrograms':
-      return m.value / 1_000_000_000;
-    case 'ounces':
-      return m.value * 0.0283495;
-    case 'pounds':
-      return m.value * 0.453592;
-    default:
-      return m.value;
-  }
-}
-
-function volumeToMl(v: { value: number; unit: string }): number {
-  switch (v.unit) {
-    case 'milliliters':
-      return v.value;
-    case 'liters':
-      return v.value * 1000;
-    case 'fluidOuncesUs':
-      return v.value * 29.5735;
-    default:
-      return v.value;
-  }
-}
-
 async function readRecentRecords(sinceDate: Date): Promise<NormalizedEntry[]> {
   const HealthConnect = await loadNativeModule();
   const entries: NormalizedEntry[] = [];
@@ -70,7 +35,7 @@ async function readRecentRecords(sinceDate: Date): Promise<NormalizedEntry[]> {
   for (const r of weightResult.records) {
     entries.push({
       kind: 'WEIGHT',
-      value: Number(massToKg(r.weight).toFixed(2)),
+      value: Number(r.weight.inKilograms.toFixed(2)),
       unit: 'kg',
       recorded_at: new Date(r.time).toISOString(),
     });
@@ -80,7 +45,7 @@ async function readRecentRecords(sinceDate: Date): Promise<NormalizedEntry[]> {
   for (const r of hydrationResult.records) {
     entries.push({
       kind: 'WATER',
-      value: Math.round(volumeToMl(r.volume)),
+      value: Math.round(r.volume.inMilliliters),
       unit: 'ml',
       recorded_at: new Date(r.startTime).toISOString(),
     });
