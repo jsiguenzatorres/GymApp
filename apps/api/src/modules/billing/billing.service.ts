@@ -10,6 +10,7 @@ import {
   UploadPaymentVoucherDto,
   ConfirmPaymentDraftDto,
   RejectPaymentDraftDto,
+  AttachVoucherDto,
 } from './dto/create-payment.dto';
 import { ListPaymentsDto } from './dto/list-payments.dto';
 
@@ -72,6 +73,19 @@ export class BillingService {
 
     const paidAt = dto.paidAt ? new Date(dto.paidAt) : new Date();
 
+    // Comprobante adjunto al pago manual (opcional, sin extracción IA — el
+    // staff ya digitó los datos, esto es solo evidencia adjunta al mismo
+    // bucket 'payment-vouchers' que usa la subida con IA).
+    let voucherPath: string | undefined;
+    if (dto.voucherDocument) {
+      const { path } = await this.storage.uploadDocument(
+        'payment-vouchers',
+        `${gymId}/${dto.memberId}`,
+        dto.voucherDocument,
+      );
+      voucherPath = path;
+    }
+
     const payment = await this.prisma.payment.create({
       data: {
         gym_id: gymId,
@@ -87,6 +101,7 @@ export class BillingService {
         voucher_number: dto.voucherNumber,
         subtotal: dto.subtotal,
         tax_amount: dto.taxAmount,
+        voucher_path: voucherPath,
         paid_at: paidAt,
       },
       include: {
@@ -102,6 +117,33 @@ export class BillingService {
     );
 
     return this.withVoucherUrl(payment);
+  }
+
+  // Adjunta (o reemplaza) el comprobante de un pago YA existente — para
+  // cuando el staff registra el pago primero y escanea el recibo después.
+  // Sin extracción IA, solo evidencia adjunta a la transacción.
+  async attachVoucher(gymId: string, id: string, dto: AttachVoucherDto) {
+    const payment = await this.prisma.payment.findFirst({ where: { id, gym_id: gymId } });
+    if (!payment) throw new NotFoundException('Pago no encontrado');
+
+    const { path } = await this.storage.uploadDocument(
+      'payment-vouchers',
+      `${gymId}/${payment.member_id}`,
+      dto.document,
+    );
+
+    const updated = await this.prisma.payment.update({
+      where: { id },
+      data: { voucher_path: path },
+      include: {
+        member: {
+          select: { first_name: true, last_name: true, user: { select: { email: true } } },
+        },
+        membership: { include: { type: { select: { name: true } } } },
+      },
+    });
+
+    return this.withVoucherUrl(updated);
   }
 
   async listPayments(gymId: string, query: ListPaymentsDto) {

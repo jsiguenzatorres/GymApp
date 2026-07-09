@@ -66,6 +66,17 @@ export class CreatePaymentDto {
   @IsNumber()
   @Min(0)
   taxAmount?: number;
+
+  // Comprobante adjunto al crear el pago manual (opcional) — sin extracción
+  // IA, es solo evidencia adjunta a la transacción que el staff ya digitó.
+  @IsOptional()
+  @IsString()
+  voucherDocument?: string; // data:image/{jpeg|png|webp}|application/pdf;base64,...
+}
+
+export class AttachVoucherDto {
+  @IsString()
+  document: string; // data:image/{jpeg|png|webp}|application/pdf;base64,...
 }
 
 export class UploadPaymentVoucherDto {

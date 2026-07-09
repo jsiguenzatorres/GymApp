@@ -6,6 +6,7 @@ import { serverFetch } from '@/lib/server-api';
 import { PaymentStatusBadge } from '@/components/billing/payment-status-badge';
 import { RefundButton } from '@/components/billing/refund-button';
 import { PaymentDraftReview } from '@/components/billing/payment-draft-review';
+import { AttachVoucherForm } from '@/components/billing/attach-voucher-form';
 
 export const metadata: Metadata = { title: 'Detalle de Pago — GymApp' };
 
@@ -200,8 +201,8 @@ export default async function PaymentDetailPage({ params }: { params: Promise<{ 
               </InfoRow>
             )}
             {payment.description && <InfoRow label="Descripción">{payment.description}</InfoRow>}
-            {payment.voucher_url && (
-              <InfoRow label="Comprobante">
+            <InfoRow label="Comprobante">
+              {payment.voucher_url ? (
                 <a
                   href={payment.voucher_url}
                   target="_blank"
@@ -210,8 +211,10 @@ export default async function PaymentDetailPage({ params }: { params: Promise<{ 
                 >
                   Ver archivo
                 </a>
-              </InfoRow>
-            )}
+              ) : (
+                <AttachVoucherForm paymentId={payment.id} />
+              )}
+            </InfoRow>
           </Section>
 
           {/* Dates */}

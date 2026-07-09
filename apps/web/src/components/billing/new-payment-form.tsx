@@ -1,9 +1,18 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, AlertCircle, CheckCircle2, Loader2, Receipt } from 'lucide-react';
+import { Search, AlertCircle, CheckCircle2, Loader2, Receipt, Paperclip, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+
+function fileToDataUri(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
 
 interface MemberSearchResult {
   id: string;
@@ -49,6 +58,8 @@ function round2(n: number) {
 
 export function NewPaymentForm() {
   const router = useRouter();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [voucherFile, setVoucherFile] = useState<File | null>(null);
 
   // Member search
   const [memberSearch, setMemberSearch] = useState('');
@@ -198,6 +209,8 @@ export function NewPaymentForm() {
         });
       }
 
+      const voucherDocument = voucherFile ? await fileToDataUri(voucherFile) : undefined;
+
       const res = await fetch('/api/proxy/payments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -208,6 +221,7 @@ export function NewPaymentForm() {
           subtotal: form.subtotal ? Number(form.subtotal) : undefined,
           taxAmount: form.taxAmount ? Number(form.taxAmount) : undefined,
           voucherNumber: form.voucherNumber || undefined,
+          voucherDocument,
           paymentType: form.paymentType,
           invoiceType: form.invoiceType || undefined,
           description: form.description || undefined,
@@ -412,6 +426,48 @@ export function NewPaymentForm() {
           onChange={handleChange}
           placeholder="Ej. 000123"
           className={inputClass}
+          disabled={isLoading}
+        />
+      </div>
+
+      {/* Adjuntar comprobante */}
+      <div className="space-y-1.5">
+        <label className="text-sm font-medium flex items-center gap-1.5">
+          <Paperclip className="h-3.5 w-3.5" />
+          Adjuntar comprobante{' '}
+          <span className="text-xs font-normal text-muted-foreground">(foto o PDF, opcional)</span>
+        </label>
+        {voucherFile ? (
+          <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-3.5 py-2.5 text-sm">
+            <span className="truncate">{voucherFile.name}</span>
+            <button
+              type="button"
+              onClick={() => {
+                setVoucherFile(null);
+                if (fileInputRef.current) fileInputRef.current.value = '';
+              }}
+              disabled={isLoading}
+              className="text-muted-foreground hover:text-destructive transition-colors"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isLoading}
+            className="w-full rounded-lg border border-dashed px-3.5 py-2.5 text-sm text-muted-foreground hover:border-primary hover:text-foreground transition-colors disabled:opacity-50"
+          >
+            Click para adjuntar una foto o PDF del recibo
+          </button>
+        )}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp,application/pdf"
+          onChange={(e) => setVoucherFile(e.target.files?.[0] ?? null)}
+          className="hidden"
           disabled={isLoading}
         />
       </div>

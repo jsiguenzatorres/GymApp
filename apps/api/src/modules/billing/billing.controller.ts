@@ -25,6 +25,7 @@ import {
   UploadPaymentVoucherDto,
   ConfirmPaymentDraftDto,
   RejectPaymentDraftDto,
+  AttachVoucherDto,
 } from './dto/create-payment.dto';
 import { ListPaymentsDto } from './dto/list-payments.dto';
 
@@ -67,6 +68,16 @@ export class BillingController {
     @Body('reason') reason?: string,
   ) {
     return this.billingService.refundPayment(this.gymId(user), id, reason);
+  }
+
+  @Post('payments/:id/attach-voucher')
+  @HttpCode(HttpStatus.OK)
+  attachVoucher(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: AttachVoucherDto,
+  ) {
+    return this.billingService.attachVoucher(this.gymId(user), id, dto);
   }
 
   @Get('members/:memberId/payments')
