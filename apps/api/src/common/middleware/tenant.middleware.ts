@@ -1,6 +1,7 @@
 import { Injectable, NestMiddleware, UnauthorizedException } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
 import { JwtService } from '@nestjs/jwt';
+import { tenantStorage } from '../context/tenant-context';
 
 export interface GymContext {
   gymId: string;
@@ -22,31 +23,28 @@ export class TenantMiddleware implements NestMiddleware {
   constructor(private readonly jwtService: JwtService) {}
 
   use(req: Request, _res: Response, next: NextFunction): void {
+    let gymId: string | null = null;
+
     try {
       const token = this.extractToken(req);
-      if (!token) {
-        next();
-        return;
+      if (token) {
+        const payload = this.jwtService.verify(token);
+        // SUPER_ADMIN opera entre gyms a propósito (mismo criterio que
+        // PlanGuard) — no se le fija gymId, ni al contexto ni al ALS, para
+        // no romper sus vistas cross-tenant existentes. El header
+        // "x-gym-id" YA NO se usa como fallback: era un valor suministrable
+        // por el cliente que, ahora que el ALS realmente filtra queries,
+        // se volvería un vector de escalación de privilegios.
+        if (payload.role !== 'SUPER_ADMIN' && payload.gymId) {
+          gymId = payload.gymId as string;
+          req.gymContext = { gymId, userId: payload.sub, role: payload.role };
+        }
       }
-
-      const payload = this.jwtService.verify(token);
-      const gymId = payload.gymId ?? req.headers['x-gym-id'];
-
-      if (!gymId) {
-        next();
-        return;
-      }
-
-      req.gymContext = {
-        gymId: gymId as string,
-        userId: payload.sub,
-        role: payload.role,
-      };
     } catch {
       // Token inválido o expirado — el guard de auth se encargará de rechazarlo
     }
 
-    next();
+    tenantStorage.run({ gymId }, () => next());
   }
 
   private extractToken(req: Request): string | null {

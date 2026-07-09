@@ -1,5 +1,6 @@
 import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
+import { tenantScopeExtension } from './tenant-scope.extension';
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
@@ -13,6 +14,13 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
         { emit: 'stdout', level: 'warn' },
       ],
     });
+    // Aplica la red de seguridad de aislamiento multi-tenant a esta MISMA
+    // instancia (en vez de retornar un cliente extendido aparte) para que
+    // los 30+ services que ya inyectan PrismaService por DI la obtengan
+    // automáticamente, sin tocar un solo archivo consumidor. Object.assign
+    // preserva la identidad de `this`, así que onModuleInit/onModuleDestroy
+    // y el ciclo de vida de Nest siguen funcionando exactamente igual.
+    Object.assign(this, this.$extends(tenantScopeExtension));
   }
 
   async onModuleInit(): Promise<void> {
