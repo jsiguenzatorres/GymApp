@@ -143,6 +143,15 @@ export class MembersController {
     return this.membersService.createMember(this.gymId(user), dto);
   }
 
+  // GET /api/v1/members/expiring-soon?days=7 — para el dashboard de staff
+  @Get('members/expiring-soon')
+  getExpiringMemberships(@CurrentUser() user: JwtPayload, @Query('days') days?: string) {
+    return this.membersService.getExpiringMemberships(
+      this.gymId(user),
+      days ? parseInt(days, 10) : 7,
+    );
+  }
+
   @Get('members/:id')
   getMember(@CurrentUser() user: JwtPayload, @Param('id', ParseUUIDPipe) id: string) {
     return this.membersService.getMember(this.gymId(user), id);

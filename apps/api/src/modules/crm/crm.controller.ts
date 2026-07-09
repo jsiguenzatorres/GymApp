@@ -115,6 +115,13 @@ export class CrmController {
     return this.crmService.getMyPendingPtRequests(this.gymId(user), user.staffId);
   }
 
+  // GET /api/v1/pt-sessions/pending/gym — cola de todos los trainers, para el dashboard
+  @Get('pt-sessions/pending/gym')
+  getGymPendingPtRequests(@CurrentUser() user: JwtPayload) {
+    if (!user.staffId) throw new ForbiddenException('Solo staff puede ver solicitudes PT');
+    return this.crmService.getGymPendingPtRequests(this.gymId(user));
+  }
+
   // PATCH /api/v1/pt-sessions/:id/check-in
   @Patch('pt-sessions/:id/check-in')
   checkInPtSession(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: JwtPayload) {

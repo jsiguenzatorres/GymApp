@@ -42,6 +42,7 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/analytics', label: 'Analytics', icon: BarChart3 },
   { href: '/members', label: 'Miembros', icon: Users },
   { href: '/staff', label: 'Staff', icon: UserCog },
   { href: '/membership-types', label: 'Membresías', icon: CreditCard },
@@ -65,7 +66,6 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/webhooks', label: 'Webhooks', icon: Webhook },
   { href: '/access', label: 'Control de Acceso', icon: ScanLine },
   { href: '/crm', label: 'CRM / ARIA', icon: BrainCircuit },
-  { href: '/analytics', label: 'Analytics', icon: BarChart3 },
 ];
 
 interface SidebarClientProps {

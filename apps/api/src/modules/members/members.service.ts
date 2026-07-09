@@ -618,6 +618,21 @@ export class MembersService {
     });
   }
 
+  // Membresías activas que vencen dentro de los próximos N días — para el
+  // widget "requiere tu atención hoy" del dashboard de staff.
+  async getExpiringMemberships(gymId: string, days = 7) {
+    const now = new Date();
+    const until = new Date(now.getTime() + days * 86_400_000);
+    return this.prisma.membership.findMany({
+      where: { gym_id: gymId, status: 'ACTIVE', end_date: { gte: now, lte: until } },
+      orderBy: { end_date: 'asc' },
+      include: {
+        member: { select: { id: true, first_name: true, last_name: true } },
+        type: { select: { name: true } },
+      },
+    });
+  }
+
   async freezeMembership(
     gymId: string,
     memberId: string,

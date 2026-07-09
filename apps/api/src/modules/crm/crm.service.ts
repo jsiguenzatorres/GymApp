@@ -246,6 +246,18 @@ export class CrmService {
     });
   }
 
+  // Cola gym-wide (todos los trainers) — para el dashboard de staff/admin.
+  async getGymPendingPtRequests(gymId: string) {
+    return this.prisma.appointment.findMany({
+      where: { gym_id: gymId, appointment_type: 'TRAINING', status: 'PENDING' },
+      orderBy: { scheduled_at: 'asc' },
+      include: {
+        member: { select: { id: true, first_name: true, last_name: true } },
+        staff: { select: { id: true, first_name: true, last_name: true } },
+      },
+    });
+  }
+
   async checkInPtSession(gymId: string, appointmentId: string) {
     const appointment = await this.prisma.appointment.findFirst({
       where: { id: appointmentId, gym_id: gymId, appointment_type: 'TRAINING' },
