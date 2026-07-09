@@ -83,13 +83,17 @@ export default function ZeusPage() {
 
   async function sendMessage(text: string) {
     if (!text.trim() || loading) return;
+    // El backend no persiste el historial de este chat en modo admin/staff
+    // (sin memberId) — se manda lo que ya está en pantalla para que ZEUS no
+    // pierda el contexto entre mensajes. Se excluye el saludo inicial.
+    const historyToSend = messages.slice(1).map((m) => ({ role: m.role, content: m.content }));
     const userMsg: Message = { role: 'user', content: text.trim(), ts: Date.now() };
     setMessages((prev) => [...prev, userMsg]);
     setInput('');
     setLoading(true);
 
     try {
-      const body: Record<string, string> = { message: text.trim() };
+      const body: Record<string, unknown> = { message: text.trim(), history: historyToSend };
       if (selectedMember) body.memberId = selectedMember.id;
 
       const res = await fetch('/api/proxy/workout/zeus/chat', {

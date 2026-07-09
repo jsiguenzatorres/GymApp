@@ -233,10 +233,18 @@ export class WorkoutController {
   // ─── ZEUS ─────────────────────────────────────────────────────────────────────
 
   @Post('workout/zeus/chat')
-  zeusChat(@CurrentUser() user: JwtPayload, @Body() body: { message: string; memberId?: string }) {
+  zeusChat(
+    @CurrentUser() user: JwtPayload,
+    @Body()
+    body: {
+      message: string;
+      memberId?: string;
+      history?: { role: 'user' | 'zeus'; content: string }[];
+    },
+  ) {
     // Si NO se pasa memberId explícito (staff/admin usando ZEUS sin contexto de miembro),
     // se pasa null para activar el modo "asistente general sin contexto de miembro".
     const memberId = body.memberId ?? null;
-    return this.workoutService.zeusChat(this.gymId(user), memberId, body.message);
+    return this.workoutService.zeusChat(this.gymId(user), memberId, body.message, body.history);
   }
 }

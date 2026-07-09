@@ -718,7 +718,12 @@ export class WorkoutService {
 
   // ─── ZEUS ─────────────────────────────────────────────────────────────────────
 
-  async zeusChat(gymId: string, memberId: string | null, message: string) {
+  async zeusChat(
+    gymId: string,
+    memberId: string | null,
+    message: string,
+    clientHistory?: { role: 'user' | 'zeus'; content: string }[],
+  ) {
     // Modo admin/staff sin miembro: solo carga ejercicios + RAG, sin contexto personal
     const isAdminMode = !memberId;
 
@@ -756,7 +761,9 @@ export class WorkoutService {
         take: 30,
       }),
       this.rag.buildContext(gymId, message),
-      isAdminMode ? Promise.resolve([]) : this.conversation.getHistory(gymId, memberId, 'ZEUS'),
+      isAdminMode || clientHistory?.length
+        ? Promise.resolve([])
+        : this.conversation.getHistory(gymId, memberId, 'ZEUS'),
     ]);
 
     const memberName = member ? `${member.first_name} ${member.last_name}` : null;
@@ -803,7 +810,15 @@ INSTRUCCIONES:
 - Añade una frase motivadora corta al final cuando sea apropiado`;
 
     try {
-      const geminiHistory = this.conversation.toGeminiHistory(history);
+      // El panel web ya mantiene el historial completo en pantalla — se usa ese
+      // en vez del de la BD cuando lo manda, porque ZEUS en modo admin/staff
+      // (sin memberId) no tiene ninguna sesion de conversacion persistida.
+      const geminiHistory = clientHistory?.length
+        ? clientHistory.map((h) => ({
+            role: h.role === 'zeus' ? ('model' as const) : ('user' as const),
+            parts: [{ text: h.content }],
+          }))
+        : this.conversation.toGeminiHistory(history);
       const response = await this.gemini.chat(systemPrompt, message, geminiHistory);
       // Solo persistir historial si hay miembro real (FK constraint)
       if (memberId && member) {

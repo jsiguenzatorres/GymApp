@@ -33,6 +33,11 @@ export default function AriaPage() {
 
   async function sendMessage(text: string) {
     if (!text.trim() || loading) return;
+    // El backend no persiste el historial de este chat (lo usa el staff/admin,
+    // no un miembro con sesión propia) — se manda lo que ya está en pantalla
+    // para que ARIA no pierda el contexto entre mensajes. Se excluye el saludo
+    // inicial (índice 0), que no es un intercambio real.
+    const historyToSend = messages.slice(1).map((m) => ({ role: m.role, content: m.content }));
     const userMsg: Message = { role: 'user', content: text.trim(), ts: Date.now() };
     setMessages((prev) => [...prev, userMsg]);
     setInput('');
@@ -42,7 +47,7 @@ export default function AriaPage() {
       const res = await fetch('/api/proxy/aria/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text.trim() }),
+        body: JSON.stringify({ message: text.trim(), history: historyToSend }),
       });
 
       if (res.ok) {

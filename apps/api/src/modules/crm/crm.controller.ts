@@ -129,7 +129,19 @@ export class CrmController {
 
   // POST /api/v1/aria/chat
   @Post('aria/chat')
-  ariaChat(@Body() body: { message: string; memberId?: string }, @CurrentUser() user: JwtPayload) {
-    return this.crmService.ariaChat(this.gymId(user), body.memberId ?? user.sub, body.message);
+  ariaChat(
+    @Body()
+    body: {
+      message: string;
+      memberId?: string;
+      history?: { role: 'user' | 'aria'; content: string }[];
+    },
+    @CurrentUser() user: JwtPayload,
+  ) {
+    // Si NO se pasa memberId explícito (staff/admin usando ARIA sin contexto
+    // de miembro), se pasa null — usar user.sub como fallback aquí rompía el
+    // historial (el ID del staff no corresponde a ningún Member real).
+    const memberId = body.memberId ?? null;
+    return this.crmService.ariaChat(this.gymId(user), memberId, body.message, body.history);
   }
 }
