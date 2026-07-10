@@ -512,7 +512,9 @@ INSTRUCCIONES:
       const errMsg = (err as Error).message ?? String(err);
       this.logger.error(`Business Coach error: ${errMsg}`);
 
-      if (errMsg.includes('All Gemini API keys exhausted') && this.nvidiaNim.isEnabled) {
+      // Cualquier fallo de Gemini (no solo cuota agotada) cae a NVIDIA NIM
+      // como respaldo — ver comentario equivalente en crm.service.ts.
+      if (this.nvidiaNim.isEnabled) {
         try {
           return await this.nvidiaNim.chat(systemPrompt, question);
         } catch (nimErr) {

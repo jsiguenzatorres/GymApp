@@ -618,10 +618,13 @@ ${
       const errMsg = (err as Error).message ?? String(err);
       this.logger.error(`ARIA Gemini error: ${errMsg}`);
 
-      // Las 10 keys de Gemini se agotaron (cuota) — intenta con NVIDIA NIM como
-      // respaldo de segundo nivel antes de rendirse. Solo aplica a este error
-      // especifico, no a fallos de red/timeout/contenido bloqueado.
-      if (errMsg.includes('All Gemini API keys exhausted') && this.nvidiaNim.isEnabled) {
+      // Gemini falló (cuota agotada, key inválida, red, contenido bloqueado,
+      // cualquier motivo) — intenta con NVIDIA NIM como respaldo de segundo
+      // nivel antes de rendirse. Antes esto solo aplicaba cuando el mensaje
+      // coincidía textualmente con "All Gemini API keys exhausted", lo que
+      // dejaba sin respaldo cualquier otro tipo de fallo de Gemini (ej. una
+      // sola key invalida/revocada falla de inmediato sin ese texto exacto).
+      if (this.nvidiaNim.isEnabled) {
         try {
           const response = await this.nvidiaNim.chat(systemPrompt, message, geminiHistory);
           if (memberId)
