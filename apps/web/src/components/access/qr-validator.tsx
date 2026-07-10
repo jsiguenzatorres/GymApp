@@ -19,6 +19,23 @@ interface ValidationResponse {
   message: string;
 }
 
+const OVERRIDE_REASONS: { value: string; label: string }[] = [
+  { value: 'CASH_PAYMENT_NOW', label: 'Pagó en efectivo en el momento' },
+  { value: 'GRACE_PERIOD', label: 'Período de gracia autorizado (2-3 días)' },
+  { value: 'TECHNICAL_ISSUE', label: 'Falla técnica del QR/sistema' },
+  { value: 'OTHER', label: 'Otro motivo' },
+];
+
+// Solo tiene sentido anular rechazos ligados al miembro (membresía/pago) —
+// DENIED_INVALID (QR ilegible/firma inválida) no siempre corresponde a un
+// miembro real, así que no se ofrece override ahí.
+const OVERRIDABLE_RESULTS: AccessResult[] = [
+  'DENIED_INACTIVE',
+  'DENIED_NO_MEMBERSHIP',
+  'DENIED_EXPIRED',
+  'DENIED_REPLAY',
+];
+
 const RESULT_STYLES: Record<
   AccessResult,
   { border: string; bg: string; icon: string; text: string }
@@ -57,11 +74,17 @@ export function QrValidator() {
   const [loading, setLoading] = useState(false);
   const [response, setResponse] = useState<ValidationResponse | null>(null);
 
+  const [showOverride, setShowOverride] = useState(false);
+  const [overrideReason, setOverrideReason] = useState(OVERRIDE_REASONS[0].value);
+  const [overrideNote, setOverrideNote] = useState('');
+  const [overrideLoading, setOverrideLoading] = useState(false);
+
   async function handleValidate(e: React.FormEvent) {
     e.preventDefault();
     if (!payload.trim()) return;
     setLoading(true);
     setResponse(null);
+    setShowOverride(false);
 
     try {
       const res = await fetch('/api/proxy/access/validate', {
@@ -83,7 +106,37 @@ export function QrValidator() {
     }
   }
 
+  async function handleOverride() {
+    if (!response?.memberId) return;
+    setOverrideLoading(true);
+    try {
+      const res = await fetch('/api/proxy/access/override', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          memberId: response.memberId,
+          reason: overrideReason,
+          note: overrideNote.trim() || undefined,
+        }),
+      });
+      const data: ValidationResponse = await res.json();
+      setResponse(data);
+      setShowOverride(false);
+      setOverrideNote('');
+      if (data.result === 'GRANTED') {
+        router.refresh();
+        setTimeout(() => setResponse(null), 5000);
+      }
+    } catch {
+      // deja el formulario abierto para reintentar
+    } finally {
+      setOverrideLoading(false);
+    }
+  }
+
   const style = response ? RESULT_STYLES[response.result] : null;
+  const canOverride =
+    response && response.memberId && OVERRIDABLE_RESULTS.includes(response.result);
 
   return (
     <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm">
@@ -120,6 +173,63 @@ export function QrValidator() {
               <p className={`text-sm ${style.text}`}>{response.message}</p>
             </div>
           </div>
+
+          {canOverride && !showOverride && (
+            <button
+              type="button"
+              onClick={() => setShowOverride(true)}
+              className="mt-4 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              Anular y permitir ingreso →
+            </button>
+          )}
+
+          {canOverride && showOverride && (
+            <div className="mt-4 space-y-3 rounded-lg border border-gray-200 bg-white p-4">
+              <p className="text-xs font-medium text-gray-500">
+                Quedará registrado con tu usuario en el historial de accesos.
+              </p>
+              <select
+                value={overrideReason}
+                onChange={(e) => setOverrideReason(e.target.value)}
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+                disabled={overrideLoading}
+              >
+                {OVERRIDE_REASONS.map((r) => (
+                  <option key={r.value} value={r.value}>
+                    {r.label}
+                  </option>
+                ))}
+              </select>
+              <textarea
+                value={overrideNote}
+                onChange={(e) => setOverrideNote(e.target.value)}
+                placeholder="Nota opcional (ej. monto, fecha límite del período de gracia...)"
+                rows={2}
+                maxLength={500}
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm placeholder-gray-400"
+                disabled={overrideLoading}
+              />
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowOverride(false)}
+                  disabled={overrideLoading}
+                  className="rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleOverride}
+                  disabled={overrideLoading}
+                  className="flex-1 rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+                >
+                  {overrideLoading ? 'Autorizando…' : 'Confirmar ingreso manual'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

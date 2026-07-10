@@ -16,6 +16,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { STAFF_ROLES } from '@gymapp/shared-types';
+import { OverrideAccessDto } from './dto/override-access.dto';
 
 @UseGuards(JwtAuthGuard)
 @Controller('access')
@@ -51,6 +52,21 @@ export class AccessController {
     @CurrentUser() user: JwtPayload,
   ) {
     return this.accessService.validateQrCode(this.gymId(user), body.payload, body.deviceId);
+  }
+
+  // POST /api/v1/access/override — staff anula un rechazo y deja entrar al
+  // miembro a su criterio (ej. pagó en efectivo en el momento, período de gracia)
+  @UseGuards(RolesGuard)
+  @Roles(...STAFF_ROLES)
+  @Post('override')
+  overrideAccess(@Body() dto: OverrideAccessDto, @CurrentUser() user: JwtPayload) {
+    return this.accessService.overrideAccess(
+      this.gymId(user),
+      user.sub,
+      dto.memberId,
+      dto.reason,
+      dto.note,
+    );
   }
 
   // GET /api/v1/access/stats — dashboard de acceso

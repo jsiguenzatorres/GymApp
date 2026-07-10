@@ -783,6 +783,13 @@ model AccessLog {
   nonce       String?   @db.VarChar(64)
   device_id   String?   @db.VarChar(100)
   notes       String?
+  // Solo cuando method='MANUAL' — el staff anuló un rechazo y dejó entrar al
+  // miembro a criterio propio (ej. pagó en efectivo en el momento, período de
+  // gracia). override_reason es una categoría fija para poder agrupar/graficar
+  // en Analytics; override_note es el detalle libre opcional.
+  override_reason String? @db.VarChar(40) // CASH_PAYMENT_NOW | GRACE_PERIOD | TECHNICAL_ISSUE | OTHER
+  override_note   String?
+  overridden_by   String? @db.Uuid // user_id del staff que autorizó
   occurred_at DateTime  @default(now())
 
   gym    Gym     @relation(fields: [gym_id], references: [id], onDelete: Cascade)
@@ -791,6 +798,7 @@ model AccessLog {
   @@index([gym_id, occurred_at(sort: Desc)])
   @@index([gym_id, member_id])
   @@index([gym_id, result])
+  @@index([gym_id, override_reason])
   @@map("access_logs")
 }
 

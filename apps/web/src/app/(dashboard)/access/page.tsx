@@ -7,6 +7,9 @@ interface AccessLog {
   result: string;
   method: string;
   occurred_at: string;
+  override_reason?: string | null;
+  override_note?: string | null;
+  overridden_by_name?: string | null;
   member?: { id: string; first_name: string; last_name: string } | null;
 }
 
@@ -14,8 +17,18 @@ interface AccessStats {
   todayGranted: number;
   todayDenied: number;
   weekGranted: number;
+  todayOverrides: number;
+  weekOverrides: number;
+  overridesByReason: { reason: string | null; count: number }[];
   recentLogs: AccessLog[];
 }
+
+const OVERRIDE_REASON_LABELS: Record<string, string> = {
+  CASH_PAYMENT_NOW: 'Pagó en efectivo',
+  GRACE_PERIOD: 'Período de gracia',
+  TECHNICAL_ISSUE: 'Falla técnica',
+  OTHER: 'Otro motivo',
+};
 
 interface LogsResponse {
   items: AccessLog[];
@@ -94,7 +107,7 @@ export default async function AccessPage({
       </p>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <div className="rounded-xl border border-emerald-100 bg-white p-5 shadow-sm">
           <p className="text-sm text-gray-500">Entradas hoy</p>
           <p className="mt-1 text-3xl font-bold text-emerald-600">{stats?.todayGranted ?? '—'}</p>
@@ -110,7 +123,33 @@ export default async function AccessPage({
           <p className="mt-1 text-3xl font-bold text-gray-900">{stats?.weekGranted ?? '—'}</p>
           <p className="mt-1 text-xs text-gray-400">últimos 7 días</p>
         </div>
+        <div className="rounded-xl border border-amber-100 bg-white p-5 shadow-sm">
+          <p className="text-sm text-gray-500">Ingresos manuales</p>
+          <p className="mt-1 text-3xl font-bold text-amber-600">{stats?.todayOverrides ?? '—'}</p>
+          <p className="mt-1 text-xs text-gray-400">
+            hoy · {stats?.weekOverrides ?? 0} esta semana
+          </p>
+        </div>
       </div>
+
+      {/* Overrides por motivo (7 días) */}
+      {stats && stats.weekOverrides > 0 && (
+        <div className="rounded-xl border border-amber-100 bg-amber-50 p-4">
+          <p className="mb-2 text-xs font-semibold text-amber-900">
+            Ingresos manuales por motivo — últimos 7 días
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {stats.overridesByReason.map((r) => (
+              <span
+                key={r.reason ?? 'unknown'}
+                className="rounded-full bg-white px-3 py-1 text-xs font-medium text-amber-800 shadow-sm"
+              >
+                {(r.reason && OVERRIDE_REASON_LABELS[r.reason]) ?? 'Sin motivo'}: {r.count}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Recent + Validator */}
       <div className="grid gap-6 lg:grid-cols-2">
@@ -141,11 +180,18 @@ export default async function AccessPage({
                       <p className="text-xs text-gray-400">{fmtDateTime(log.occurred_at)}</p>
                     </div>
                   </div>
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-xs font-medium ${RESULT_COLORS[log.result] ?? 'bg-gray-100 text-gray-600'}`}
-                  >
-                    {RESULT_LABELS[log.result] ?? log.result}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    {log.method === 'MANUAL' && (
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+                        Manual
+                      </span>
+                    )}
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-xs font-medium ${RESULT_COLORS[log.result] ?? 'bg-gray-100 text-gray-600'}`}
+                    >
+                      {RESULT_LABELS[log.result] ?? log.result}
+                    </span>
+                  </div>
                 </li>
               ))}
             </ul>
@@ -217,7 +263,27 @@ export default async function AccessPage({
                         {RESULT_LABELS[log.result] ?? log.result}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-gray-500">{log.method}</td>
+                    <td className="px-4 py-3 text-gray-500">
+                      {log.method === 'MANUAL' ? (
+                        <div className="space-y-0.5">
+                          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+                            Manual
+                            {log.override_reason
+                              ? ` · ${OVERRIDE_REASON_LABELS[log.override_reason] ?? log.override_reason}`
+                              : ''}
+                          </span>
+                          {(log.overridden_by_name || log.override_note) && (
+                            <p className="text-[11px] text-gray-400">
+                              {log.overridden_by_name ? `por ${log.overridden_by_name}` : ''}
+                              {log.overridden_by_name && log.override_note ? ' — ' : ''}
+                              {log.override_note ?? ''}
+                            </p>
+                          )}
+                        </div>
+                      ) : (
+                        log.method
+                      )}
+                    </td>
                     <td className="whitespace-nowrap px-4 py-3 text-xs text-gray-500">
                       {fmtDateTime(log.occurred_at)}
                     </td>

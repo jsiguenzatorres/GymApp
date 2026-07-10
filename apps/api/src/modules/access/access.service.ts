@@ -161,6 +161,7 @@ export class AccessService {
       await this.log(gymId, member.id, 'DENIED_INACTIVE', 'QR', payload.n, deviceId);
       return {
         result: 'DENIED_INACTIVE',
+        memberId: member.id,
         memberName: `${member.first_name} ${member.last_name}`,
         message: 'Membresía inactiva o suspendida',
       };
@@ -179,6 +180,7 @@ export class AccessService {
       await this.log(gymId, member.id, 'DENIED_NO_MEMBERSHIP', 'QR', payload.n, deviceId);
       return {
         result: 'DENIED_NO_MEMBERSHIP',
+        memberId: member.id,
         memberName: `${member.first_name} ${member.last_name}`,
         message: 'Sin membresía vigente',
       };
@@ -192,6 +194,43 @@ export class AccessService {
       memberId: member.id,
       memberName: `${member.first_name} ${member.last_name}`,
       message: `Bienvenido, ${member.first_name}`,
+    };
+  }
+
+  // ─── OVERRIDE MANUAL ────────────────────────────────────────────────────────
+
+  async overrideAccess(
+    gymId: string,
+    staffUserId: string,
+    memberId: string,
+    reason: string,
+    note?: string,
+  ): Promise<{ result: AccessResult; memberId: string; memberName: string; message: string }> {
+    const member = await this.prisma.member.findFirst({
+      where: { id: memberId, gym_id: gymId },
+      select: { id: true, first_name: true, last_name: true },
+    });
+    if (!member) throw new NotFoundException('Miembro no encontrado');
+
+    await this.prisma.accessLog.create({
+      data: {
+        gym_id: gymId,
+        member_id: member.id,
+        result: 'GRANTED',
+        method: 'MANUAL',
+        override_reason: reason,
+        override_note: note,
+        overridden_by: staffUserId,
+      },
+    });
+
+    this.eventEmitter.emit('member.checked_in', { gymId, memberId: member.id });
+
+    return {
+      result: 'GRANTED',
+      memberId: member.id,
+      memberName: `${member.first_name} ${member.last_name}`,
+      message: `Ingreso manual autorizado — ${member.first_name}`,
     };
   }
 
@@ -241,7 +280,25 @@ export class AccessService {
       this.prisma.accessLog.count({ where }),
     ]);
 
-    return { items, total, page, limit, pages: Math.ceil(total / limit) };
+    const staffIds = [...new Set(items.map((i) => i.overridden_by).filter(Boolean))] as string[];
+    const staffNames = staffIds.length
+      ? await this.prisma.staff.findMany({
+          where: { user_id: { in: staffIds }, gym_id: gymId },
+          select: { user_id: true, first_name: true, last_name: true },
+        })
+      : [];
+    const staffNameByUserId = new Map(
+      staffNames.map((s) => [s.user_id, `${s.first_name} ${s.last_name}`]),
+    );
+
+    const itemsWithStaffName = items.map((item) => ({
+      ...item,
+      overridden_by_name: item.overridden_by
+        ? (staffNameByUserId.get(item.overridden_by) ?? null)
+        : null,
+    }));
+
+    return { items: itemsWithStaffName, total, page, limit, pages: Math.ceil(total / limit) };
   }
 
   async getAccessStats(gymId: string) {
@@ -249,7 +306,15 @@ export class AccessService {
     today.setHours(0, 0, 0, 0);
     const weekAgo = new Date(today.getTime() - 7 * 86_400_000);
 
-    const [todayGranted, todayDenied, weekGranted, recentLogs] = await Promise.all([
+    const [
+      todayGranted,
+      todayDenied,
+      weekGranted,
+      todayOverrides,
+      weekOverrides,
+      overridesByReason,
+      recentLogs,
+    ] = await Promise.all([
       this.prisma.accessLog.count({
         where: { gym_id: gymId, result: 'GRANTED', occurred_at: { gte: today } },
       }),
@@ -259,6 +324,17 @@ export class AccessService {
       this.prisma.accessLog.count({
         where: { gym_id: gymId, result: 'GRANTED', occurred_at: { gte: weekAgo } },
       }),
+      this.prisma.accessLog.count({
+        where: { gym_id: gymId, method: 'MANUAL', occurred_at: { gte: today } },
+      }),
+      this.prisma.accessLog.count({
+        where: { gym_id: gymId, method: 'MANUAL', occurred_at: { gte: weekAgo } },
+      }),
+      this.prisma.accessLog.groupBy({
+        by: ['override_reason'],
+        where: { gym_id: gymId, method: 'MANUAL', occurred_at: { gte: weekAgo } },
+        _count: true,
+      }),
       this.prisma.accessLog.findMany({
         where: { gym_id: gymId },
         orderBy: { occurred_at: 'desc' },
@@ -267,7 +343,18 @@ export class AccessService {
       }),
     ]);
 
-    return { todayGranted, todayDenied, weekGranted, recentLogs };
+    return {
+      todayGranted,
+      todayDenied,
+      weekGranted,
+      todayOverrides,
+      weekOverrides,
+      overridesByReason: overridesByReason.map((r) => ({
+        reason: r.override_reason,
+        count: r._count,
+      })),
+      recentLogs,
+    };
   }
 
   // ─── PRIVATE ──────────────────────────────────────────────────────────────────

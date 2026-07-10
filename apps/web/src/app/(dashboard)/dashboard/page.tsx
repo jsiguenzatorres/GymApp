@@ -42,6 +42,8 @@ interface AccessStats {
   todayGranted: number;
   todayDenied: number;
   weekGranted: number;
+  todayOverrides: number;
+  weekOverrides: number;
   recentLogs: {
     id: string;
     result: string;
@@ -296,6 +298,7 @@ export default async function DashboardPage() {
           </p>
           <p className="mt-1.5 text-xs text-white/50">
             {access ? `${access.weekGranted} en los últimos 7 días` : ''}
+            {access && access.weekOverrides > 0 ? ` · ${access.weekOverrides} manuales` : ''}
           </p>
         </div>
         <div className="p-5">
