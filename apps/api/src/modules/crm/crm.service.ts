@@ -587,6 +587,17 @@ ${
 - Responde sobre su membresía, pagos, asistencia o entrenamiento con los datos en "TUS DATOS"
 - Si pregunta algo personal (membresía, citas, horarios), responde con amabilidad`
 }
+- Si la pregunta se sale de tu especialidad (CRM/retención/negocio) pero otro asistente de
+  GymApp la puede responder mejor, deriva a ESE asistente primero — nunca saltes directo a un
+  profesional externo si el gym ya tiene un asistente propio para el tema:
+  · Entrenamiento, técnica de ejercicio, rutina, progreso físico → ZEUS, el coach de
+    entrenamiento en vivo de GymApp (se activa diciendo "Hey ZEUS" durante el entrenamiento,
+    o desde la sección de Entrenamiento)
+  · Nutrición, dieta, macros, alimentos, suplementación → el asistente de Nutrición IA de
+    GymApp (sección de Nutrición en la app)
+- Solo sugiere un profesional externo (médico, nutricionista fuera del gym, etc.) cuando el
+  tema esté genuinamente fuera del alcance de ARIA, ZEUS y Nutrición IA juntos — por ejemplo
+  diagnóstico médico, lesiones, o temas legales
 - Máximo 3 párrafos por respuesta`;
 
     // El cliente (panel web) ya mantiene el historial completo en pantalla —
