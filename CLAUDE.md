@@ -99,7 +99,9 @@ CREATE EXTENSION IF NOT EXISTS "pg_cron";       -- jobs dentro de Postgres
 
 ### Infraestructura por fase
 
-- **Fase 1–2 (MVP–Growth):** Railway.app — simple, auto-deploy, ~$50–300/mes
+- **Fase 1–2 (MVP–Growth):** Railway.app aloja `apps/api` **y** `apps/web` (Next.js corre perfectamente como servicio Node en Railway, no es exclusivo de Vercel) — una sola factura/plataforma en vez de repartir entre Vercel + Railway, ~$50–300/mes.
+- **Supabase se mantiene SIEMPRE separado**, sin importar la fase — es el proveedor de PostgreSQL (con backups/point-in-time recovery administrados) y Storage. Nunca migrar la base de datos a un VPS ni auto-hospedar Postgres: GymApp maneja pagos, DUI/NIT y (a futuro) datos biométricos — el riesgo de administrar eso uno mismo no vale el ahorro.
+- **VPS genérico (ej. Hostinger) descartado para esta fase**: aunque más barato, transfiere al equipo la carga operativa (backups, parches de seguridad, SSL, uptime a las 2am) que Railway ya resuelve. Reconsiderar solo si el proyecto ya factura lo suficiente como para justificar tener/contratar a alguien dedicado a administrar esa infraestructura.
 - **Fase 3+ (Scale):** AWS ECS Fargate + RDS + ElastiCache — $2,000–8,000/mes
 - **CDN/WAF:** Cloudflare (todas las fases)
 
