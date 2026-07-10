@@ -14,7 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useAuthStore } from '@/store/auth.store';
-import { memberApi, zeusApi, WorkoutPlan } from '@/lib/api-client';
+import { memberApi, zeusApi, MemberPlan } from '@/lib/api-client';
 import { useStt } from '@/hooks/useStt';
 import { useTts } from '@/hooks/useTts';
 
@@ -32,7 +32,7 @@ const SUGGESTIONS = [
 
 export default function WorkoutTab() {
   const { accessToken } = useAuthStore();
-  const [plan, setPlan] = useState<WorkoutPlan | null>(null);
+  const [memberPlan, setMemberPlan] = useState<MemberPlan | null>(null);
   const [memberId, setMemberId] = useState<string | null>(null);
   const [loadingPlan, setLoadingPlan] = useState(true);
   const [zeusOpen, setZeusOpen] = useState(false);
@@ -50,7 +50,7 @@ export default function WorkoutTab() {
       const me = await memberApi.getMe(accessToken);
       setMemberId(me.id);
       const plans = await memberApi.getPlans(me.id, accessToken);
-      setPlan(plans?.[0] ?? null);
+      setMemberPlan(plans?.find((p) => p.is_active) ?? plans?.[0] ?? null);
     } catch {
       // no plan yet
     } finally {
@@ -207,7 +207,7 @@ export default function WorkoutTab() {
           {/* Workout plan */}
           {loadingPlan ? (
             <ActivityIndicator size="large" color="#1d4ed8" style={{ marginTop: 40 }} />
-          ) : !plan ? (
+          ) : !memberPlan ? (
             <View style={styles.emptyPlan}>
               <Text style={styles.emptyPlanEmoji}>🏋️</Text>
               <Text style={styles.emptyPlanTitle}>Sin plan asignado</Text>
@@ -226,52 +226,60 @@ export default function WorkoutTab() {
             </View>
           ) : (
             <View style={styles.planContainer}>
-              <View style={styles.planHeaderRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.planName}>{plan.name}</Text>
-                  {plan.goal && <Text style={styles.planGoal}>Objetivo: {plan.goal}</Text>}
-                </View>
-                <TouchableOpacity
-                  style={styles.startSessionBtn}
-                  onPress={() =>
-                    router.push({
-                      pathname: '/session',
-                      params: {
-                        memberId: memberId ?? '',
-                        token: accessToken ?? '',
-                        planId: plan.id,
-                        planName: plan.name,
-                        planData: JSON.stringify(plan),
-                      },
-                    })
-                  }
-                >
-                  <Text style={styles.startSessionBtnText}>▶ Entrenar</Text>
-                </TouchableOpacity>
+              <View>
+                <Text style={styles.planName}>{memberPlan.plan.name}</Text>
+                {memberPlan.plan.goal && (
+                  <Text style={styles.planGoal}>Objetivo: {memberPlan.plan.goal}</Text>
+                )}
               </View>
 
-              {(plan.blocks ?? [])
-                .sort((a, b) => a.sort_order - b.sort_order)
-                .map((block) => (
-                  <View key={block.id} style={styles.block}>
-                    <Text style={styles.blockName}>{block.name}</Text>
-                    <Text style={styles.blockType}>{block.block_type}</Text>
-                    {(block.exercises ?? [])
-                      .sort((a, b) => a.sort_order - b.sort_order)
-                      .map((ex) => (
-                        <View key={ex.id} style={styles.exercise}>
+              {[...memberPlan.plan.days]
+                .sort((a, b) => a.day_number - b.day_number)
+                .map((day) => (
+                  <View key={day.id} style={styles.block}>
+                    <View style={styles.planHeaderRow}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.blockName}>
+                          Día {day.day_number}
+                          {day.name ? ` — ${day.name}` : ''}
+                        </Text>
+                        <Text style={styles.blockType}>
+                          {day.blocks.length} ejercicio{day.blocks.length === 1 ? '' : 's'}
+                        </Text>
+                      </View>
+                      <TouchableOpacity
+                        style={styles.startSessionBtn}
+                        onPress={() =>
+                          router.push({
+                            pathname: '/session',
+                            params: {
+                              memberId: memberId ?? '',
+                              token: accessToken ?? '',
+                              planId: memberPlan.plan.id,
+                              planDayId: day.id,
+                              planName: `${memberPlan.plan.name} — Día ${day.day_number}`,
+                              planData: JSON.stringify(day.blocks),
+                            },
+                          })
+                        }
+                      >
+                        <Text style={styles.startSessionBtnText}>▶ Entrenar</Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    {[...day.blocks]
+                      .sort((a, b) => a.order - b.order)
+                      .map((block) => (
+                        <View key={block.id} style={styles.exercise}>
                           <View style={styles.exerciseHeader}>
-                            <Text style={styles.exerciseName}>{ex.exercise.name}</Text>
+                            <Text style={styles.exerciseName}>{block.exercise.name}</Text>
                             <Text style={styles.exerciseSets}>
-                              {ex.sets} × {ex.reps_min}–{ex.reps_max}
+                              {block.sets} × {block.reps_min ?? '—'}–{block.reps_max ?? '—'}
                             </Text>
                           </View>
-                          {ex.exercise.muscle_groups?.length > 0 && (
-                            <Text style={styles.muscles}>
-                              {ex.exercise.muscle_groups.join(', ')}
-                            </Text>
+                          {block.rest_seconds != null && (
+                            <Text style={styles.rest}>Descanso: {block.rest_seconds}s</Text>
                           )}
-                          <Text style={styles.rest}>Descanso: {ex.rest_seconds}s</Text>
                         </View>
                       ))}
                   </View>

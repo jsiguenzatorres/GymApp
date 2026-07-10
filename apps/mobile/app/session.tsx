@@ -23,7 +23,7 @@ import {
   sessionApi,
   exercisesApi,
   workoutApi,
-  WorkoutPlan,
+  PlanBlockExercise,
   WeightSuggestion,
   ExerciseHistorySession,
   ExerciseSubstitute,
@@ -66,22 +66,21 @@ function formatDuration(secs: number) {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-function buildExerciseStates(plan: WorkoutPlan | null): ExerciseState[] {
-  if (!plan) return [];
-  return plan.blocks
-    .flatMap((b) => b.exercises)
-    .sort((a, b) => a.sort_order - b.sort_order)
-    .map((pe) => ({
-      id: pe.id,
-      exerciseId: pe.exercise.id,
-      name: pe.exercise.name,
-      sets: pe.sets,
-      repsMin: pe.reps_min,
-      repsMax: pe.reps_max,
-      restSeconds: pe.rest_seconds ?? 60,
-      logs: Array.from({ length: pe.sets }, (_, i) => ({
+function buildExerciseStates(blocks: PlanBlockExercise[] | null): ExerciseState[] {
+  if (!blocks) return [];
+  return [...blocks]
+    .sort((a, b) => a.order - b.order)
+    .map((b) => ({
+      id: b.id,
+      exerciseId: b.exercise_id,
+      name: b.exercise.name,
+      sets: b.sets,
+      repsMin: b.reps_min ?? 0,
+      repsMax: b.reps_max ?? b.reps_min ?? 0,
+      restSeconds: b.rest_seconds ?? 60,
+      logs: Array.from({ length: b.sets }, (_, i) => ({
         setNumber: i + 1,
-        reps: String(pe.reps_min),
+        reps: String(b.reps_min ?? ''),
         weightKg: '',
         logged: false,
       })),
@@ -138,11 +137,13 @@ export default function SessionScreen() {
     token: rawToken,
     memberId,
     planId,
+    planDayId,
     planName,
   } = useLocalSearchParams<{
     token: string;
     memberId: string;
     planId?: string;
+    planDayId?: string;
     planName?: string;
   }>();
   const planDataParam = useLocalSearchParams<{ planData?: string }>().planData;
@@ -215,14 +216,21 @@ export default function SessionScreen() {
   // ── Iniciar sesión ──
   useEffect(() => {
     async function init() {
+      let states: ExerciseState[] = [];
       try {
-        const plan: WorkoutPlan | null = planDataParam ? JSON.parse(planDataParam) : null;
-        const states = buildExerciseStates(plan);
+        const blocks: PlanBlockExercise[] | null = planDataParam ? JSON.parse(planDataParam) : null;
+        states = buildExerciseStates(blocks);
         setExercises(states);
+      } catch (parseErr) {
+        // Datos del día mal formados — no es un problema de red, seguimos como sesión libre
+        console.warn('No se pudo interpretar el plan del día', parseErr);
+      }
 
+      try {
         const session = await sessionApi.start(token, {
           memberId,
           planId: planId ?? undefined,
+          planDayId: planDayId ?? undefined,
           name: planName ? `Sesión — ${planName}` : undefined,
         });
         setSessionId(session.id);
@@ -237,10 +245,14 @@ export default function SessionScreen() {
             // silent — el ejercicio puede no tener histórico
           }
         });
-      } catch {
-        Alert.alert('Error', 'No se pudo iniciar la sesión. Verifica tu conexión.', [
-          { text: 'Volver', onPress: () => router.back() },
-        ]);
+      } catch (err) {
+        Alert.alert(
+          'Error',
+          err instanceof Error
+            ? err.message
+            : 'No se pudo iniciar la sesión. Verifica tu conexión.',
+          [{ text: 'Volver', onPress: () => router.back() }],
+        );
       } finally {
         setStarting(false);
       }

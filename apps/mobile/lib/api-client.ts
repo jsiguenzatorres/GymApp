@@ -109,26 +109,45 @@ export interface MemberProfile {
   }>;
 }
 
+export interface PlanBlockExercise {
+  id: string;
+  exercise_id: string;
+  block_type: string;
+  order: number;
+  sets: number;
+  reps_min: number | null;
+  reps_max: number | null;
+  rpe: number | null;
+  rest_seconds: number | null;
+  notes?: string | null;
+  exercise: { name: string };
+}
+
+export interface WorkoutPlanDay {
+  id: string;
+  day_number: number;
+  name: string | null;
+  blocks: PlanBlockExercise[];
+}
+
 export interface WorkoutPlan {
   id: string;
   name: string;
   description?: string;
   goal?: string;
-  blocks: Array<{
-    id: string;
-    name: string;
-    block_type: string;
-    sort_order: number;
-    exercises: Array<{
-      id: string;
-      sets: number;
-      reps_min: number;
-      reps_max: number;
-      rest_seconds: number;
-      sort_order: number;
-      exercise: { id: string; name: string; muscle_groups: string[] };
-    }>;
-  }>;
+  days_per_week?: number;
+  days: WorkoutPlanDay[];
+}
+
+// Lo que realmente devuelve GET /members/:id/plans — la asignación, no el plan plano
+export interface MemberPlan {
+  id: string;
+  member_id: string;
+  plan_id: string;
+  is_active: boolean;
+  started_at: string;
+  notes?: string | null;
+  plan: WorkoutPlan;
 }
 
 export interface WorkoutSession {
@@ -240,7 +259,7 @@ export const memberApi = {
   getProgressPdfUrl: (month?: string) =>
     `${API_URL}/api/v1/members/me/progress-pdf${month ? `?month=${month}` : ''}`,
   getPlans: (memberId: string, token: string) =>
-    apiClient.get<WorkoutPlan[]>(`/api/v1/members/${memberId}/plans`, token),
+    apiClient.get<MemberPlan[]>(`/api/v1/members/${memberId}/plans`, token),
   getSessions: (memberId: string, token: string) =>
     apiClient.get<{ data: WorkoutSession[] }>(
       `/api/v1/members/${memberId}/workout-sessions`,
