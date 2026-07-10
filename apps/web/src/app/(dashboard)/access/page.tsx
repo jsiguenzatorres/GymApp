@@ -71,10 +71,27 @@ export default async function AccessPage({
   return (
     <div className="space-y-6 p-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Control de Acceso</h1>
-        <p className="text-sm text-gray-500">QR dinámico — HMAC-SHA256, 60 segundos de vigencia</p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Control de Acceso</h1>
+          <p className="text-sm text-gray-500">
+            QR dinámico — HMAC-SHA256, 60 segundos de vigencia
+          </p>
+        </div>
+        <a
+          href="/kiosk/access"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="shrink-0 rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800"
+        >
+          Abrir modo kiosco ↗
+        </a>
       </div>
+      <p className="-mt-4 text-xs text-gray-400">
+        El modo kiosco abre la cámara en pantalla completa y valida los QR automáticamente — ideal
+        para dejarlo corriendo en una tablet en recepción, sin que nadie tenga que presionar nada
+        por cada ingreso.
+      </p>
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4">

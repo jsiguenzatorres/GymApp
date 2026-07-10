@@ -197,6 +197,14 @@ export class AccessService {
 
   // ─── LOGS ─────────────────────────────────────────────────────────────────────
 
+  async isOwnMember(gymId: string, userId: string, memberId: string): Promise<boolean> {
+    const member = await this.prisma.member.findFirst({
+      where: { id: memberId, gym_id: gymId, user_id: userId },
+      select: { id: true },
+    });
+    return !!member;
+  }
+
   async listAccessLogs(
     gymId: string,
     filter: {

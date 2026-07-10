@@ -11,8 +11,11 @@ import {
 } from '@nestjs/common';
 import { AccessService } from './access.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
+import { STAFF_ROLES } from '@gymapp/shared-types';
 
 @UseGuards(JwtAuthGuard)
 @Controller('access')
@@ -31,12 +34,17 @@ export class AccessController {
   }
 
   // GET /api/v1/access/member/:id/qr — staff genera QR para un miembro
+  @UseGuards(RolesGuard)
+  @Roles(...STAFF_ROLES)
   @Get('member/:id/qr')
   getMemberQr(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: JwtPayload) {
     return this.accessService.generateQrCode(this.gymId(user), id);
   }
 
-  // POST /api/v1/access/validate — scanner valida un QR
+  // POST /api/v1/access/validate — scanner valida un QR (staff/kiosco únicamente,
+  // evita que un miembro se auto-conceda el ingreso llamando al endpoint directo)
+  @UseGuards(RolesGuard)
+  @Roles(...STAFF_ROLES)
   @Post('validate')
   validateQr(
     @Body() body: { payload: string; deviceId?: string },
@@ -46,12 +54,16 @@ export class AccessController {
   }
 
   // GET /api/v1/access/stats — dashboard de acceso
+  @UseGuards(RolesGuard)
+  @Roles(...STAFF_ROLES)
   @Get('stats')
   getStats(@CurrentUser() user: JwtPayload) {
     return this.accessService.getAccessStats(this.gymId(user));
   }
 
   // GET /api/v1/access/logs
+  @UseGuards(RolesGuard)
+  @Roles(...STAFF_ROLES)
   @Get('logs')
   listLogs(
     @CurrentUser() user: JwtPayload,
@@ -72,9 +84,17 @@ export class AccessController {
     });
   }
 
-  // GET /api/v1/access/members/:id/logs
+  // GET /api/v1/access/members/:id/logs — staff ve el historial de cualquier
+  // miembro; un MEMBER solo puede ver su propio historial (verifica ownership,
+  // ya que este endpoint lo usa la app móvil para "mi historial de acceso").
   @Get('members/:id/logs')
-  memberLogs(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: JwtPayload) {
-    return this.accessService.listAccessLogs(this.gymId(user), { memberId: id, limit: 50 });
+  async memberLogs(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: JwtPayload) {
+    const gymId = this.gymId(user);
+    const isStaff = (STAFF_ROLES as readonly string[]).includes(user.role);
+    if (!isStaff) {
+      const own = await this.accessService.isOwnMember(gymId, user.sub, id);
+      if (!own) throw new ForbiddenException('No puedes ver el historial de otro miembro');
+    }
+    return this.accessService.listAccessLogs(gymId, { memberId: id, limit: 50 });
   }
 }
