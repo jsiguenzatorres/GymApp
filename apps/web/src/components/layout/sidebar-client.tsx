@@ -78,17 +78,8 @@ export function SidebarClient({ userName, userEmail, gymName = 'GymApp' }: Sideb
   return (
     <aside className="flex h-full w-64 flex-col border-r bg-zinc-950 text-zinc-100">
       {/* Logo */}
-      <div className="flex h-16 items-center gap-3 border-b border-zinc-800 px-5">
-        <div className="flex items-center gap-1.5">
-          <div className="flex gap-0.5">
-            <span className="block h-5 w-1.5 rounded-sm bg-violet-500" />
-            <span className="block h-5 w-1.5 rounded-sm bg-violet-500" />
-          </div>
-          <span className="block h-2.5 w-2 rounded-sm bg-amber-400" />
-          <div className="flex gap-0.5">
-            <span className="block h-5 w-1.5 rounded-sm bg-violet-500" />
-          </div>
-        </div>
+      <div className="flex h-16 items-center gap-2.5 border-b border-zinc-800 px-4">
+        <img src="/logo-bagym.png" alt={gymName} className="h-11 w-11 rounded-full object-cover" />
         <span className="font-bold text-sm tracking-tight text-zinc-50">{gymName}</span>
       </div>
 

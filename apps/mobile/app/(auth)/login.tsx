@@ -9,6 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -18,6 +19,7 @@ import { useAuthStore } from '@/store/auth.store';
 import { authApi, onboardingApi, ApiError } from '@/lib/api-client';
 import { registerPushToken } from '@/lib/push';
 import { THEME_LIGHT, COLORS, RADIUS, SPACING, TYPOGRAPHY } from '@/theme';
+import logoFull from '@/assets/logo-full.png';
 
 const T = THEME_LIGHT.colors;
 const BIOMETRIC_EMAIL_KEY = 'gymapp_biometric_email';
@@ -142,12 +144,7 @@ export default function LoginScreen() {
         >
           {/* Logo */}
           <View style={styles.logoRow}>
-            <View style={styles.logoMark}>
-              <View style={[styles.logoBar, { backgroundColor: T.primary }]} />
-              <View style={[styles.logoHandle, { backgroundColor: T.premium }]} />
-              <View style={[styles.logoBar, { backgroundColor: T.primary }]} />
-            </View>
-            <Text style={[styles.logoText, { color: T.text }]}>GymApp</Text>
+            <Image source={logoFull} style={styles.logoImage} resizeMode="contain" />
           </View>
 
           <Text style={[styles.title, { color: T.text }]}>Bienvenido</Text>
@@ -307,11 +304,8 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.zinc50 },
   scroll: { flexGrow: 1, paddingHorizontal: SPACING[6], paddingVertical: SPACING[8] },
-  logoRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: SPACING[8] },
-  logoMark: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  logoBar: { width: 5, height: 18, borderRadius: 2 },
-  logoHandle: { width: 8, height: 8, borderRadius: 2 },
-  logoText: { fontSize: TYPOGRAPHY.size.xl, fontWeight: '700' },
+  logoRow: { flexDirection: 'row', alignItems: 'center', marginBottom: SPACING[8] },
+  logoImage: { width: 120, height: 120 },
   title: { fontSize: TYPOGRAPHY.size['3xl'], fontWeight: '700', marginBottom: 4 },
   subtitle: { fontSize: TYPOGRAPHY.size.base, marginBottom: SPACING[6] },
   errorBox: {

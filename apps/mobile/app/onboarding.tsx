@@ -9,12 +9,16 @@ import {
   ActivityIndicator,
   Alert,
   Switch,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
+import { Calendar, DateData } from 'react-native-calendars';
 import { useAuthStore } from '@/store/auth.store';
 import { onboardingApi, memberApi } from '@/lib/api-client';
 import * as ImagePicker from 'expo-image-picker';
+
+const TODAY = new Date().toISOString().slice(0, 10);
 
 const PARQ_QUESTIONS = [
   { id: 'q1', text: '¿Te ha dicho un médico que tienes un problema cardíaco?' },
@@ -33,6 +37,50 @@ const GOALS = [
   { v: 'REHAB', l: '🩹 Rehabilitación', unit: '' },
 ];
 
+const DESIRED_OUTCOMES = [
+  { v: 'ALIVIAR_ESTRES', l: '😌 Aliviar el estrés' },
+  { v: 'MEJORAR_SUENO', l: '😴 Mejorar el sueño' },
+  { v: 'MAS_ENERGIA', l: '⚡ Más energía' },
+  { v: 'LONGEVIDAD', l: '🌱 Envejecimiento activo' },
+  { v: 'MEJOR_NUTRICION', l: '🥗 Mejorar mi nutrición' },
+  { v: 'MEJORES_HABITOS', l: '✅ Mejores hábitos' },
+  { v: 'CONFIANZA', l: '✨ Más confianza' },
+  { v: 'ESTETICA', l: '🌸 Estética' },
+  { v: 'MEJOR_POSTURA', l: '🧍 Mejorar mi postura' },
+  { v: 'MAS_AGILIDAD', l: '🤸 Más agilidad' },
+];
+
+const INTENSITY_LEVELS = [
+  { v: 1, l: 'Fácil' },
+  { v: 2, l: 'Suave' },
+  { v: 3, l: 'Moderado' },
+  { v: 4, l: 'Duro' },
+  { v: 5, l: 'Intenso' },
+];
+
+const PLANNING_STYLES = [
+  {
+    v: 'GUIDED',
+    l: '🧑‍🏫 Que mi entrenador lo planifique todo',
+    d: 'Ideal si prefieres seguir un plan armado por un profesional.',
+  },
+  {
+    v: 'SELF',
+    l: '📝 Yo prefiero planificar mis propios entrenamientos',
+    d: 'Tendrás control total sobre tu rutina y horarios.',
+  },
+  {
+    v: 'HYBRID',
+    l: '🔀 Un poco de cada uno (híbrido)',
+    d: 'Tu entrenador guía, tú ajustas según tu semana.',
+  },
+  {
+    v: 'AI_FULL',
+    l: '🤖 Que ZEUS (IA) lo planifique todo por mí',
+    d: 'Recibe rutinas generadas automáticamente y adaptadas a tu progreso.',
+  },
+];
+
 export default function OnboardingScreen() {
   const { accessToken } = useAuthStore();
   const [step, setStep] = useState(0);
@@ -46,11 +94,17 @@ export default function OnboardingScreen() {
   const [goalType, setGoalType] = useState<string>('');
   const [goalValue, setGoalValue] = useState<string>('');
   const [goalDeadline, setGoalDeadline] = useState<string>('');
+  const [showDeadlineCalendar, setShowDeadlineCalendar] = useState(false);
 
-  // Paso 3 — Foto
+  // Paso 3 — Preferencias
+  const [desiredOutcomes, setDesiredOutcomes] = useState<string[]>([]);
+  const [intensityPreference, setIntensityPreference] = useState(3);
+  const [planningStyle, setPlanningStyle] = useState<string>('');
+
+  // Paso 4 — Foto
   const [photoUploaded, setPhotoUploaded] = useState(false);
 
-  // Paso 4 — Contrato
+  // Paso 5 — Contrato
   const [contractAccepted, setContractAccepted] = useState(false);
 
   useEffect(() => {
@@ -65,7 +119,11 @@ export default function OnboardingScreen() {
         }
         if (ob.parq_completed) setStep(1);
         if (ob.goal_completed_at) setStep(2);
-        if (ob.initial_photo_uploaded) setStep(3);
+        if (ob.preferences_completed_at) setStep(3);
+        if (ob.initial_photo_uploaded) setStep(4);
+        if (ob.desired_outcomes?.length) setDesiredOutcomes(ob.desired_outcomes);
+        if (ob.intensity_preference) setIntensityPreference(ob.intensity_preference);
+        if (ob.planning_style) setPlanningStyle(ob.planning_style);
         setPhotoUploaded(ob.initial_photo_uploaded);
         setContractAccepted(ob.contract_accepted);
       } catch {
@@ -85,7 +143,7 @@ export default function OnboardingScreen() {
     );
   }
 
-  const nextStep = () => setStep((s) => Math.min(3, s + 1));
+  const nextStep = () => setStep((s) => Math.min(4, s + 1));
   const skip = () => router.replace('/(tabs)' as never);
 
   const submitParq = async () => {
@@ -125,6 +183,29 @@ export default function OnboardingScreen() {
         goal_target_value: Number.isFinite(value) ? value : undefined,
         goal_target_unit: goalMeta?.unit || undefined,
         goal_deadline: goalDeadline || undefined,
+      });
+      nextStep();
+    } catch (err) {
+      Alert.alert('Error', err instanceof Error ? err.message : 'Error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggleOutcome = (v: string) =>
+    setDesiredOutcomes((prev) => (prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]));
+
+  const submitPreferences = async () => {
+    if (!accessToken || !planningStyle) {
+      Alert.alert('Falta información', 'Selecciona cómo quieres planificar tus entrenamientos.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await onboardingApi.submitPreferences(accessToken, {
+        desired_outcomes: desiredOutcomes,
+        intensity_preference: intensityPreference,
+        planning_style: planningStyle,
       });
       nextStep();
     } catch (err) {
@@ -193,7 +274,7 @@ export default function OnboardingScreen() {
 
       {/* Stepper */}
       <View style={styles.stepperRow}>
-        {[0, 1, 2, 3].map((i) => (
+        {[0, 1, 2, 3, 4].map((i) => (
           <View
             key={i}
             style={[
@@ -281,15 +362,58 @@ export default function OnboardingScreen() {
                   keyboardType="decimal-pad"
                   style={styles.input}
                 />
-                <Text style={styles.label}>Para cuándo (YYYY-MM-DD, opcional)</Text>
-                <TextInput
-                  value={goalDeadline}
-                  onChangeText={setGoalDeadline}
-                  placeholder="2026-12-31"
-                  style={styles.input}
-                />
+                <Text style={styles.label}>Para cuándo (opcional)</Text>
+                <TouchableOpacity
+                  style={styles.dateInput}
+                  onPress={() => setShowDeadlineCalendar(true)}
+                >
+                  <Text style={goalDeadline ? styles.dateInputText : styles.dateInputPlaceholder}>
+                    {goalDeadline || 'Toca para elegir una fecha'}
+                  </Text>
+                  <Text style={styles.dateInputIcon}>📅</Text>
+                </TouchableOpacity>
               </View>
             )}
+
+            <Modal
+              visible={showDeadlineCalendar}
+              transparent
+              animationType="fade"
+              onRequestClose={() => setShowDeadlineCalendar(false)}
+            >
+              <TouchableOpacity
+                style={styles.modalBackdrop}
+                activeOpacity={1}
+                onPress={() => setShowDeadlineCalendar(false)}
+              >
+                <TouchableOpacity activeOpacity={1} style={styles.calendarCard}>
+                  <Calendar
+                    current={goalDeadline || TODAY}
+                    minDate={TODAY}
+                    onDayPress={(day: DateData) => {
+                      setGoalDeadline(day.dateString);
+                      setShowDeadlineCalendar(false);
+                    }}
+                    markedDates={
+                      goalDeadline
+                        ? { [goalDeadline]: { selected: true, selectedColor: '#1d4ed8' } }
+                        : {}
+                    }
+                    theme={{
+                      todayTextColor: '#1d4ed8',
+                      arrowColor: '#1d4ed8',
+                      selectedDayBackgroundColor: '#1d4ed8',
+                    }}
+                  />
+                  <TouchableOpacity
+                    style={styles.calendarCloseBtn}
+                    onPress={() => setShowDeadlineCalendar(false)}
+                  >
+                    <Text style={styles.calendarCloseBtnText}>Cerrar</Text>
+                  </TouchableOpacity>
+                </TouchableOpacity>
+              </TouchableOpacity>
+            </Modal>
             <TouchableOpacity
               style={[styles.primaryBtn, (!goalType || saving) && { opacity: 0.5 }]}
               onPress={submitGoal}
@@ -304,8 +428,94 @@ export default function OnboardingScreen() {
           </>
         )}
 
-        {/* STEP 3: Foto inicial */}
+        {/* STEP 3: Preferencias */}
         {step === 2 && (
+          <>
+            <Text style={styles.stepTitle}>✨ Tus preferencias</Text>
+            <Text style={styles.stepDesc}>
+              Esto ayuda a ARIA, ZEUS y a nuestro asistente de nutrición a acompañarte mejor.
+            </Text>
+
+            <Text style={styles.label}>
+              ¿Qué resultados te gustaría conseguir? (elige los que quieras)
+            </Text>
+            <View style={styles.chipsWrap}>
+              {DESIRED_OUTCOMES.map((o) => {
+                const active = desiredOutcomes.includes(o.v);
+                return (
+                  <TouchableOpacity
+                    key={o.v}
+                    style={[styles.chip, active && styles.chipActive]}
+                    onPress={() => toggleOutcome(o.v)}
+                  >
+                    <Text style={[styles.chipText, active && styles.chipTextActive]}>{o.l}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <Text style={[styles.label, { marginTop: 16 }]}>
+              ¿Qué tan duro te gustaría entrenar?
+            </Text>
+            <View style={styles.intensityRow}>
+              {INTENSITY_LEVELS.map((lvl) => (
+                <TouchableOpacity
+                  key={lvl.v}
+                  style={[
+                    styles.intensityDot,
+                    intensityPreference >= lvl.v && styles.intensityDotActive,
+                  ]}
+                  onPress={() => setIntensityPreference(lvl.v)}
+                >
+                  <Text
+                    style={[
+                      styles.intensityDotText,
+                      intensityPreference >= lvl.v && styles.intensityDotTextActive,
+                    ]}
+                  >
+                    {lvl.v}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <View style={styles.intensityLabels}>
+              <Text style={styles.intensityLabelText}>Fácil</Text>
+              <Text style={styles.intensityLabelText}>Intenso</Text>
+            </View>
+
+            <Text style={[styles.label, { marginTop: 16 }]}>
+              ¿Cómo quieres que se planifiquen tus entrenamientos?
+            </Text>
+            {PLANNING_STYLES.map((p) => (
+              <TouchableOpacity
+                key={p.v}
+                style={[styles.planRow, planningStyle === p.v && styles.goalRowActive]}
+                onPress={() => setPlanningStyle(p.v)}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.goalLabel}>{p.l}</Text>
+                  <Text style={styles.planDesc}>{p.d}</Text>
+                </View>
+                {planningStyle === p.v && <Text style={styles.goalCheck}>✓</Text>}
+              </TouchableOpacity>
+            ))}
+
+            <TouchableOpacity
+              style={[styles.primaryBtn, (!planningStyle || saving) && { opacity: 0.5 }]}
+              onPress={submitPreferences}
+              disabled={!planningStyle || saving}
+            >
+              {saving ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.primaryBtnText}>Siguiente</Text>
+              )}
+            </TouchableOpacity>
+          </>
+        )}
+
+        {/* STEP 4: Foto inicial */}
+        {step === 3 && (
           <>
             <Text style={styles.stepTitle}>📸 Foto inicial (privada)</Text>
             <Text style={styles.stepDesc}>
@@ -334,8 +544,8 @@ export default function OnboardingScreen() {
           </>
         )}
 
-        {/* STEP 4: Contrato */}
-        {step === 3 && (
+        {/* STEP 5: Contrato */}
+        {step === 4 && (
           <>
             <Text style={styles.stepTitle}>📜 Términos y condiciones</Text>
             <ScrollView style={styles.contractBox}>
@@ -456,6 +666,77 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e5e7eb',
   },
+  dateInput: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  dateInputText: { fontSize: 14, color: '#111827', fontWeight: '600' },
+  dateInputPlaceholder: { fontSize: 14, color: '#9ca3af' },
+  dateInputIcon: { fontSize: 16 },
+
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(17, 24, 39, 0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  calendarCard: {
+    width: '100%',
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 8,
+    overflow: 'hidden',
+  },
+  calendarCloseBtn: { paddingVertical: 12, alignItems: 'center' },
+  calendarCloseBtnText: { color: '#6b7280', fontWeight: '700', fontSize: 13 },
+
+  chipsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
+  chip: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    backgroundColor: '#fff',
+  },
+  chipActive: { borderColor: '#1d4ed8', backgroundColor: '#eff6ff' },
+  chipText: { fontSize: 13, color: '#374151', fontWeight: '600' },
+  chipTextActive: { color: '#1d4ed8' },
+
+  intensityRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
+  intensityDot: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    backgroundColor: '#fff',
+    alignItems: 'center',
+  },
+  intensityDotActive: { backgroundColor: '#1d4ed8', borderColor: '#1d4ed8' },
+  intensityDotText: { fontSize: 14, fontWeight: '800', color: '#9ca3af' },
+  intensityDotTextActive: { color: '#fff' },
+  intensityLabels: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 },
+  intensityLabelText: { fontSize: 11, color: '#6b7280', fontWeight: '600' },
+
+  planRow: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  planDesc: { fontSize: 12, color: '#6b7280', marginTop: 2 },
 
   bigBtn: {
     backgroundColor: '#1d4ed8',

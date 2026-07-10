@@ -61,9 +61,9 @@ export default function AriaScreen() {
     try {
       const mid = await ensureMemberId();
       const res = await ariaApi.chat(text.trim(), accessToken, mid ?? undefined);
-      const reply = res.reply;
+      const reply = res.response;
       setMessages((prev) => [...prev, { role: 'aria', text: reply }]);
-      void speak(reply);
+      if (!res.error) void speak(reply);
     } catch {
       setMessages((prev) => [
         ...prev,

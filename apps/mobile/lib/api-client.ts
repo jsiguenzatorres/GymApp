@@ -327,7 +327,7 @@ export const marketplaceApi = {
     ),
   createOrder: (
     token: string,
-    body: { items: { productId: string; quantity: number }[]; notes?: string },
+    body: { member_id: string; items: { product_id: string; quantity: number }[]; notes?: string },
   ) => apiClient.post<{ id: string; status: string }>('/api/v1/marketplace-orders', body, token),
   identifyByPhoto: (token: string, image: string, mimeType: string) =>
     apiClient.post<{
@@ -641,6 +641,10 @@ export interface MemberOnboarding {
   parq_has_conditions: boolean | null;
   goal_completed_at: string | null;
   goal_type: string | null;
+  preferences_completed_at: string | null;
+  desired_outcomes: string[];
+  intensity_preference: number | null;
+  planning_style: string | null;
   initial_photo_uploaded: boolean;
   contract_accepted: boolean;
   completed_at: string | null;
@@ -700,6 +704,10 @@ export const onboardingApi = {
       goal_deadline?: string;
     },
   ) => apiClient.post<MemberOnboarding>('/api/v1/me/onboarding/goal', body, token),
+  submitPreferences: (
+    token: string,
+    body: { desired_outcomes: string[]; intensity_preference: number; planning_style: string },
+  ) => apiClient.post<MemberOnboarding>('/api/v1/me/onboarding/preferences', body, token),
   markPhoto: (token: string) =>
     apiClient.post<MemberOnboarding>('/api/v1/me/onboarding/photo', {}, token),
   acceptContract: (token: string, version = '1.0') =>
@@ -939,9 +947,16 @@ export const sessionApi = {
 
 // ─── ARIA ────────────────────────────────────────────────────────────────────
 
+export interface AriaChatResponse {
+  response: string;
+  isStub: boolean;
+  error?: boolean;
+  fallbackModel?: boolean;
+}
+
 export const ariaApi = {
   chat: (message: string, token: string, memberId?: string) =>
-    apiClient.post<{ reply: string }>('/api/v1/aria/chat', { message, memberId }, token),
+    apiClient.post<AriaChatResponse>('/api/v1/aria/chat', { message, memberId }, token),
 };
 
 // ─── Orders ──────────────────────────────────────────────────────────────────

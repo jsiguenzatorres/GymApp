@@ -85,6 +85,36 @@ class OnboardingService {
     );
   }
 
+  async submitPreferences(
+    memberId: string,
+    dto: {
+      desired_outcomes: string[];
+      intensity_preference: number;
+      planning_style: string;
+    },
+  ) {
+    const now = new Date();
+    return this.maybeFinalize(
+      memberId,
+      this.prisma.memberOnboarding.upsert({
+        where: { member_id: memberId },
+        create: {
+          member_id: memberId,
+          desired_outcomes: dto.desired_outcomes,
+          intensity_preference: dto.intensity_preference,
+          planning_style: dto.planning_style,
+          preferences_completed_at: now,
+        },
+        update: {
+          desired_outcomes: dto.desired_outcomes,
+          intensity_preference: dto.intensity_preference,
+          planning_style: dto.planning_style,
+          preferences_completed_at: now,
+        },
+      }),
+    );
+  }
+
   async markPhotoUploaded(memberId: string) {
     const now = new Date();
     return this.maybeFinalize(
@@ -126,6 +156,7 @@ class OnboardingService {
     const allDone =
       ob.parq_completed &&
       ob.goal_completed_at &&
+      ob.preferences_completed_at &&
       ob.initial_photo_uploaded &&
       ob.contract_accepted;
     if (allDone && !ob.completed_at) {
@@ -177,6 +208,19 @@ class OnboardingController {
     },
   ) {
     return this.svc.submitGoal(await this.memberId(user), body);
+  }
+
+  @Post('preferences')
+  async preferences(
+    @CurrentUser() user: JwtPayload,
+    @Body()
+    body: {
+      desired_outcomes: string[];
+      intensity_preference: number;
+      planning_style: string;
+    },
+  ) {
+    return this.svc.submitPreferences(await this.memberId(user), body);
   }
 
   @Post('photo')

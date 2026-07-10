@@ -19,6 +19,7 @@ import {
   ordersApi,
   creditApi,
   subscriptionsApi,
+  memberApi,
   Product,
   ProductCategory,
   MarketplaceOrder,
@@ -252,18 +253,25 @@ export default function MarketplaceScreen() {
 
   const placeOrder = async () => {
     if (!accessToken || cartCount === 0) return;
-    const items = Object.entries(cart).map(([productId, quantity]) => ({ productId, quantity }));
+    const items = Object.entries(cart).map(([productId, quantity]) => ({
+      product_id: productId,
+      quantity,
+    }));
     setOrdering(true);
     try {
-      await marketplaceApi.createOrder(accessToken, { items });
+      const me = await memberApi.getMe(accessToken);
+      await marketplaceApi.createOrder(accessToken, { member_id: me.id, items });
       setCart({});
       Alert.alert(
         '¡Pedido realizado!',
         'Tu pedido ha sido registrado. El staff te lo entregará pronto.',
         [{ text: 'OK', onPress: () => router.back() }],
       );
-    } catch {
-      Alert.alert('Error', 'No se pudo procesar el pedido. Intenta de nuevo.');
+    } catch (err) {
+      Alert.alert(
+        'Error',
+        err instanceof Error ? err.message : 'No se pudo procesar el pedido. Intenta de nuevo.',
+      );
     } finally {
       setOrdering(false);
     }

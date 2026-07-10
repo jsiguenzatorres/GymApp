@@ -26,6 +26,7 @@ import {
   CreateOrderDto,
   UpdateOrderStatusDto,
 } from './dto/create-product.dto';
+import { STAFF_ROLES } from '@gymapp/shared-types';
 
 @RequiresPlan('PRO', 'ELITE', 'ENTERPRISE')
 @UseGuards(JwtAuthGuard, PlanGuard)
@@ -159,8 +160,14 @@ export class MarketplaceController {
 
   @Post('marketplace-orders')
   @HttpCode(HttpStatus.CREATED)
-  createOrder(@CurrentUser() user: JwtPayload, @Body() dto: CreateOrderDto) {
-    return this.marketplaceService.createOrder(this.gymId(user), dto);
+  async createOrder(@CurrentUser() user: JwtPayload, @Body() dto: CreateOrderDto) {
+    const gymId = this.gymId(user);
+    const isStaff = (STAFF_ROLES as readonly string[]).includes(user.role);
+    if (!isStaff) {
+      const own = await this.marketplaceService.isOwnMember(gymId, user.sub, dto.member_id);
+      if (!own) throw new ForbiddenException('No puedes crear pedidos para otro miembro');
+    }
+    return this.marketplaceService.createOrder(gymId, dto);
   }
 
   @Patch('marketplace-orders/:id/status')

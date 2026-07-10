@@ -158,6 +158,14 @@ export class MarketplaceService {
     return o;
   }
 
+  async isOwnMember(gymId: string, userId: string, memberId: string): Promise<boolean> {
+    const member = await this.prisma.member.findFirst({
+      where: { id: memberId, gym_id: gymId, user_id: userId },
+      select: { id: true },
+    });
+    return !!member;
+  }
+
   async createOrder(gymId: string, dto: CreateOrderDto) {
     const productIds = dto.items.map((i) => i.product_id);
     const products = await this.prisma.product.findMany({

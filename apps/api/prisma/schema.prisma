@@ -1664,6 +1664,11 @@ model MemberOnboarding {
   contract_accepted   Boolean  @default(false)
   contract_accepted_at DateTime?
   contract_version    String?  @db.VarChar(20)
+  // Preferencias (resultados deseados, intensidad, estilo de planificación)
+  desired_outcomes    String[] @default([]) // aliviar_estres | mejorar_sueno | mas_energia | ...
+  intensity_preference Int?    // 1 (fácil) a 5 (intenso)
+  planning_style      String?  @db.VarChar(20) // GUIDED | SELF | HYBRID | AI_FULL
+  preferences_completed_at DateTime?
 
   completed_at        DateTime?
   created_at          DateTime @default(now())
