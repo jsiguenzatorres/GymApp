@@ -237,7 +237,7 @@ export default function NutritionScreen() {
     setAiReply('');
     try {
       const res = await nutritionApi.aiSuggest(plan.id, memberId, aiInput.trim(), accessToken);
-      setAiReply(res.suggestion);
+      setAiReply(res.response);
       setAiUsedToday((n) => n + 1);
     } catch {
       setAiReply('Error al conectar con el Nutricionista IA. Intenta de nuevo.');
@@ -274,6 +274,18 @@ export default function NutritionScreen() {
           </Text>
         </View>
       </View>
+
+      <TouchableOpacity
+        style={styles.nutritionistBanner}
+        onPress={() =>
+          router.push({ pathname: '/appointments', params: { presetType: 'NUTRITION' } })
+        }
+      >
+        <Text style={styles.nutritionistBannerText}>
+          📅 Agendar seguimiento con tu nutricionista
+        </Text>
+        <Text style={styles.nutritionistBannerArrow}>→</Text>
+      </TouchableOpacity>
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
@@ -1011,6 +1023,21 @@ const styles = StyleSheet.create({
   title: { fontSize: 16, fontWeight: '700', color: '#111827', flex: 1, textAlign: 'center' },
   tierChip: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 100 },
   tierChipText: { fontSize: 11, fontWeight: '700' },
+  nutritionistBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginHorizontal: 16,
+    marginTop: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#eff6ff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+  },
+  nutritionistBannerText: { fontSize: 13, fontWeight: '600', color: '#1d4ed8', flex: 1 },
+  nutritionistBannerArrow: { fontSize: 15, fontWeight: '700', color: '#1d4ed8' },
   content: { padding: 16, gap: 14, paddingBottom: 32 },
   empty: { alignItems: 'center', paddingVertical: 36, gap: 8 },
   emptyEmoji: { fontSize: 48 },

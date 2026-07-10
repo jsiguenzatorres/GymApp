@@ -12,11 +12,14 @@ import {
 } from '@nestjs/common';
 import { CrmService } from './crm.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { CreateInteractionDto } from './dto/create-interaction.dto';
 import { CreateAppointmentDto, UpdateAppointmentStatusDto } from './dto/create-appointment.dto';
 import { RequestPtSessionDto } from './dto/request-pt-session.dto';
+import { STAFF_ROLES } from '@gymapp/shared-types';
 
 @UseGuards(JwtAuthGuard)
 @Controller()
@@ -59,24 +62,43 @@ export class CrmController {
   }
 
   // GET /api/v1/appointments
+  // Un miembro (no-staff) SIEMPRE ve solo sus propias citas — memberId se resuelve
+  // desde su token y se ignora cualquier memberId que mande en el query, para
+  // evitar que pueda leer las citas de otro miembro del gym.
   @Get('appointments')
-  listAppointments(
+  async listAppointments(
     @CurrentUser() user: JwtPayload,
     @Query('status') status?: string,
     @Query('from') from?: string,
     @Query('to') to?: string,
     @Query('memberId') memberId?: string,
   ) {
-    return this.crmService.listAppointments(this.gymId(user), { status, from, to, memberId });
+    const gymId = this.gymId(user);
+    const isStaff = (STAFF_ROLES as readonly string[]).includes(user.role);
+    const scopedMemberId = isStaff
+      ? memberId
+      : await this.crmService.resolveMemberId(gymId, user.sub);
+    return this.crmService.listAppointments(gymId, { status, from, to, memberId: scopedMemberId });
   }
 
   // POST /api/v1/appointments
+  // Igual que arriba: un miembro solo puede agendar citas para sí mismo.
   @Post('appointments')
-  createAppointment(@Body() dto: CreateAppointmentDto, @CurrentUser() user: JwtPayload) {
-    return this.crmService.createAppointment(this.gymId(user), dto);
+  async createAppointment(@Body() dto: CreateAppointmentDto, @CurrentUser() user: JwtPayload) {
+    const gymId = this.gymId(user);
+    const isStaff = (STAFF_ROLES as readonly string[]).includes(user.role);
+    if (!isStaff) {
+      const own = await this.crmService.isOwnMember(gymId, user.sub, dto.memberId);
+      if (!own) throw new ForbiddenException('No puedes agendar citas para otro miembro');
+    }
+    return this.crmService.createAppointment(gymId, dto);
   }
 
   // PATCH /api/v1/appointments/:id/status
+  // Staff-only — confirmar/rechazar/completar/marcar no-show es una decisión del
+  // gym, no del miembro (que hoy no tiene ningún botón de cancelar en la app).
+  @UseGuards(RolesGuard)
+  @Roles(...STAFF_ROLES)
   @Patch('appointments/:id/status')
   updateAppointmentStatus(
     @Param('id', ParseUUIDPipe) id: string,

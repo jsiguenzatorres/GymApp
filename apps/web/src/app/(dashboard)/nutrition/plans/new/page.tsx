@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Salad, Search, Calculator, Loader2 } from 'lucide-react';
 import CopilotChat from './_components/CopilotChat';
@@ -84,6 +84,7 @@ function inputCls(extra = '') {
 
 export default function NewPlanPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -105,6 +106,18 @@ export default function NewPlanPage() {
   const [tmbTdee, setTmbTdee] = useState<TmbTdeeResult | null>(null);
   const [calculating, setCalculating] = useState(false);
   const [calcError, setCalcError] = useState<string | null>(null);
+
+  // Preseleccionar miembro si se llega con ?memberId=... (ej. desde la ficha nutricional)
+  useEffect(() => {
+    const memberId = searchParams.get('memberId');
+    if (!memberId) return;
+    fetch(`/api/proxy/members/${memberId}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((m: Member | null) => {
+        if (m?.id) setSelectedMember(m);
+      })
+      .catch(() => {});
+  }, [searchParams]);
 
   useEffect(() => {
     if (memberSearch.length < 2) {

@@ -423,9 +423,9 @@ export const nutritionApi = {
   deleteDiaryEntry: (token: string, entryId: string) =>
     apiClient.delete<void>(`/api/v1/food-diary/${entryId}`, undefined, token),
   aiSuggest: (planId: string, memberId: string, context: string, token: string) =>
-    apiClient.post<{ suggestion: string }>(
+    apiClient.post<{ response: string; isStub: boolean; error?: boolean }>(
       '/api/v1/nutrition/ai-suggest',
-      { planId, memberId, context },
+      { plan_id: planId, member_id: memberId, context },
       token,
     ),
   analyzePhoto: (token: string, imageDataUri: string) =>
@@ -1118,7 +1118,13 @@ export const gymApi = {
       is_closed: h?.closed ?? false,
     }));
   },
-  getStaff: (accessToken: string) => apiClient.get<StaffMember[]>('/api/v1/staff', accessToken),
+  getStaff: (accessToken: string, filter?: { role?: string; isActive?: boolean }) => {
+    const params = new URLSearchParams();
+    if (filter?.role) params.set('role', filter.role);
+    if (filter?.isActive !== undefined) params.set('isActive', String(filter.isActive));
+    const qs = params.toString();
+    return apiClient.get<StaffMember[]>(`/api/v1/staff${qs ? `?${qs}` : ''}`, accessToken);
+  },
 };
 
 // ─── Exercises ────────────────────────────────────────────────────────────────

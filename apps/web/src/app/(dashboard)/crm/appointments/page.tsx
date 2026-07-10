@@ -17,7 +17,7 @@ interface Appointment {
   duration_min: number;
   notes: string | null;
   member: { id: string; first_name: string; last_name: string };
-  staff?: { user: { first_name: string; last_name: string } } | null;
+  staff?: { id: string; first_name: string; last_name: string } | null;
 }
 
 const STATUS_COLORS: Record<AppointmentStatus, string> = {
@@ -129,6 +129,7 @@ export default async function AppointmentsPage({
                 <th className="px-4 py-3">Duración</th>
                 <th className="px-4 py-3">Asignado a</th>
                 <th className="px-4 py-3">Estado</th>
+                <th className="px-4 py-3" />
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
@@ -154,7 +155,7 @@ export default async function AppointmentsPage({
                   </td>
                   <td className="px-4 py-3 text-gray-600">{a.duration_min} min</td>
                   <td className="px-4 py-3 text-gray-600">
-                    {a.staff ? `${a.staff.user.first_name} ${a.staff.user.last_name}` : '—'}
+                    {a.staff ? `${a.staff.first_name} ${a.staff.last_name}` : '—'}
                   </td>
                   <td className="px-4 py-3">
                     <span
@@ -162,6 +163,16 @@ export default async function AppointmentsPage({
                     >
                       {APPOINTMENT_STATUS_LABELS[a.status]}
                     </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    {a.appointment_type === AppointmentType.NUTRITION && (
+                      <Link
+                        href={`/nutrition/members/${a.member.id}`}
+                        className="whitespace-nowrap text-xs font-medium text-emerald-700 hover:underline"
+                      >
+                        Ver ficha nutricional →
+                      </Link>
+                    )}
                   </td>
                 </tr>
               ))}

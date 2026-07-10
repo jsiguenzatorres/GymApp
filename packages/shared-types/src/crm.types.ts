@@ -34,6 +34,7 @@ export enum AppointmentType {
   TRAINING = 'TRAINING',
   EVALUATION = 'EVALUATION',
   FOLLOW_UP = 'FOLLOW_UP',
+  NUTRITION = 'NUTRITION',
   OTHER = 'OTHER',
 }
 
@@ -62,6 +63,7 @@ export const APPOINTMENT_TYPE_LABELS: Record<AppointmentType, string> = {
   [AppointmentType.TRAINING]: 'Sesión de entrenamiento',
   [AppointmentType.EVALUATION]: 'Evaluación física',
   [AppointmentType.FOLLOW_UP]: 'Seguimiento',
+  [AppointmentType.NUTRITION]: 'Nutrición',
   [AppointmentType.OTHER]: 'Otro',
 };
 

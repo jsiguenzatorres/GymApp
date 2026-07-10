@@ -15,6 +15,32 @@ import { StaffService } from './staff.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
+import { STAFF_ROLES } from '@gymapp/shared-types';
+
+// Forma pública/reducida de un Staff cuando quien pregunta es un miembro (no-staff) —
+// oculta email, teléfono, last_login_at y 2FA, que no son asunto de un miembro que
+// solo necesita elegir con quién agendar una cita.
+function toMemberSafeStaff(staff: {
+  id: string;
+  first_name: string;
+  last_name: string;
+  avatar_url: string | null;
+  bio: string | null;
+  specialties: string[];
+  is_active: boolean;
+  user: { role: string };
+}) {
+  return {
+    id: staff.id,
+    first_name: staff.first_name,
+    last_name: staff.last_name,
+    avatar_url: staff.avatar_url,
+    bio: staff.bio,
+    specialties: staff.specialties,
+    is_active: staff.is_active,
+    role: staff.user.role,
+  };
+}
 
 @UseGuards(JwtAuthGuard)
 @Controller('staff')
@@ -26,6 +52,10 @@ export class StaffController {
     return user.gymId;
   }
 
+  private isStaff(user: JwtPayload): boolean {
+    return (STAFF_ROLES as readonly string[]).includes(user.role);
+  }
+
   // GET /api/v1/staff/stats
   @Get('stats')
   getStats(@CurrentUser() user: JwtPayload) {
@@ -34,23 +64,25 @@ export class StaffController {
 
   // GET /api/v1/staff
   @Get()
-  list(
+  async list(
     @CurrentUser() user: JwtPayload,
     @Query('role') role?: string,
     @Query('isActive') isActive?: string,
     @Query('search') search?: string,
   ) {
-    return this.staffService.list(this.gymId(user), {
+    const staffList = await this.staffService.list(this.gymId(user), {
       role,
       isActive: isActive === undefined ? undefined : isActive === 'true',
       search,
     });
+    return this.isStaff(user) ? staffList : staffList.map(toMemberSafeStaff);
   }
 
   // GET /api/v1/staff/:id
   @Get(':id')
-  getById(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: JwtPayload) {
-    return this.staffService.getById(this.gymId(user), id);
+  async getById(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: JwtPayload) {
+    const staff = await this.staffService.getById(this.gymId(user), id);
+    return this.isStaff(user) ? staff : toMemberSafeStaff(staff);
   }
 
   // POST /api/v1/staff

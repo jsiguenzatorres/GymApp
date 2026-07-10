@@ -153,7 +153,7 @@ export class CrmService {
   // (status PENDING = "sala de espera"), el trainer/staff confirma o rechaza
   // vía updateAppointmentStatus (ya genérico, arriba).
 
-  private async resolveMemberId(gymId: string, userId: string): Promise<string> {
+  async resolveMemberId(gymId: string, userId: string): Promise<string> {
     const member = await this.prisma.member.findFirst({
       where: { user_id: userId, gym_id: gymId },
       select: { id: true },
@@ -671,23 +671,104 @@ ${
     return member;
   }
 
-  // Si el mensaje del staff menciona el nombre completo de un miembro real del
-  // gym, arma su expediente completo (plan, pagos, asistencia, entrenamiento)
-  // para que ARIA pueda responder preguntas especificas ("cuanto debe Juan
-  // Campos", "ha asistido esta semana") en vez de solo tener acceso a
-  // conteos agregados. Match simple por substring (case-insensitive) — el
-  // volumen de miembros por gym es bajo (cientos, no miles), asi que no
-  // justifica un parser de NLP para esto.
-  private async findMentionedMemberContext(gymId: string, message: string): Promise<string | null> {
-    const lowerMsg = message.toLowerCase();
-    const members = await this.prisma.member.findMany({
-      where: { gym_id: gymId },
-      select: { id: true, first_name: true, last_name: true },
+  /** True si userId es el usuario del member_id dado (para checks de ownership en el controller). */
+  async isOwnMember(gymId: string, userId: string, memberId: string): Promise<boolean> {
+    const member = await this.prisma.member.findFirst({
+      where: { id: memberId, gym_id: gymId, user_id: userId },
+      select: { id: true },
     });
+    return !!member;
+  }
 
-    const mentioned = members.find((m) =>
-      lowerMsg.includes(`${m.first_name} ${m.last_name}`.toLowerCase()),
-    );
+  // Si el mensaje del staff menciona el nombre de un miembro real del gym,
+  // arma su expediente completo (plan, pagos, asistencia, entrenamiento) para
+  // que ARIA pueda responder preguntas especificas ("cuanto debe Juan
+  // Campos", "ha asistido esta semana") en vez de solo tener acceso a
+  // conteos agregados.
+  //
+  // pg_trgm (word_similarity) en vez del `includes` literal anterior — asi
+  // toleramos typos y variantes ("Jhon Campos", "campos, juan", acentos).
+  // NO usamos el mismo patron de nutrition.service.ts (candidatos + Gemini
+  // SIEMPRE que hay ambiguedad): esta funcion corre en CADA mensaje de ARIA
+  // (chat en vivo, la latencia importa — ver comentario de NvidiaNimService),
+  // mientras que el matching de alimentos solo corre cuando el miembro
+  // registra una comida por texto/voz, una accion explicita y poco frecuente.
+  // Por eso aqui Gemini solo se invoca en la banda ambigua intermedia, nunca
+  // en el camino feliz (mencion clara) ni cuando claramente no hay mencion.
+  // Cuando SI se invoca, tiene el mismo respaldo de segundo nivel que el chat
+  // principal de ARIA (NVIDIA NIM / Gemma si Gemini falla) — ver el catch de
+  // ariaChat() arriba.
+  private async findMentionedMemberContext(gymId: string, message: string): Promise<string | null> {
+    const AUTO_ACCEPT_WSIM = 0.72;
+    const AMBIGUOUS_MIN_WSIM = 0.45;
+
+    const candidates = await this.prisma.$queryRaw<
+      { id: string; first_name: string; last_name: string; wsim: number }[]
+    >`
+      SELECT id, first_name, last_name,
+        word_similarity(lower(first_name || ' ' || last_name), lower(${message})) AS wsim
+      FROM members
+      WHERE gym_id = ${gymId}::uuid
+      ORDER BY wsim DESC
+      LIMIT 5
+    `;
+
+    if (candidates.length === 0 || candidates[0].wsim < AMBIGUOUS_MIN_WSIM) return null;
+
+    let mentioned = candidates[0].wsim >= AUTO_ACCEPT_WSIM ? candidates[0] : null;
+
+    if (!mentioned) {
+      // Banda ambigua (0.45–0.72): un nombre parecido aparece, pero no con
+      // confianza suficiente para asumirlo sin más — solo aquí vale la pena
+      // el costo/latencia extra de preguntarle a Gemini.
+      const prompt = `Un miembro del staff de un gimnasio escribió este mensaje a un asistente de CRM:
+"${message}"
+
+¿El mensaje se refiere específicamente a UNA de estas personas (miembros del gym)? Responde solo si
+hay evidencia razonable en el mensaje (nombre, apellido, o ambos) — NO asumas por coincidencia parcial
+o un solo nombre común que podría ser cualquiera.
+
+${candidates.map((c, i) => `${i}. ${c.first_name} ${c.last_name}`).join('\n')}
+
+Responde EXCLUSIVAMENTE con JSON: { "index": indiceOnull }`;
+
+      let raw: string | null = null;
+      try {
+        raw = await this.gemini.generate(prompt);
+      } catch (err) {
+        this.logger.warn(`ARIA member-mention: Gemini falló (${(err as Error).message})`);
+        // Mismo respaldo de segundo nivel que el chat principal de ARIA — si
+        // Gemini no responde, se intenta con NVIDIA NIM (Gemma) antes de
+        // rendirse, en vez de perder la desambiguación por completo.
+        if (this.nvidiaNim.isEnabled) {
+          try {
+            raw = await this.nvidiaNim.chat('', prompt);
+          } catch (nimErr) {
+            this.logger.warn(
+              `ARIA member-mention: NVIDIA NIM también falló (${(nimErr as Error).message})`,
+            );
+          }
+        }
+      }
+
+      if (raw) {
+        try {
+          const cleaned = raw
+            .replace(/^```json\s*/i, '')
+            .replace(/```\s*$/i, '')
+            .trim();
+          const parsed = JSON.parse(cleaned) as { index: number | null };
+          if (parsed.index !== null && parsed.index !== undefined && candidates[parsed.index]) {
+            mentioned = candidates[parsed.index];
+          }
+        } catch (parseErr) {
+          this.logger.warn(
+            `ARIA member-mention: respuesta no parseable (${(parseErr as Error).message})`,
+          );
+        }
+      }
+    }
+
     if (!mentioned) return null;
 
     const dossier = await this.buildMemberDossier(gymId, mentioned.id);

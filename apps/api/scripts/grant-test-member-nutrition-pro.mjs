@@ -1,14 +1,15 @@
 #!/usr/bin/env node
 /**
- * Activa el add-on NUTRITION tier PRO para el miembro de prueba
+ * Activa el add-on NUTRITION para el miembro de prueba
  * (miembro.prueba@gymapp.app), replicando la lógica de AddonsService.assignAddon
  * (cancela cualquier addon NUTRITION activo previo, crea uno nuevo ACTIVE).
  *
  * Uso:
- *   node scripts/grant-test-member-nutrition-pro.mjs
+ *   node scripts/grant-test-member-nutrition-pro.mjs [PRO|ELITE]
+ *   (sin argumento, activa ELITE — el tier más alto, para probar todo el módulo)
  *
  * Requisitos: DATABASE_URL en env (export desde apps/api/.env antes de correr).
- * Es re-ejecutable sin duplicar — si ya hay un addon PRO activo, no hace nada.
+ * Es re-ejecutable sin duplicar — si ya hay un addon de ese tier activo, no hace nada.
  */
 
 import { PrismaClient } from '@prisma/client';
@@ -16,10 +17,16 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 const TEST_EMAIL = 'miembro.prueba@gymapp.app';
+const TIER = (process.argv[2] ?? 'ELITE').toUpperCase();
 
 async function main() {
+  if (!['PRO', 'ELITE'].includes(TIER)) {
+    throw new Error(`Tier inválido: ${TIER}. Usa PRO o ELITE.`);
+  }
+
   const user = await prisma.user.findUnique({ where: { email: TEST_EMAIL } });
-  if (!user) throw new Error(`No existe el usuario ${TEST_EMAIL} — corre create-test-member-full.mjs primero.`);
+  if (!user)
+    throw new Error(`No existe el usuario ${TEST_EMAIL} — corre create-test-member-full.mjs primero.`);
 
   const member = await prisma.member.findUnique({ where: { user_id: user.id } });
   if (!member) throw new Error('No se encontró el registro de Member para el usuario de prueba.');
@@ -27,8 +34,8 @@ async function main() {
   const existing = await prisma.memberAddon.findFirst({
     where: { member_id: member.id, type: 'NUTRITION', status: 'ACTIVE' },
   });
-  if (existing?.tier === 'PRO') {
-    console.log(`Ya tiene NUTRITION PRO activo (addon ${existing.id}). Nada que hacer.`);
+  if (existing?.tier === TIER) {
+    console.log(`Ya tiene NUTRITION ${TIER} activo (addon ${existing.id}). Nada que hacer.`);
     return;
   }
 
@@ -37,7 +44,7 @@ async function main() {
       where: { member_id: member.id, type: 'NUTRITION', status: 'ACTIVE' },
       data: {
         status: 'CANCELLED',
-        cancellation_reason: 'Reemplazado para pruebas — activación NutriPro',
+        cancellation_reason: `Reemplazado para pruebas — activación Nutri${TIER}`,
         ends_at: new Date(),
       },
     });
@@ -45,7 +52,7 @@ async function main() {
       data: {
         member_id: member.id,
         type: 'NUTRITION',
-        tier: 'PRO',
+        tier: TIER,
         status: 'ACTIVE',
         ends_at: null,
         price_paid: 0,
@@ -55,7 +62,7 @@ async function main() {
     });
   });
 
-  console.log(`NutriPro activado — addon ${addon.id} para member ${member.id} (${TEST_EMAIL})`);
+  console.log(`Nutri${TIER} activado — addon ${addon.id} para member ${member.id} (${TEST_EMAIL})`);
 }
 
 main()

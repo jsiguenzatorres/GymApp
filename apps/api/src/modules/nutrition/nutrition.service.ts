@@ -779,6 +779,108 @@ Responde EXCLUSIVAMENTE con JSON válido:
   }
 
   // ─── TEXTO NL: parser de "comí 200g pollo" → log de comida ────────────────
+  // ─── MATCHING DIFUSO DE ALIMENTOS (texto/voz) ────────────────────────────────
+  // pg_trgm acota candidatos por similitud de nombre; si el match no es obvio,
+  // Gemini elige cuál corresponde de verdad — cubre sinónimos, regionalismos y
+  // formas de cocción distintas que un `contains` literal no resuelve (ej.
+  // "pechuga de pollo a la plancha" dicho por el usuario vs "Pollo pechuga sin
+  // piel (cocido)" en el catálogo).
+  private async matchFoodItemsFuzzy(
+    gymId: string,
+    items: Array<{ name: string }>,
+  ): Promise<
+    ({
+      id: string;
+      name: string;
+      kcal_per_100g: number;
+      protein_per_100g: number;
+      carbs_per_100g: number;
+      fat_per_100g: number;
+    } | null)[]
+  > {
+    type Candidate = {
+      id: string;
+      name: string;
+      kcal_per_100g: number;
+      protein_per_100g: number;
+      carbs_per_100g: number;
+      fat_per_100g: number;
+      sim: number;
+    };
+
+    const AUTO_ACCEPT_SIM = 0.5;
+    const MIN_CANDIDATE_SIM = 0.1;
+
+    const perItemCandidates = await Promise.all(
+      items.map(
+        (item) =>
+          this.prisma.$queryRaw<Candidate[]>`
+          SELECT id, name, kcal_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g,
+                 similarity(lower(name), lower(${item.name})) AS sim
+          FROM food_items
+          WHERE (gym_id = ${gymId}::uuid OR gym_id IS NULL)
+            AND similarity(lower(name), lower(${item.name})) > ${MIN_CANDIDATE_SIM}
+          ORDER BY sim DESC
+          LIMIT 8
+        `,
+      ),
+    );
+
+    const resolved: (Candidate | null)[] = new Array(items.length).fill(null);
+    const pending: { idx: number; item: { name: string }; candidates: Candidate[] }[] = [];
+
+    perItemCandidates.forEach((candidates, idx) => {
+      if (candidates.length === 0) return;
+      if (candidates[0].sim >= AUTO_ACCEPT_SIM) {
+        resolved[idx] = candidates[0];
+      } else {
+        pending.push({ idx, item: items[idx], candidates });
+      }
+    });
+
+    if (pending.length > 0) {
+      const prompt = `Eres un asistente que empareja alimentos que una persona dijo con el catálogo
+real de una base de datos nutricional. La persona puede usar sinónimos, regionalismos de
+Latinoamérica/El Salvador, o describir la preparación (ej: "a la plancha", "frito", "cocido")
+que no cambia sustancialmente el alimento base.
+
+Para cada alimento dicho, elige el índice del candidato del catálogo que sea NUTRICIONALMENTE
+el mismo alimento (aunque el nombre no coincida literalmente), o null si ninguno corresponde
+realmente.
+
+${pending
+  .map(
+    (p, i) =>
+      `${i}. Dicho: "${p.item.name}"\nCandidatos: ${p.candidates
+        .map((c, ci) => `[${ci}] ${c.name}`)
+        .join(', ')}`,
+  )
+  .join('\n')}
+
+Responde EXCLUSIVAMENTE con JSON: { "matches": [indiceCandidatoOnull, ...] } en el mismo orden.`;
+
+      try {
+        const raw = await this.gemini.generate(prompt);
+        const cleaned = raw
+          .replace(/^```json\s*/i, '')
+          .replace(/```\s*$/i, '')
+          .trim();
+        const parsed = JSON.parse(cleaned) as { matches: (number | null)[] };
+        pending.forEach((p, i) => {
+          const choice = parsed.matches?.[i];
+          if (choice !== null && choice !== undefined && p.candidates[choice]) {
+            resolved[p.idx] = p.candidates[choice];
+          }
+        });
+      } catch (err) {
+        this.logger.warn(`Fuzzy food match disambiguation failed: ${(err as Error).message}`);
+        // Sin desambiguación por IA — quedan sin match (nunca se inventa el alimento)
+      }
+    }
+
+    return resolved;
+  }
+
   async logFromText(gymId: string, memberId: string, text: string) {
     if (!text?.trim()) return { success: false, error: 'Texto vacío' };
 
@@ -823,18 +925,15 @@ Si no puedes entender el mensaje, devuelve { "items": [], "note": "explicación"
         };
       }
 
-      // Buscar food_items en BD y registrar lo que matchee
+      // Buscar food_items en BD (matching difuso) y registrar lo que matchee
       const today = new Date().toISOString().slice(0, 10);
       const registered: Array<{ name: string; grams: number; kcal: number; matched: boolean }> = [];
 
-      for (const item of parsed.items) {
-        const food = await this.prisma.foodItem.findFirst({
-          where: {
-            OR: [{ gym_id: gymId }, { gym_id: null }],
-            name: { contains: item.name, mode: 'insensitive' },
-          },
-          orderBy: { is_verified: 'desc' },
-        });
+      const matches = await this.matchFoodItemsFuzzy(gymId, parsed.items);
+
+      for (let i = 0; i < parsed.items.length; i++) {
+        const item = parsed.items[i];
+        const food = matches[i];
 
         if (!food) {
           registered.push({ name: item.name, grams: item.grams, kcal: 0, matched: false });
@@ -1143,6 +1242,75 @@ Responde EXCLUSIVAMENTE con JSON válido:
         resolution_notes: dto.resolution_notes,
       },
     });
+  }
+
+  // ─── FICHA DEL MIEMBRO (diagnóstico para el nutricionista) ───────────────────
+  // Consolida todo lo que el nutricionista necesita para evaluar a un miembro
+  // antes/durante una cita: perfil, plan activo + adherencia real (vs. registrado
+  // en el diario), historial reciente de comidas, alertas de riesgo y exámenes
+  // de laboratorio. Solo lectura — no crea ni modifica nada.
+  async getMemberOverview(gymId: string, memberId: string) {
+    const member = await this.prisma.member.findFirst({
+      where: { id: memberId, gym_id: gymId },
+      select: {
+        id: true,
+        first_name: true,
+        last_name: true,
+        avatar_url: true,
+        birthdate: true,
+        gender: true,
+        status: true,
+      },
+    });
+    if (!member) throw new NotFoundException('Miembro no encontrado');
+
+    const [profile, plans, diaryRange, riskAlerts, labResults, recentEntries] = await Promise.all([
+      this.getNutritionProfile(gymId, memberId),
+      this.listPlans(gymId, memberId),
+      this.getDiaryRange(gymId, memberId, 30),
+      this.prisma.nutritionRiskAlert.findMany({
+        where: { gym_id: gymId, member_id: memberId },
+        orderBy: { created_at: 'desc' },
+        take: 5,
+      }),
+      this.listLabResults(gymId, memberId),
+      this.prisma.foodDiaryEntry.findMany({
+        where: { gym_id: gymId, member_id: memberId },
+        include: { food_item: { select: { name: true } } },
+        orderBy: { date: 'desc' },
+        take: 15,
+      }),
+    ]);
+
+    const activePlan = plans.find((p) => p.is_active) ?? null;
+    const daysInRange = diaryRange.daily.length;
+
+    const adherence = activePlan
+      ? {
+          kcal_target: activePlan.kcal_target,
+          avg_kcal_30d: diaryRange.avg_kcal,
+          adherence_pct:
+            activePlan.kcal_target > 0
+              ? Math.round((diaryRange.avg_kcal / activePlan.kcal_target) * 100)
+              : null,
+          days_logged_30d: diaryRange.days_with_logs,
+          days_in_range: daysInRange,
+          logging_consistency_pct:
+            daysInRange > 0 ? Math.round((diaryRange.days_with_logs / daysInRange) * 100) : 0,
+        }
+      : null;
+
+    return {
+      member,
+      profile,
+      active_plan: activePlan,
+      plans_history: plans.filter((p) => !p.is_active),
+      adherence,
+      diary_range: diaryRange,
+      recent_entries: recentEntries,
+      risk_alerts: riskAlerts,
+      lab_results: labResults,
+    };
   }
 
   // ─── STATS ────────────────────────────────────────────────────────────────────

@@ -135,6 +135,19 @@ export class NutritionController {
     return this.nutritionService.reviewRiskAlert(this.gymId(user), id, dto);
   }
 
+  // ─── FICHA DEL MIEMBRO — staff-only ─────────────────────────────────────────
+  // Para que el nutricionista evalúe progreso, adherencia y registro de
+  // alimentación de un miembro antes/durante una cita.
+  @UseGuards(RolesGuard)
+  @Roles(...NUTRITION_STAFF_ROLES)
+  @Get('nutrition/members/:memberId/overview')
+  getMemberOverview(
+    @CurrentUser() user: JwtPayload,
+    @Param('memberId', ParseUUIDPipe) memberId: string,
+  ) {
+    return this.nutritionService.getMemberOverview(this.gymId(user), memberId);
+  }
+
   // ─── ANÁLISIS DE LABORATORIO (D-29) — staff-only ────────────────────────────
 
   @UseGuards(RolesGuard)

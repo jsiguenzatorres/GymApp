@@ -13,11 +13,34 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useAuthStore } from '@/store/auth.store';
-import { apiClient, memberApi } from '@/lib/api-client';
+import { apiClient, memberApi, gymApi, StaffMember } from '@/lib/api-client';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+
+type AppointmentType =
+  | 'CONSULTATION'
+  | 'TRAINING'
+  | 'EVALUATION'
+  | 'FOLLOW_UP'
+  | 'NUTRITION'
+  | 'OTHER';
+
+const APPOINTMENT_TYPES: { value: AppointmentType; label: string }[] = [
+  { value: 'CONSULTATION', label: 'Consulta' },
+  { value: 'TRAINING', label: 'Entrenamiento' },
+  { value: 'EVALUATION', label: 'Evaluación física' },
+  { value: 'FOLLOW_UP', label: 'Seguimiento' },
+  { value: 'NUTRITION', label: 'Nutrición' },
+  { value: 'OTHER', label: 'Otro' },
+];
+
+// Rol de staff a filtrar según el tipo de cita — solo Nutrición tiene selector
+// de profesional por ahora (lo que se pidió); los demás tipos quedan como antes.
+const STAFF_ROLE_BY_TYPE: Partial<Record<AppointmentType, string>> = {
+  NUTRITION: 'NUTRITIONIST',
+};
 
 interface Appointment {
   id: string;
@@ -138,9 +161,9 @@ function EmptyState({ tab }: { tab: Tab }) {
 export default function AppointmentsScreen() {
   const { accessToken } = useAuthStore();
   const token = accessToken ?? '';
+  const { presetType } = useLocalSearchParams<{ presetType?: string }>();
 
   const [memberId, setMemberId] = useState<string>('');
-  const [gymId, setGymId] = useState<string>('');
   const [activeTab, setActiveTab] = useState<Tab>('upcoming');
   const [currentView, setCurrentView] = useState<ScreenView>('list');
 
@@ -151,6 +174,10 @@ export default function AppointmentsScreen() {
 
   // Form state
   const [formTitle, setFormTitle] = useState('');
+  const [formType, setFormType] = useState<AppointmentType>('CONSULTATION');
+  const [formStaffId, setFormStaffId] = useState<string | null>(null);
+  const [staffOptions, setStaffOptions] = useState<StaffMember[]>([]);
+  const [loadingStaff, setLoadingStaff] = useState(false);
   const [formDate, setFormDate] = useState('');
   const [formTime, setFormTime] = useState('');
   const [formDuration, setFormDuration] = useState('60');
@@ -164,16 +191,36 @@ export default function AppointmentsScreen() {
       try {
         const profile = await memberApi.getMe(token);
         setMemberId(profile.id);
-        // gym_id comes from the profile; MemberProfile type has it via the user relation
-        // The API returns gym_id at top level for members
-        const raw = profile as unknown as { gym_id?: string; gymId?: string };
-        setGymId(raw.gym_id ?? raw.gymId ?? '');
       } catch {
         // proceed with empty ids — fetch will still attempt
       }
     }
     init();
   }, [token]);
+
+  // ── Entrada directa desde otra pantalla (ej. "Agendar con tu nutricionista") ──
+  useEffect(() => {
+    if (presetType && APPOINTMENT_TYPES.some((t) => t.value === presetType)) {
+      setFormType(presetType as AppointmentType);
+      setCurrentView('form');
+    }
+  }, [presetType]);
+
+  // ── Cargar profesionales del rol correspondiente al tipo de cita elegido ──
+  useEffect(() => {
+    const role = STAFF_ROLE_BY_TYPE[formType];
+    setFormStaffId(null);
+    if (!role || !token) {
+      setStaffOptions([]);
+      return;
+    }
+    setLoadingStaff(true);
+    gymApi
+      .getStaff(token, { role, isActive: true })
+      .then((list) => setStaffOptions(Array.isArray(list) ? list : []))
+      .catch(() => setStaffOptions([]))
+      .finally(() => setLoadingStaff(false));
+  }, [formType, token]);
 
   // ── Fetch appointments ──
   const fetchAppointments = useCallback(
@@ -225,18 +272,19 @@ export default function AppointmentsScreen() {
       return;
     }
 
-    const durationMinutes = parseInt(formDuration) || 60;
+    const durationMin = parseInt(formDuration) || 60;
 
     setSubmitting(true);
     try {
       await apiClient.post(
         '/api/v1/appointments',
         {
-          gymId,
           memberId,
+          staffId: formStaffId ?? undefined,
           title: formTitle.trim(),
+          appointmentType: formType,
           scheduledAt: scheduledAt.toISOString(),
-          durationMinutes,
+          durationMin,
           notes: formNotes.trim() || undefined,
         },
         token,
@@ -246,6 +294,8 @@ export default function AppointmentsScreen() {
 
       // Reset form
       setFormTitle('');
+      setFormType('CONSULTATION');
+      setFormStaffId(null);
       setFormDate('');
       setFormTime('');
       setFormDuration('60');
@@ -318,6 +368,57 @@ export default function AppointmentsScreen() {
         )}
 
         <Text style={styles.formSectionTitle}>Nueva cita</Text>
+
+        <Text style={styles.fieldLabel}>Tipo de cita</Text>
+        <View style={styles.typeRow}>
+          {APPOINTMENT_TYPES.map((t) => (
+            <TouchableOpacity
+              key={t.value}
+              onPress={() => setFormType(t.value)}
+              disabled={submitting}
+              style={[styles.typeChip, formType === t.value && styles.typeChipActive]}
+            >
+              <Text
+                style={[styles.typeChipText, formType === t.value && styles.typeChipTextActive]}
+              >
+                {t.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {STAFF_ROLE_BY_TYPE[formType] && (
+          <>
+            <Text style={styles.fieldLabel}>Nutricionista (opcional)</Text>
+            {loadingStaff ? (
+              <ActivityIndicator color="#1d4ed8" style={{ marginVertical: 8 }} />
+            ) : staffOptions.length === 0 ? (
+              <Text style={styles.noStaffText}>
+                No hay nutricionistas activos en este gym por ahora.
+              </Text>
+            ) : (
+              <View style={styles.typeRow}>
+                {staffOptions.map((s) => (
+                  <TouchableOpacity
+                    key={s.id}
+                    onPress={() => setFormStaffId((prev) => (prev === s.id ? null : s.id))}
+                    disabled={submitting}
+                    style={[styles.typeChip, formStaffId === s.id && styles.typeChipActive]}
+                  >
+                    <Text
+                      style={[
+                        styles.typeChipText,
+                        formStaffId === s.id && styles.typeChipTextActive,
+                      ]}
+                    >
+                      {s.first_name} {s.last_name}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+          </>
+        )}
 
         <Text style={styles.fieldLabel}>Motivo / Título *</Text>
         <TextInput
@@ -669,6 +770,36 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     fontSize: 15,
     color: '#111827',
+  },
+  typeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  typeChip: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    backgroundColor: '#fff',
+  },
+  typeChipActive: {
+    backgroundColor: '#1d4ed8',
+    borderColor: '#1d4ed8',
+  },
+  typeChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  typeChipTextActive: {
+    color: '#fff',
+  },
+  noStaffText: {
+    fontSize: 13,
+    color: '#9ca3af',
+    fontStyle: 'italic',
   },
   textArea: {
     minHeight: 80,
