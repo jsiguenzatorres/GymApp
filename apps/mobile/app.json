@@ -70,7 +70,7 @@
       "typedRoutes": true
     },
     "runtimeVersion": {
-      "policy": "fingerprint"
+      "policy": "appVersion"
     },
     "updates": {
       "url": "https://u.expo.dev/5853d764-b3de-4bfe-9e87-78ddb0c8dfe3"
