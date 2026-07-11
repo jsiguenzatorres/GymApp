@@ -30,6 +30,7 @@ import {
   Webhook,
   Tag,
   UserCheck,
+  CalendarClock,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -41,31 +42,41 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
+  // Operación diaria
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/analytics', label: 'Analytics', icon: BarChart3 },
+  { href: '/access', label: 'Control de Acceso', icon: ScanLine },
   { href: '/members', label: 'Miembros', icon: Users },
-  { href: '/staff', label: 'Staff', icon: UserCog },
-  { href: '/membership-types', label: 'Membresías', icon: CreditCard },
   { href: '/payments', label: 'Pagos', icon: DollarSign },
-  { href: '/coupons', label: 'Cupones', icon: Tag },
+  { href: '/crm', label: 'CRM / ARIA', icon: BrainCircuit },
+
+  // Programas del gym
   { href: '/workouts', label: 'Entrenamiento', icon: Dumbbell },
   { href: '/workouts/zeus', label: 'ZEUS Coach IA', icon: Zap },
-  { href: '/marketplace', label: 'Marketplace', icon: ShoppingBag },
   { href: '/nutrition', label: 'Nutrición IA', icon: Salad },
-  { href: '/leads', label: 'Pipeline de Leads', icon: UserPlus },
-  { href: '/feedback', label: 'Feedback & NPS', icon: MessageSquare },
+  { href: '/crm/appointments', label: 'Citas', icon: CalendarClock },
   { href: '/classes', label: 'Clases & Horarios', icon: Calendar },
   { href: '/crm/pt-sessions', label: 'Sesiones PT', icon: UserCheck },
+
+  // Comercial / ingresos
+  { href: '/membership-types', label: 'Membresías', icon: CreditCard },
+  { href: '/subscriptions', label: 'Suscripciones', icon: Repeat },
+  { href: '/marketplace', label: 'Marketplace', icon: ShoppingBag },
+  { href: '/monthly-boxes', label: 'Caja del mes', icon: Package },
+  { href: '/coupons', label: 'Cupones', icon: Tag },
+
+  // Comunidad / engagement
   { href: '/gamification', label: 'Gamificación', icon: Trophy },
   { href: '/challenges', label: 'Retos del gym', icon: Target },
   { href: '/rewards', label: 'Tienda recompensas', icon: Gift },
+  { href: '/feedback', label: 'Feedback & NPS', icon: MessageSquare },
+  { href: '/leads', label: 'Pipeline de Leads', icon: UserPlus },
   { href: '/blog', label: 'Blog', icon: Newspaper },
-  { href: '/monthly-boxes', label: 'Caja del mes', icon: Package },
-  { href: '/subscriptions', label: 'Suscripciones', icon: Repeat },
+
+  // Administración (uso poco frecuente)
+  { href: '/staff', label: 'Staff', icon: UserCog },
   { href: '/broadcast', label: 'Mensaje masivo', icon: Megaphone },
   { href: '/webhooks', label: 'Webhooks', icon: Webhook },
-  { href: '/access', label: 'Control de Acceso', icon: ScanLine },
-  { href: '/crm', label: 'CRM / ARIA', icon: BrainCircuit },
 ];
 
 interface SidebarClientProps {

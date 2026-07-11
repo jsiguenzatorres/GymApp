@@ -7,9 +7,9 @@ import {
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../database/prisma.service';
-import { GeminiService } from '../ai/gemini.service';
 import { RagService } from '../ai/rag.service';
 import { ConversationService } from '../ai/conversation.service';
+import { AiFallbackService } from '../ai/ai-fallback.service';
 import { CreateExerciseDto } from './dto/create-exercise.dto';
 import { CreatePlanDto } from './dto/create-plan.dto';
 import { StartSessionDto } from './dto/start-session.dto';
@@ -21,9 +21,9 @@ export class WorkoutService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly gemini: GeminiService,
     private readonly rag: RagService,
     private readonly conversation: ConversationService,
+    private readonly aiFallback: AiFallbackService,
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
@@ -825,14 +825,18 @@ INSTRUCCIONES:
             parts: [{ text: h.content }],
           }))
         : this.conversation.toGeminiHistory(history);
-      const response = await this.gemini.chat(systemPrompt, message, geminiHistory);
+      const { response, provider } = await this.aiFallback.chat(
+        systemPrompt,
+        message,
+        geminiHistory,
+      );
       // Solo persistir historial si hay miembro real (FK constraint)
       if (memberId && member) {
         void this.conversation.addMessages(gymId, memberId, 'ZEUS', message, response);
       }
-      return { response, isStub: false };
+      return { response, isStub: false, fallbackModel: provider !== 'gemini' };
     } catch (err) {
-      this.logger.error(`ZEUS Gemini error: ${(err as Error).message}`);
+      this.logger.error(`ZEUS: los 3 proveedores de IA fallaron: ${(err as Error).message}`);
       return {
         response:
           'ZEUS no disponible en este momento. Verifica que GEMINI_API_KEY esté configurada en el backend.',

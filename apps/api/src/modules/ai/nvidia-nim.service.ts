@@ -11,13 +11,21 @@ export class NvidiaNimService {
   private readonly logger = new Logger(NvidiaNimService.name);
   private readonly apiKey: string | undefined;
   private readonly model: string;
+  private readonly tertiaryModel: string;
 
   constructor(private readonly config: ConfigService) {
     this.apiKey = this.config.get<string>('NVIDIA_NIM_API_KEY');
     // gemma-4-31b-it: chat estandar (no "razonamiento"), ~600-1500ms al primer
     // token vs 24-180s de los modelos Nemotron/MiniMax de razonamiento — la
-    // latencia importa aqui porque ARIA/Business Coach responden en vivo.
+    // latencia importa aqui porque ARIA/ZEUS/Business Coach responden en vivo.
+    // Es el respaldo SECUNDARIO (después de Gemini).
     this.model = this.config.get<string>('NVIDIA_NIM_MODEL') ?? 'google/gemma-4-31b-it';
+    // Respaldo TERCIARIO — solo si Gemini y Gemma fallan ambos. Más grande y
+    // multimodal (Qwen3.5 397B, MoE con ~17B parametros activos por token) que
+    // Gemma, así que probablemente más lento — por eso va de último recurso,
+    // no como segunda opción. Ver docs/INVESTIGACION_MODELOS_IA_NVIDIA.md.
+    this.tertiaryModel =
+      this.config.get<string>('NVIDIA_NIM_TERTIARY_MODEL') ?? 'qwen/qwen3.5-397b-a17b';
     if (!this.apiKey) {
       this.logger.warn('No NVIDIA_NIM_API_KEY — fallback a NVIDIA NIM deshabilitado');
     }
@@ -31,6 +39,7 @@ export class NvidiaNimService {
     systemPrompt: string,
     userMessage: string,
     history: { role: 'user' | 'model'; parts: { text: string }[] }[] = [],
+    model?: string,
   ): Promise<string> {
     if (!this.apiKey) {
       throw new Error('NVIDIA NIM no configurado (falta NVIDIA_NIM_API_KEY)');
@@ -53,7 +62,7 @@ export class NvidiaNimService {
         Accept: 'application/json',
       },
       body: JSON.stringify({
-        model: this.model,
+        model: model ?? this.model,
         messages,
         temperature: 0.6,
         max_tokens: 1024,
@@ -69,5 +78,14 @@ export class NvidiaNimService {
     const text = data.choices?.[0]?.message?.content;
     if (!text) throw new Error('NVIDIA NIM: respuesta sin contenido');
     return text;
+  }
+
+  /** Respaldo terciario (Qwen3.5 397B) — solo llamar cuando Gemini Y Gemma ya fallaron. */
+  async chatTertiary(
+    systemPrompt: string,
+    userMessage: string,
+    history: { role: 'user' | 'model'; parts: { text: string }[] }[] = [],
+  ): Promise<string> {
+    return this.chat(systemPrompt, userMessage, history, this.tertiaryModel);
   }
 }

@@ -5,6 +5,7 @@ import { TtsService } from './tts.service';
 import { SttService } from './stt.service';
 import { ConversationService } from './conversation.service';
 import { NvidiaNimService } from './nvidia-nim.service';
+import { AiFallbackService } from './ai-fallback.service';
 import { AiController } from './ai.controller';
 import { DatabaseModule } from '../database/database.module';
 import { PlanGuard } from '../../common/guards/plan.guard';
@@ -20,6 +21,7 @@ import { PlanGuard } from '../../common/guards/plan.guard';
     SttService,
     ConversationService,
     NvidiaNimService,
+    AiFallbackService,
     PlanGuard,
   ],
   exports: [
@@ -29,6 +31,7 @@ import { PlanGuard } from '../../common/guards/plan.guard';
     SttService,
     ConversationService,
     NvidiaNimService,
+    AiFallbackService,
   ],
 })
 export class AiModule {}

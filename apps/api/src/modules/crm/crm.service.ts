@@ -1,10 +1,9 @@
 ﻿import { Injectable, NotFoundException, ConflictException, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../database/prisma.service';
-import { GeminiService } from '../ai/gemini.service';
 import { RagService } from '../ai/rag.service';
 import { ConversationService } from '../ai/conversation.service';
-import { NvidiaNimService } from '../ai/nvidia-nim.service';
+import { AiFallbackService } from '../ai/ai-fallback.service';
 import { NotificationService } from '../notifications/notification.service';
 import { CreateInteractionDto } from './dto/create-interaction.dto';
 import { CreateAppointmentDto, UpdateAppointmentStatusDto } from './dto/create-appointment.dto';
@@ -20,11 +19,10 @@ export class CrmService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly gemini: GeminiService,
     private readonly rag: RagService,
     private readonly conversation: ConversationService,
     private readonly notification: NotificationService,
-    private readonly nvidiaNim: NvidiaNimService,
+    private readonly aiFallback: AiFallbackService,
   ) {}
 
   // â”€â”€â”€ INTERACTIONS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -614,7 +612,11 @@ ${
       : this.conversation.toGeminiHistory(dbHistory);
 
     try {
-      const response = await this.gemini.chat(systemPrompt, message, geminiHistory);
+      const { response, provider } = await this.aiFallback.chat(
+        systemPrompt,
+        message,
+        geminiHistory,
+      );
       if (memberId)
         void this.conversation.addMessages(
           gymId,
@@ -622,37 +624,12 @@ ${
           'ARIA',
           message,
           response,
-          'gemini-2.5-flash-lite',
+          provider === 'gemini' ? 'gemini-2.5-flash-lite' : `nvidia-nim-${provider}`,
         );
-      return { response, isStub: false };
+      return { response, isStub: false, fallbackModel: provider !== 'gemini' };
     } catch (err) {
       const errMsg = (err as Error).message ?? String(err);
-      this.logger.error(`ARIA Gemini error: ${errMsg}`);
-
-      // Gemini falló (cuota agotada, key inválida, red, contenido bloqueado,
-      // cualquier motivo) — intenta con NVIDIA NIM como respaldo de segundo
-      // nivel antes de rendirse. Antes esto solo aplicaba cuando el mensaje
-      // coincidía textualmente con "All Gemini API keys exhausted", lo que
-      // dejaba sin respaldo cualquier otro tipo de fallo de Gemini (ej. una
-      // sola key invalida/revocada falla de inmediato sin ese texto exacto).
-      if (this.nvidiaNim.isEnabled) {
-        try {
-          const response = await this.nvidiaNim.chat(systemPrompt, message, geminiHistory);
-          if (memberId)
-            void this.conversation.addMessages(
-              gymId,
-              memberId,
-              'ARIA',
-              message,
-              response,
-              'nvidia-nim-fallback',
-            );
-          return { response, isStub: false, fallbackModel: true };
-        } catch (nimErr) {
-          this.logger.error(`ARIA NVIDIA NIM fallback error: ${(nimErr as Error).message}`);
-        }
-      }
-
+      this.logger.error(`ARIA: los 3 proveedores de IA fallaron: ${errMsg}`);
       return {
         response:
           'Lo siento, el servicio de IA no está disponible en este momento. Por favor intenta de nuevo en unos segundos.',
@@ -734,21 +711,14 @@ Responde EXCLUSIVAMENTE con JSON: { "index": indiceOnull }`;
 
       let raw: string | null = null;
       try {
-        raw = await this.gemini.generate(prompt);
+        // Misma cadena de respaldo de 3 niveles que el chat principal de ARIA
+        // (Gemini → Gemma → Qwen) — si todos fallan, se pierde la
+        // desambiguación pero ARIA sigue respondiendo sin el expediente extra.
+        raw = (await this.aiFallback.chat('', prompt)).response;
       } catch (err) {
-        this.logger.warn(`ARIA member-mention: Gemini falló (${(err as Error).message})`);
-        // Mismo respaldo de segundo nivel que el chat principal de ARIA — si
-        // Gemini no responde, se intenta con NVIDIA NIM (Gemma) antes de
-        // rendirse, en vez de perder la desambiguación por completo.
-        if (this.nvidiaNim.isEnabled) {
-          try {
-            raw = await this.nvidiaNim.chat('', prompt);
-          } catch (nimErr) {
-            this.logger.warn(
-              `ARIA member-mention: NVIDIA NIM también falló (${(nimErr as Error).message})`,
-            );
-          }
-        }
+        this.logger.warn(
+          `ARIA member-mention: los 3 proveedores fallaron (${(err as Error).message})`,
+        );
       }
 
       if (raw) {

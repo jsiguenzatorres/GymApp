@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, ForbiddenException, Logger } from '@nest
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import { GeminiService } from '../ai/gemini.service';
+import { AiFallbackService } from '../ai/ai-fallback.service';
 import { StorageService } from '../storage/storage.service';
 import {
   CreatePlanDto,
@@ -21,6 +22,7 @@ export class NutritionService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly gemini: GeminiService,
+    private readonly aiFallback: AiFallbackService,
     private readonly storage: StorageService,
   ) {}
 
@@ -632,7 +634,7 @@ Responde EXCLUSIVAMENTE con JSON válido:
 }`;
 
     try {
-      const raw = await this.gemini.generate(prompt);
+      const { response: raw } = await this.aiFallback.chat('', prompt);
       const cleaned = raw
         .replace(/^```json\s*/i, '')
         .replace(/```\s*$/i, '')
@@ -860,7 +862,7 @@ ${pending
 Responde EXCLUSIVAMENTE con JSON: { "matches": [indiceCandidatoOnull, ...] } en el mismo orden.`;
 
       try {
-        const raw = await this.gemini.generate(prompt);
+        const { response: raw } = await this.aiFallback.chat('', prompt);
         const cleaned = raw
           .replace(/^```json\s*/i, '')
           .replace(/```\s*$/i, '')
@@ -902,7 +904,7 @@ Responde EXCLUSIVAMENTE con JSON válido:
 Si no puedes entender el mensaje, devuelve { "items": [], "note": "explicación" }.`;
 
     try {
-      const raw = await this.gemini.generate(prompt);
+      const { response: raw } = await this.aiFallback.chat('', prompt);
       const cleaned = raw
         .replace(/^```json\s*/i, '')
         .replace(/```\s*$/i, '')
@@ -1075,7 +1077,7 @@ Responde EXCLUSIVAMENTE con JSON válido en este formato exacto:
 }`;
 
     try {
-      const raw = await this.gemini.generate(prompt);
+      const { response: raw } = await this.aiFallback.chat('', prompt);
       const cleaned = raw
         .replace(/^```json\s*/i, '')
         .replace(/```\s*$/i, '')
@@ -1126,7 +1128,7 @@ Responde EXCLUSIVAMENTE con JSON válido:
 }`;
 
     try {
-      const raw = await this.gemini.generate(prompt);
+      const { response: raw } = await this.aiFallback.chat('', prompt);
       const cleaned = raw
         .replace(/^```json\s*/i, '')
         .replace(/```\s*$/i, '')
@@ -1393,7 +1395,7 @@ Responde EXCLUSIVAMENTE con JSON válido en este formato exacto:
 Usa "plan_summary": null y "sample_day": null SOLO si todavía estás haciendo preguntas de aclaración y aún no tienes suficiente información para proponer números.`;
 
     try {
-      const raw = await this.gemini.chat(systemPrompt, message, history);
+      const { response: raw } = await this.aiFallback.chat(systemPrompt, message, history);
       const cleaned = raw
         .replace(/^```json\s*/i, '')
         .replace(/```\s*$/i, '')
@@ -1476,8 +1478,8 @@ INSTRUCCIONES:
       `Dame sugerencias de comidas para ${memberName} para cumplir los objetivos del plan de hoy.`;
 
     try {
-      const response = await this.gemini.chat(systemPrompt, userMessage);
-      return { response, isStub: false };
+      const { response, provider } = await this.aiFallback.chat(systemPrompt, userMessage);
+      return { response, isStub: false, fallbackModel: provider !== 'gemini' };
     } catch (err) {
       this.logger.error(`Nutrition AI error: ${(err as Error).message}`);
       return {

@@ -1,7 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
-import { GeminiService } from '../ai/gemini.service';
-import { NvidiaNimService } from '../ai/nvidia-nim.service';
+import { AiFallbackService } from '../ai/ai-fallback.service';
 
 @Injectable()
 export class AnalyticsService {
@@ -9,8 +8,7 @@ export class AnalyticsService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly gemini: GeminiService,
-    private readonly nvidiaNim: NvidiaNimService,
+    private readonly aiFallback: AiFallbackService,
   ) {}
 
   // ─── DASHBOARD KPIs ──────────────────────────────────────────────────────────
@@ -507,23 +505,12 @@ INSTRUCCIONES:
 - Máximo 3 párrafos bien estructurados`;
 
     try {
-      return await this.gemini.chat(systemPrompt, question);
+      const { response } = await this.aiFallback.chat(systemPrompt, question);
+      return response;
     } catch (err) {
-      const errMsg = (err as Error).message ?? String(err);
-      this.logger.error(`Business Coach error: ${errMsg}`);
-
-      // Cualquier fallo de Gemini (no solo cuota agotada) cae a NVIDIA NIM
-      // como respaldo — ver comentario equivalente en crm.service.ts.
-      if (this.nvidiaNim.isEnabled) {
-        try {
-          return await this.nvidiaNim.chat(systemPrompt, question);
-        } catch (nimErr) {
-          this.logger.error(
-            `Business Coach NVIDIA NIM fallback error: ${(nimErr as Error).message}`,
-          );
-        }
-      }
-
+      this.logger.error(
+        `Business Coach: los 3 proveedores de IA fallaron: ${(err as Error).message}`,
+      );
       return 'El Business Coach no está disponible en este momento. Intenta de nuevo en unos segundos.';
     }
   }
