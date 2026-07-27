@@ -129,6 +129,7 @@ export class DunningService {
           id: payment.id,
           gym_id: payment.gym_id,
           attempt_number: payment.attempt_number,
+          membership_id: payment.membership_id,
           member: payment.member,
         });
       } catch (err) {
@@ -141,6 +142,7 @@ export class DunningService {
     id: string;
     gym_id: string;
     attempt_number: number;
+    membership_id: string | null;
     member: {
       id: string;
       user_id: string;
@@ -167,7 +169,16 @@ export class DunningService {
           body: 'Cobramos tu pago pendiente con éxito. Tu membresía sigue activa, gracias por regularizar.',
           data: { paymentId: payment.id },
         });
-        if (payment.member.status === 'PRE_CANCEL' || payment.member.status === 'EXPIRED') {
+        if (payment.membership_id) {
+          // Reactiva SOLO la membresía a la que pertenece este pago — otras
+          // membresías del mismo miembro no se ven afectadas.
+          await this.prisma.membership.update({
+            where: { id: payment.membership_id },
+            data: { status: 'ACTIVE' },
+          });
+        } else if (payment.member.status === 'PRE_CANCEL' || payment.member.status === 'EXPIRED') {
+          // Fallback: pago sin membresía asociada (ej. day-pass, cargo manual) —
+          // no hay una fila de Membership específica que tocar.
           await this.prisma.member.update({
             where: { id: payment.member.id },
             data: { status: 'ACTIVE' },
@@ -205,21 +216,40 @@ export class DunningService {
         : {}),
     });
 
-    // Block access on Day 7+
-    if (step.blockAccess && payment.member.status === 'ACTIVE') {
-      await this.prisma.member.update({
-        where: { id: payment.member.id },
-        data: { status: 'PRE_CANCEL' },
-      });
+    // Block access on Day 7+ — congela SOLO la membresía de este pago; si el
+    // miembro tiene otras membresías vigentes, siguen dándole acceso.
+    if (step.blockAccess) {
+      if (payment.membership_id) {
+        await this.prisma.membership.update({
+          where: { id: payment.membership_id },
+          data: { status: 'FROZEN', frozen_at: new Date() },
+        });
+      } else if (payment.member.status === 'ACTIVE') {
+        await this.prisma.member.update({
+          where: { id: payment.member.id },
+          data: { status: 'PRE_CANCEL' },
+        });
+      }
       this.logger.warn(`Access blocked for member ${payment.member.id} (dunning day 7)`);
     }
 
     // Start cancellation process on Day 14
     if (step.startCancellation) {
-      await this.prisma.member.update({
-        where: { id: payment.member.id },
-        data: { status: 'EXPIRED' },
-      });
+      if (payment.membership_id) {
+        await this.prisma.membership.update({
+          where: { id: payment.membership_id },
+          data: {
+            status: 'CANCELLED',
+            cancelled_at: new Date(),
+            cancel_reason: 'Cancelado automáticamente por falta de pago',
+          },
+        });
+      } else {
+        await this.prisma.member.update({
+          where: { id: payment.member.id },
+          data: { status: 'EXPIRED' },
+        });
+      }
       this.logger.warn(`Cancellation started for member ${payment.member.id} (dunning day 14)`);
 
       // Mark payment as final dunning exhausted

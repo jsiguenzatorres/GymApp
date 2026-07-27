@@ -10,7 +10,7 @@ interface MemberSearchResult {
   first_name: string;
   last_name: string;
   user: { email: string };
-  activeMembership: { id: string; type: { name: string } } | null;
+  activeMemberships: Array<{ id: string; type: { name: string }; end_date: string }>;
 }
 
 const inputClass = cn(
@@ -35,6 +35,7 @@ export function UploadVoucherForm() {
   const [searchResults, setSearchResults] = useState<MemberSearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [selectedMember, setSelectedMember] = useState<MemberSearchResult | null>(null);
+  const [membershipId, setMembershipId] = useState('');
 
   const [file, setFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -63,6 +64,8 @@ export function UploadVoucherForm() {
     setSelectedMember(member);
     setMemberSearch(`${member.first_name} ${member.last_name}`);
     setSearchResults([]);
+    // Auto-selecciona solo si tiene exactamente 1 membresía activa
+    setMembershipId(member.activeMemberships.length === 1 ? member.activeMemberships[0].id : '');
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -91,7 +94,7 @@ export function UploadVoucherForm() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           memberId: selectedMember.id,
-          membershipId: selectedMember.activeMembership?.id,
+          membershipId: membershipId || undefined,
           document: dataUri,
         }),
       });
@@ -170,6 +173,26 @@ export function UploadVoucherForm() {
           </p>
         )}
       </div>
+
+      {/* Selector de membresía — solo cuando el miembro tiene varias activas */}
+      {selectedMember && selectedMember.activeMemberships.length > 1 && (
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium">¿A cuál membresía aplica este comprobante?</label>
+          <select
+            value={membershipId}
+            onChange={(e) => setMembershipId(e.target.value)}
+            className={inputClass}
+            disabled={isUploading}
+          >
+            <option value="">— Selecciona una membresía —</option>
+            {selectedMember.activeMemberships.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.type.name} — vence {new Date(m.end_date).toLocaleDateString('es-SV')}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* Archivo */}
       <div className="space-y-1.5">

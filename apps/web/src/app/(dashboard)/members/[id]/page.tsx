@@ -154,7 +154,7 @@ export default async function MemberDetailPage({ params }: PageProps) {
   // Crédito inicial (se refresca client-side al hacer mutación)
   const credit = await fetchCreditAction(id);
 
-  const activeMembership = member.memberships.find((m) =>
+  const activeMemberships = member.memberships.filter((m) =>
     ['ACTIVE', 'TRIAL', 'FROZEN'].includes(m.status),
   );
 
@@ -230,65 +230,74 @@ export default async function MemberDetailPage({ params }: PageProps) {
           </div>
         </div>
 
-        {/* Membresía activa */}
+        {/* Membresías activas — un miembro puede tener varias a la vez (ej.
+            gimnasio + nutrición + entrenamiento personalizado) */}
         <div className="lg:col-span-2 rounded-lg border bg-card p-5 space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">
-              Membresía Activa
+              Membresías Activas
             </h2>
             <Link
               href={`/members/${id}/assign-membership`}
               className="text-xs text-primary hover:text-primary/80 font-medium"
             >
-              {activeMembership ? 'Cambiar plan' : '+ Asignar plan'}
+              + Agregar membresía
             </Link>
           </div>
 
-          {activeMembership ? (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-semibold text-lg">{activeMembership.type.name}</p>
-                  <p className="text-sm text-muted-foreground">
-                    {formatCurrency(activeMembership.price_paid, activeMembership.currency)}
-                    {' · '}
-                    {activeMembership.type.billing_frequency}
-                  </p>
-                </div>
-                <span
-                  className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${MEMBERSHIP_STATUS_CONFIG[activeMembership.status]?.color ?? 'bg-muted text-muted-foreground'}`}
+          {activeMemberships.length > 0 ? (
+            <div className="space-y-5">
+              {activeMemberships.map((membership, i) => (
+                <div
+                  key={membership.id}
+                  className={i > 0 ? 'space-y-4 pt-5 border-t' : 'space-y-4'}
                 >
-                  {MEMBERSHIP_STATUS_CONFIG[activeMembership.status]?.label ??
-                    activeMembership.status}
-                </span>
-              </div>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-semibold text-lg">{membership.type.name}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {formatCurrency(membership.price_paid, membership.currency)}
+                        {' · '}
+                        {membership.type.billing_frequency}
+                      </p>
+                    </div>
+                    <span
+                      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${MEMBERSHIP_STATUS_CONFIG[membership.status]?.color ?? 'bg-muted text-muted-foreground'}`}
+                    >
+                      {MEMBERSHIP_STATUS_CONFIG[membership.status]?.label ?? membership.status}
+                    </span>
+                  </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-lg bg-muted/50 p-3">
-                  <p className="text-xs text-muted-foreground mb-0.5">Inicio</p>
-                  <p className="font-medium text-sm">{formatDate(activeMembership.start_date)}</p>
-                </div>
-                <div className="rounded-lg bg-muted/50 p-3">
-                  <p className="text-xs text-muted-foreground mb-0.5">Vencimiento</p>
-                  <p className="font-medium text-sm">{formatDate(activeMembership.end_date)}</p>
-                </div>
-              </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-lg bg-muted/50 p-3">
+                      <p className="text-xs text-muted-foreground mb-0.5">Inicio</p>
+                      <p className="font-medium text-sm">{formatDate(membership.start_date)}</p>
+                    </div>
+                    <div className="rounded-lg bg-muted/50 p-3">
+                      <p className="text-xs text-muted-foreground mb-0.5">Vencimiento</p>
+                      <p className="font-medium text-sm">{formatDate(membership.end_date)}</p>
+                    </div>
+                  </div>
 
-              {activeMembership.status === 'FROZEN' && activeMembership.freeze_ends_at && (
-                <div className="rounded-lg bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-800 px-4 py-3 text-sm">
-                  <p className="font-medium text-sky-700 dark:text-sky-300">Membresía congelada</p>
-                  <p className="text-sky-600 dark:text-sky-400 text-xs mt-0.5">
-                    Se descongela el {formatDate(activeMembership.freeze_ends_at)}
-                  </p>
-                </div>
-              )}
+                  {membership.status === 'FROZEN' && membership.freeze_ends_at && (
+                    <div className="rounded-lg bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-800 px-4 py-3 text-sm">
+                      <p className="font-medium text-sky-700 dark:text-sky-300">
+                        Membresía congelada
+                      </p>
+                      <p className="text-sky-600 dark:text-sky-400 text-xs mt-0.5">
+                        Se descongela el {formatDate(membership.freeze_ends_at)}
+                      </p>
+                    </div>
+                  )}
 
-              {/* Acciones rápidas */}
-              <MembershipActionsClient
-                memberId={id}
-                membershipId={activeMembership.id}
-                status={activeMembership.status}
-              />
+                  {/* Acciones rápidas */}
+                  <MembershipActionsClient
+                    memberId={id}
+                    membershipId={membership.id}
+                    status={membership.status}
+                  />
+                </div>
+              ))}
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center py-8 text-center">

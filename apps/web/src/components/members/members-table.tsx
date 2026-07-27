@@ -13,12 +13,12 @@ interface MemberRow {
   loyalty_level: string;
   created_at: string;
   user: { email: string; last_login_at: string | null };
-  activeMembership: {
+  activeMemberships: Array<{
     id: string;
     status: string;
     end_date: string;
     type: { name: string; billing_frequency: string } | null;
-  } | null;
+  }>;
 }
 
 function RiskBadge({ score }: { score: number }) {
@@ -100,16 +100,20 @@ export function MembersTable({ members }: { members: MemberRow[] }) {
                   <MemberStatusBadge status={member.status} />
                 </td>
                 <td className="px-4 py-3 hidden md:table-cell">
-                  {member.activeMembership ? (
+                  {member.activeMemberships.length > 0 ? (
                     <span className="text-foreground">
-                      {member.activeMembership.type?.name ?? '—'}
+                      {member.activeMemberships.length > 2
+                        ? `${member.activeMemberships[0].type?.name ?? '—'} +${member.activeMemberships.length - 1}`
+                        : member.activeMemberships.map((m) => m.type?.name ?? '—').join(', ')}
                     </span>
                   ) : (
                     <span className="text-muted-foreground">Sin plan</span>
                   )}
                 </td>
                 <td className="px-4 py-3 hidden lg:table-cell text-muted-foreground">
-                  {member.activeMembership ? formatDate(member.activeMembership.end_date) : '—'}
+                  {member.activeMemberships.length > 0
+                    ? formatDate(member.activeMemberships.map((m) => m.end_date).sort()[0])
+                    : '—'}
                 </td>
                 <td className="px-4 py-3 text-center hidden sm:table-cell">
                   <RiskBadge score={member.risk_score} />

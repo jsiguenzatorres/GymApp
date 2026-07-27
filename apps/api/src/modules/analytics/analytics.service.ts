@@ -302,8 +302,6 @@ export class AnalyticsService {
         select: {
           memberships: {
             where: { status: 'ACTIVE' },
-            orderBy: { created_at: 'desc' },
-            take: 1,
             select: { type: { select: { price: true } } },
           },
         },
@@ -375,11 +373,12 @@ export class AnalyticsService {
     const storeCreditAmt = Math.abs(Number(storeCreditDebt._sum.credit_balance_usd ?? 0));
     const totalDebt = pendingMembershipAmt + pendingOtherAmt + storeCreditAmt;
 
-    // Ingreso en riesgo: valor mensual de la membresía activa de cada miembro
-    // con score de riesgo alto — cuánto se perdería si cancelan.
+    // Ingreso en riesgo: suma de TODAS las membresías activas de cada miembro
+    // con score de riesgo alto (un miembro puede tener varias a la vez) —
+    // cuánto se perdería si cancelan.
     const revenueAtRisk = atRiskMemberships.reduce((acc, m) => {
-      const price = m.memberships[0]?.type.price;
-      return acc + (price ? Number(price) : 0);
+      const sum = m.memberships.reduce((s, mem) => s + Number(mem.type.price), 0);
+      return acc + sum;
     }, 0);
 
     const arpu = activeMembers > 0 ? totalRevenue / activeMembers : 0;

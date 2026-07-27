@@ -46,10 +46,10 @@ export class AccessService {
   ): Promise<{ payload: string; qrPayload: string; expiresAt: string; dataUrl: string }> {
     const member = await this.prisma.member.findFirst({
       where: { id: memberId, gym_id: gymId },
-      select: { id: true, status: true },
+      select: { id: true },
     });
     if (!member) throw new NotFoundException('Miembro no encontrado');
-    if (!['ACTIVE', 'TRIAL'].includes(member.status)) {
+    if (!(await this.hasValidMembership(gymId, member.id))) {
       throw new ForbiddenException('El miembro no tiene una membresía activa');
     }
 
@@ -148,35 +148,21 @@ export class AccessService {
       return { result: 'DENIED_REPLAY', message: 'QR ya fue utilizado — solicita uno nuevo' };
     }
 
-    // 5. Verificar estado del miembro
+    // 5. Verificar que el miembro existe
     const member = await this.prisma.member.findFirst({
       where: { id: payload.mid, gym_id: gymId },
-      select: { id: true, first_name: true, last_name: true, status: true },
+      select: { id: true, first_name: true, last_name: true },
     });
     if (!member) {
       await this.log(gymId, payload.mid, 'DENIED_INVALID', 'QR', payload.n, deviceId);
       return { result: 'DENIED_INVALID', message: 'Miembro no encontrado' };
     }
-    if (!['ACTIVE', 'TRIAL'].includes(member.status)) {
-      await this.log(gymId, member.id, 'DENIED_INACTIVE', 'QR', payload.n, deviceId);
-      return {
-        result: 'DENIED_INACTIVE',
-        memberId: member.id,
-        memberName: `${member.first_name} ${member.last_name}`,
-        message: 'Membresía inactiva o suspendida',
-      };
-    }
 
-    // 6. Verificar membresía vigente
-    const activeMembership = await this.prisma.membership.findFirst({
-      where: {
-        member_id: member.id,
-        gym_id: gymId,
-        status: { in: ['ACTIVE', 'TRIAL'] },
-        end_date: { gte: new Date() },
-      },
-    });
-    if (!activeMembership) {
+    // 6. Verificar membresía vigente — esta es la única fuente de verdad para el
+    // acceso; un miembro puede tener varias membresías simultáneas (ej. gimnasio +
+    // nutrición), así que basta con que UNA esté vigente, sin importar el estado
+    // de las demás.
+    if (!(await this.hasValidMembership(gymId, member.id))) {
       await this.log(gymId, member.id, 'DENIED_NO_MEMBERSHIP', 'QR', payload.n, deviceId);
       return {
         result: 'DENIED_NO_MEMBERSHIP',
@@ -195,6 +181,22 @@ export class AccessService {
       memberName: `${member.first_name} ${member.last_name}`,
       message: `Bienvenido, ${member.first_name}`,
     };
+  }
+
+  // Un miembro puede tener varias membresías activas a la vez (ej. gimnasio +
+  // nutrición); el acceso solo requiere que AL MENOS UNA esté vigente, sin
+  // importar si otra fue congelada/cancelada por falta de pago.
+  private async hasValidMembership(gymId: string, memberId: string): Promise<boolean> {
+    const membership = await this.prisma.membership.findFirst({
+      where: {
+        member_id: memberId,
+        gym_id: gymId,
+        status: { in: ['ACTIVE', 'TRIAL'] },
+        end_date: { gte: new Date() },
+      },
+      select: { id: true },
+    });
+    return !!membership;
   }
 
   // ─── OVERRIDE MANUAL ────────────────────────────────────────────────────────

@@ -193,8 +193,7 @@ export class MembersService {
           user: { select: { email: true, is_active: true, last_login_at: true } },
           memberships: {
             where: { status: { in: ['ACTIVE', 'TRIAL', 'FROZEN'] } },
-            take: 1,
-            orderBy: { created_at: 'desc' },
+            orderBy: { end_date: 'asc' },
             include: { type: { select: { name: true, billing_frequency: true } } },
           },
         },
@@ -205,7 +204,7 @@ export class MembersService {
     return {
       data: members.map((m) => ({
         ...m,
-        activeMembership: m.memberships[0] ?? null,
+        activeMemberships: m.memberships,
         memberships: undefined,
       })),
       meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
@@ -218,8 +217,7 @@ export class MembersService {
       include: {
         user: { select: { email: true, last_login_at: true } },
         memberships: {
-          orderBy: { created_at: 'desc' },
-          take: 1,
+          orderBy: { end_date: 'desc' },
           include: { type: true },
         },
       },
@@ -778,30 +776,52 @@ export class MembersService {
   }
 
   // ─── SELF-SERVICE (E3) ────────────────────────────────────────────────────
-  private async resolveMyActiveMembership(gymId: string, userId: string) {
+  // Un miembro puede tener varias membresías ACTIVE simultáneas (ej. gimnasio +
+  // nutrición) — si no especifica cuál, solo se auto-selecciona cuando hay
+  // exactamente una; con varias, debe indicar membershipId explícitamente.
+  private async resolveMyActiveMembership(gymId: string, userId: string, membershipId?: string) {
     const member = await this.prisma.member.findFirst({
       where: { user_id: userId, gym_id: gymId },
       select: { id: true },
     });
     if (!member) throw new NotFoundException('Miembro no encontrado');
 
-    const membership = await this.prisma.membership.findFirst({
+    if (membershipId) {
+      const membership = await this.prisma.membership.findFirst({
+        where: { id: membershipId, member_id: member.id, gym_id: gymId, status: 'ACTIVE' },
+      });
+      if (!membership) {
+        throw new NotFoundException('Membresía no encontrada o no está activa');
+      }
+      return { memberId: member.id, membership };
+    }
+
+    const activeMemberships = await this.prisma.membership.findMany({
       where: { member_id: member.id, gym_id: gymId, status: 'ACTIVE' },
       orderBy: { end_date: 'desc' },
     });
-    if (!membership) {
+    if (activeMemberships.length === 0) {
       throw new BadRequestException('No tienes una membresía activa');
     }
-    return { memberId: member.id, membership };
+    if (activeMemberships.length > 1) {
+      throw new BadRequestException(
+        'Tienes varias membresías activas — especifica cuál con membership_id',
+      );
+    }
+    return { memberId: member.id, membership: activeMemberships[0] };
   }
 
   async requestFreezeMine(
     gymId: string,
     userId: string,
-    body: { duration_days: number; reason?: string },
+    body: { duration_days: number; reason?: string; membership_id?: string },
   ) {
     const days = Math.max(1, Math.min(60, Math.floor(body.duration_days)));
-    const { memberId, membership } = await this.resolveMyActiveMembership(gymId, userId);
+    const { memberId, membership } = await this.resolveMyActiveMembership(
+      gymId,
+      userId,
+      body.membership_id,
+    );
 
     const freezeEndsAt = new Date();
     freezeEndsAt.setDate(freezeEndsAt.getDate() + days);
@@ -812,9 +832,13 @@ export class MembersService {
     } as FreezeMembershipDto);
   }
 
-  async requestCancelMine(gymId: string, userId: string, reason: string) {
+  async requestCancelMine(gymId: string, userId: string, reason: string, membershipId?: string) {
     if (!reason?.trim()) throw new BadRequestException('La razón es requerida');
-    const { memberId, membership } = await this.resolveMyActiveMembership(gymId, userId);
+    const { memberId, membership } = await this.resolveMyActiveMembership(
+      gymId,
+      userId,
+      membershipId,
+    );
     return this.cancelMembership(gymId, memberId, membership.id, {
       reason,
     } as CancelMembershipDto);
@@ -843,8 +867,18 @@ export class MembersService {
    * plan la hace un admin desde el panel web — esto solo deja constancia en
    * notes y notifica al staff (Fase 2 — auto-charge requiere subscription engine).
    */
-  async requestChangeMine(gymId: string, userId: string, newTypeId: string, reason?: string) {
-    const { memberId, membership } = await this.resolveMyActiveMembership(gymId, userId);
+  async requestChangeMine(
+    gymId: string,
+    userId: string,
+    newTypeId: string,
+    reason?: string,
+    membershipId?: string,
+  ) {
+    const { memberId, membership } = await this.resolveMyActiveMembership(
+      gymId,
+      userId,
+      membershipId,
+    );
 
     const newType = await this.prisma.membershipType.findFirst({
       where: { id: newTypeId, gym_id: gymId, is_active: true },

@@ -1,0 +1,55 @@
+# EAS Build ignore — raíz del monorepo.
+# IMPORTANTE: si existe .easignore, EAS CLI IGNORA las reglas de .gitignore
+# (no se suman). Por eso aquí se repiten las exclusiones esenciales de
+# .gitignore además de acotar el archivo subido a solo lo que necesita
+# apps/mobile (que solo depende de packages/shared-types, shared-schemas
+# y mobile-components — nunca de apps/api ni apps/web).
+
+# ── Apps hermanas que apps/mobile NO usa ──────────────────────────────────
+apps/api
+apps/web
+
+# ── Paquete de UI que solo usa apps/web ───────────────────────────────────
+packages/ui-components
+
+# ── Documentación / diseño — no hace falta para compilar ─────────────────
+docs
+Diseño
+
+# ── Dependencias — se reinstalan en el servidor de EAS desde el lockfile ──
+node_modules
+
+# ── Build outputs / cache ─────────────────────────────────────────────────
+dist
+build
+.next
+.turbo
+apps/mobile/.expo
+apps/mobile/ios
+apps/mobile/android
+coverage
+.nyc_output
+.cache
+.parcel-cache
+*.tsbuildinfo
+
+# ── Secrets — NUNCA deben subirse al archivo del build ────────────────────
+.env
+.env.local
+.env.*.local
+.env.production
+.env.staging
+*.pem
+*.key
+*.p8
+google-services.json
+GoogleService-Info.plist
+
+# ── Git / OS / IDE ─────────────────────────────────────────────────────────
+.git
+.DS_Store
+Thumbs.db
+.vscode/settings.json
+.idea
+*.swp
+*.swo

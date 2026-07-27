@@ -26,12 +26,12 @@ interface MemberSearchResult {
   nit: string | null;
   nrc: string | null;
   user: { email: string };
-  activeMembership: {
+  activeMemberships: Array<{
     id: string;
     type: { name: string };
     end_date: string;
     price_paid?: string;
-  } | null;
+  }>;
 }
 
 const PAYMENT_TYPES = [
@@ -132,16 +132,28 @@ export function NewPaymentForm() {
       nrc: member.nrc ?? '',
     });
 
-    // Auto-fill si tiene membresía activa
-    const activeMembership = member.activeMembership;
-    if (activeMembership) {
+    // Auto-fill solo si tiene exactamente 1 membresía activa — con varias, el
+    // staff debe elegir a cuál aplica el pago con el selector de abajo.
+    const memberships = member.activeMemberships;
+    if (memberships.length === 1) {
       setForm((prev) => ({
         ...prev,
-        membershipId: activeMembership.id,
-        amount: activeMembership.price_paid?.toString() ?? '',
-        description: activeMembership.type.name,
+        membershipId: memberships[0].id,
+        amount: memberships[0].price_paid?.toString() ?? '',
+        description: memberships[0].type.name,
       }));
     }
+  };
+
+  const handleMembershipSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const membershipId = e.target.value;
+    const membership = selectedMember?.activeMemberships.find((m) => m.id === membershipId);
+    setForm((prev) => ({
+      ...prev,
+      membershipId,
+      amount: membership?.price_paid?.toString() ?? prev.amount,
+      description: membership?.type.name ?? prev.description,
+    }));
   };
 
   const handleChange = (
@@ -301,9 +313,11 @@ export function NewPaymentForm() {
                     </p>
                     <p className="text-xs text-muted-foreground">{m.user.email}</p>
                   </div>
-                  {m.activeMembership && (
+                  {m.activeMemberships.length > 0 && (
                     <span className="ml-auto text-xs text-muted-foreground">
-                      {m.activeMembership.type.name}
+                      {m.activeMemberships.length > 1
+                        ? `${m.activeMemberships.length} planes`
+                        : m.activeMemberships[0].type.name}
                     </span>
                   )}
                 </button>
@@ -315,10 +329,10 @@ export function NewPaymentForm() {
           <div className="rounded-lg border bg-muted/30 px-3.5 py-2.5 text-xs text-muted-foreground">
             <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
               ✓ {selectedMember.first_name} {selectedMember.last_name} seleccionado
-              {selectedMember.activeMembership && (
+              {selectedMember.activeMemberships.length === 1 && (
                 <span className="font-normal text-muted-foreground">
                   {' '}
-                  — Plan: {selectedMember.activeMembership.type.name}
+                  — Plan: {selectedMember.activeMemberships[0].type.name}
                 </span>
               )}
             </p>
@@ -328,6 +342,26 @@ export function NewPaymentForm() {
           </div>
         )}
       </div>
+
+      {/* Selector de membresía — solo cuando el miembro tiene varias activas */}
+      {selectedMember && selectedMember.activeMemberships.length > 1 && (
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium">¿A cuál membresía aplica este pago?</label>
+          <select
+            value={form.membershipId}
+            onChange={handleMembershipSelect}
+            className={inputClass}
+            disabled={isLoading}
+          >
+            <option value="">— Selecciona una membresía —</option>
+            {selectedMember.activeMemberships.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.type.name} — vence {new Date(m.end_date).toLocaleDateString('es-SV')}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* Datos fiscales del miembro (El Salvador) */}
       {selectedMember && (

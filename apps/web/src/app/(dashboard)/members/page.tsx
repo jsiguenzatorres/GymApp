@@ -19,12 +19,12 @@ interface MemberRow {
   source: string | null;
   created_at: string;
   user: { email: string; last_login_at: string | null };
-  activeMembership: {
+  activeMemberships: Array<{
     id: string;
     status: string;
     end_date: string;
     type: { name: string; billing_frequency: string } | null;
-  } | null;
+  }>;
 }
 
 interface MembersResponse {

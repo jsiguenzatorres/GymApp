@@ -111,10 +111,13 @@ export default function HomeTab() {
   }
 
   const firstName = profile?.first_name ?? user?.firstName ?? 'Miembro';
-  const activeMembership = profile?.memberships?.find(
-    (m) => m.status === 'ACTIVE' || m.status === 'TRIAL',
-  );
-  const statusKey = activeMembership?.status ?? profile?.status ?? 'EXPIRED';
+  // Un miembro puede tener varias membresías activas a la vez (ej. gimnasio +
+  // nutrición) — se ordenan por la que vence más pronto para el badge superior.
+  const activeMemberships = (profile?.memberships ?? [])
+    .filter((m) => m.status === 'ACTIVE' || m.status === 'TRIAL')
+    .sort((a, b) => new Date(a.end_date).getTime() - new Date(b.end_date).getTime());
+  const nextMembership = activeMemberships[0];
+  const statusKey = nextMembership?.status ?? profile?.status ?? 'EXPIRED';
   const statusColor = STATUS_COLOR[statusKey] ?? '#6b7280';
   const statusLabel = STATUS_LABEL[statusKey] ?? statusKey;
 
@@ -243,29 +246,30 @@ export default function HomeTab() {
           </TouchableOpacity>
         )}
 
-        {/* Membresía */}
+        {/* Membresía(s) */}
         <View style={styles.card}>
           <View style={styles.cardRow}>
-            <Text style={styles.cardTitle}>Membresía</Text>
+            <Text style={styles.cardTitle}>
+              Membresía{activeMemberships.length > 1 ? `s (${activeMemberships.length})` : ''}
+            </Text>
             <View style={[styles.badge, { backgroundColor: statusColor + '20' }]}>
               <Text style={[styles.badgeText, { color: statusColor }]}>{statusLabel}</Text>
             </View>
           </View>
-          {activeMembership ? (
-            <>
-              <Text style={styles.planName}>{activeMembership.type.name}</Text>
-              <View style={styles.cardRow}>
-                <Text style={styles.cardMeta}>Vence: {formatDate(activeMembership.end_date)}</Text>
-                <Text
-                  style={[
-                    styles.daysLeft,
-                    daysUntil(activeMembership.end_date) <= 7 && { color: '#dc2626' },
-                  ]}
-                >
-                  {daysUntil(activeMembership.end_date)} días
-                </Text>
+          {activeMemberships.length > 0 ? (
+            activeMemberships.map((m, i) => (
+              <View key={m.id} style={i > 0 ? { marginTop: 10 } : undefined}>
+                <Text style={styles.planName}>{m.type.name}</Text>
+                <View style={styles.cardRow}>
+                  <Text style={styles.cardMeta}>Vence: {formatDate(m.end_date)}</Text>
+                  <Text
+                    style={[styles.daysLeft, daysUntil(m.end_date) <= 7 && { color: '#dc2626' }]}
+                  >
+                    {daysUntil(m.end_date)} días
+                  </Text>
+                </View>
               </View>
-            </>
+            ))
           ) : (
             <Text style={styles.noMembership}>Sin membresía activa</Text>
           )}

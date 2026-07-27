@@ -139,8 +139,11 @@ export default function AssignMembershipPage() {
           <ArrowLeft className="h-4 w-4" />
           Volver al perfil
         </Link>
-        <h1 className="text-2xl font-bold text-gray-900">Asignar membresía</h1>
-        <p className="text-sm text-gray-500 mt-1">Selecciona el plan y la fecha de inicio</p>
+        <h1 className="text-2xl font-bold text-gray-900">Agregar membresía</h1>
+        <p className="text-sm text-gray-500 mt-1">
+          Selecciona el plan y la fecha de inicio. Se suma a las membresías activas del miembro, no
+          las reemplaza.
+        </p>
       </div>
 
       {fetchError && (
@@ -273,7 +276,7 @@ export default function AssignMembershipPage() {
             disabled={!selected || loading}
             className="flex-1 rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            {loading ? 'Asignando...' : 'Asignar membresía'}
+            {loading ? 'Agregando...' : 'Agregar membresía'}
           </button>
         </div>
       </form>

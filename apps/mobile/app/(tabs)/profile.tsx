@@ -144,7 +144,7 @@ export default function ProfileTab() {
   const firstName = profile?.first_name ?? user?.firstName ?? '';
   const lastName = profile?.last_name ?? user?.lastName ?? '';
   const email = profile?.user?.email ?? user?.email ?? '';
-  const activeMembership = profile?.memberships?.find(
+  const activeMemberships = (profile?.memberships ?? []).filter(
     (m) => m.status === 'ACTIVE' || m.status === 'TRIAL',
   );
   const initials = `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
@@ -202,28 +202,34 @@ export default function ProfileTab() {
           </View>
         </View>
 
-        {/* Membership */}
-        {activeMembership && (
+        {/* Membership(s) — un miembro puede tener varias activas a la vez */}
+        {activeMemberships.length > 0 && (
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Membresía actual</Text>
-            <Text style={styles.membershipName}>{activeMembership.type.name}</Text>
-            <View style={styles.membershipRow}>
-              <View style={styles.membershipStat}>
-                <Text style={styles.membershipStatVal}>{daysUntil(activeMembership.end_date)}</Text>
-                <Text style={styles.membershipStatLbl}>Días restantes</Text>
+            <Text style={styles.cardTitle}>
+              Membresía{activeMemberships.length > 1 ? 's actuales' : ' actual'}
+            </Text>
+            {activeMemberships.map((m, i) => (
+              <View key={m.id} style={i > 0 ? { marginTop: 14, paddingTop: 14 } : undefined}>
+                <Text style={styles.membershipName}>{m.type.name}</Text>
+                <View style={styles.membershipRow}>
+                  <View style={styles.membershipStat}>
+                    <Text style={styles.membershipStatVal}>{daysUntil(m.end_date)}</Text>
+                    <Text style={styles.membershipStatLbl}>Días restantes</Text>
+                  </View>
+                  <View style={styles.divider} />
+                  <View style={styles.membershipStat}>
+                    <Text style={styles.membershipStatVal}>${m.type.price}</Text>
+                    <Text style={styles.membershipStatLbl}>Costo mensual</Text>
+                  </View>
+                  <View style={styles.divider} />
+                  <View style={styles.membershipStat}>
+                    <Text style={styles.membershipStatVal}>{m.type.duration_days}</Text>
+                    <Text style={styles.membershipStatLbl}>Días del plan</Text>
+                  </View>
+                </View>
+                <Text style={styles.vence}>Vence: {formatDate(m.end_date)}</Text>
               </View>
-              <View style={styles.divider} />
-              <View style={styles.membershipStat}>
-                <Text style={styles.membershipStatVal}>${activeMembership.type.price}</Text>
-                <Text style={styles.membershipStatLbl}>Costo mensual</Text>
-              </View>
-              <View style={styles.divider} />
-              <View style={styles.membershipStat}>
-                <Text style={styles.membershipStatVal}>{activeMembership.type.duration_days}</Text>
-                <Text style={styles.membershipStatLbl}>Días del plan</Text>
-              </View>
-            </View>
-            <Text style={styles.vence}>Vence: {formatDate(activeMembership.end_date)}</Text>
+            ))}
           </View>
         )}
 

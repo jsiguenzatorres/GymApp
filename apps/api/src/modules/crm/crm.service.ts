@@ -355,7 +355,7 @@ export class CrmService {
       include: {
         memberships: {
           where: { status: { in: ['ACTIVE', 'TRIAL', 'FROZEN'] } },
-          orderBy: { created_at: 'desc' },
+          orderBy: { end_date: 'asc' },
           take: 1,
         },
       },

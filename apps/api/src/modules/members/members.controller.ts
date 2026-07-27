@@ -219,14 +219,22 @@ export class MembersController {
   @Post('members/me/membership/request-freeze')
   async requestFreezeMine(
     @CurrentUser() user: JwtPayload,
-    @Body() body: { duration_days: number; reason?: string },
+    @Body() body: { duration_days: number; reason?: string; membership_id?: string },
   ) {
     return this.membersService.requestFreezeMine(this.gymId(user), user.sub, body);
   }
 
   @Post('members/me/membership/request-cancel')
-  async requestCancelMine(@CurrentUser() user: JwtPayload, @Body() body: { reason: string }) {
-    return this.membersService.requestCancelMine(this.gymId(user), user.sub, body.reason);
+  async requestCancelMine(
+    @CurrentUser() user: JwtPayload,
+    @Body() body: { reason: string; membership_id?: string },
+  ) {
+    return this.membersService.requestCancelMine(
+      this.gymId(user),
+      user.sub,
+      body.reason,
+      body.membership_id,
+    );
   }
 
   @Get('members/me/membership/types-available')
@@ -237,13 +245,14 @@ export class MembersController {
   @Post('members/me/membership/request-change')
   async requestChangeMine(
     @CurrentUser() user: JwtPayload,
-    @Body() body: { new_type_id: string; reason?: string },
+    @Body() body: { new_type_id: string; reason?: string; membership_id?: string },
   ) {
     return this.membersService.requestChangeMine(
       this.gymId(user),
       user.sub,
       body.new_type_id,
       body.reason,
+      body.membership_id,
     );
   }
 }
