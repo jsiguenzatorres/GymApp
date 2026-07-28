@@ -1,5 +1,11 @@
 import Link from 'next/link';
 
+// Anula el `force-dynamic` heredado del layout raíz — la 404 no necesita
+// datos dinámicos, y heredarlo rompe la generación estática interna que
+// Next.js hace de esta página durante `next build` (error "<Html> should
+// not be imported outside of pages/_document").
+export const dynamic = 'force-static';
+
 export default function NotFound() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center px-6 text-center">
