@@ -13,6 +13,16 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
         { emit: 'stdout', level: 'error' },
         { emit: 'stdout', level: 'warn' },
       ],
+      // El default de Prisma (5s de timeout, 2s de maxWait) es demasiado
+      // ajustado para la latencia real entre Railway y el pooler de Supabase
+      // (visto en producción: P2028 "Transaction already closed" con
+      // transacciones simples de 2 queries que tardaron ~5.1s). Se sube el
+      // margen para las 20+ llamadas a $transaction en toda la app sin tener
+      // que tocar cada una individualmente.
+      transactionOptions: {
+        maxWait: 10_000,
+        timeout: 15_000,
+      },
     });
     // Aplica la red de seguridad de aislamiento multi-tenant a esta MISMA
     // instancia (en vez de retornar un cliente extendido aparte) para que
