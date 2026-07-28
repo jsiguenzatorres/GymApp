@@ -147,9 +147,13 @@ export function AddonsSection({ memberId }: { memberId: string }) {
         <span
           className={`text-xs px-2.5 py-1 rounded-full font-semibold ${tierConfig.pillBg} ${tierConfig.pillFg}`}
         >
-          {tierConfig.emoji} Nutrición: {tierConfig.label}
+          {tierConfig.emoji} Nutrición IA: {tierConfig.label}
         </span>
       </div>
+      <p className="text-xs text-muted-foreground -mt-2">
+        Asistente de nutrición por IA dentro de la app — distinto de la membresía "Consulta
+        Nutricional (presencial)", que es la cita con el nutricionista humano.
+      </p>
 
       {loading ? (
         <p className="text-sm text-muted-foreground">Cargando…</p>
