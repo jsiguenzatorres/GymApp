@@ -31,3 +31,15 @@ export class CancelMembershipDto {
   @IsString()
   reason?: string;
 }
+
+export class UpdateMembershipDatesDto {
+  @IsDateString()
+  startDate: string;
+
+  @IsDateString()
+  endDate: string;
+
+  @IsOptional()
+  @IsString()
+  reason?: string;
+}

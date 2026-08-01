@@ -17,6 +17,7 @@ import {
   AssignMembershipDto,
   FreezeMembershipDto,
   CancelMembershipDto,
+  UpdateMembershipDatesDto,
 } from './dto/membership-actions.dto';
 import { ListMembersDto } from './dto/list-members.dto';
 
@@ -201,14 +202,59 @@ export class MembersService {
       this.prisma.member.count({ where }),
     ]);
 
+    const allMemberships = members.flatMap((m) => m.memberships);
+    const paymentStatusByMembership = await this.getPaymentStatusByMembership(allMemberships);
+
     return {
       data: members.map((m) => ({
         ...m,
-        activeMemberships: m.memberships,
+        activeMemberships: m.memberships.map((mem) => ({
+          ...mem,
+          payment_status: paymentStatusByMembership.get(mem.id) ?? 'CURRENT',
+        })),
         memberships: undefined,
       })),
       meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
     };
+  }
+
+  // Un miembro puede tener varias membresías, cada una con su propio historial de
+  // pagos — el estado de pago se calcula por membresía (no uno solo por miembro),
+  // en vivo desde el pago mas reciente ligado a esa membresía. Al ser calculado en
+  // cada lectura (no un campo guardado), se mantiene correcto automáticamente sin
+  // importar si el pago se registró manualmente o vía el cobro automático (dunning).
+  private async getPaymentStatusByMembership(
+    memberships: { id: string }[],
+  ): Promise<Map<string, 'CURRENT' | 'PENDING' | 'OVERDUE'>> {
+    const result = new Map<string, 'CURRENT' | 'PENDING' | 'OVERDUE'>();
+    if (memberships.length === 0) return result;
+
+    const payments = await this.prisma.payment.findMany({
+      where: { membership_id: { in: memberships.map((m) => m.id) } },
+      orderBy: { created_at: 'desc' },
+      select: { membership_id: true, status: true },
+    });
+
+    const latestByMembership = new Map<string, (typeof payments)[number]>();
+    for (const p of payments) {
+      if (p.membership_id && !latestByMembership.has(p.membership_id)) {
+        latestByMembership.set(p.membership_id, p);
+      }
+    }
+
+    for (const m of memberships) {
+      const latest = latestByMembership.get(m.id);
+      if (!latest) {
+        result.set(m.id, 'CURRENT'); // sin pagos registrados aún — nada pendiente que reportar
+      } else if (latest.status === 'FAILED') {
+        result.set(m.id, 'OVERDUE');
+      } else if (['PENDING', 'PROCESSING', 'DRAFT'].includes(latest.status)) {
+        result.set(m.id, 'PENDING');
+      } else {
+        result.set(m.id, 'CURRENT');
+      }
+    }
+    return result;
   }
 
   async findMyProfile(userId: string, gymId: string) {
@@ -524,7 +570,15 @@ export class MembersService {
     });
 
     if (!member) throw new NotFoundException('Miembro no encontrado');
-    return member;
+
+    const paymentStatusByMembership = await this.getPaymentStatusByMembership(member.memberships);
+    return {
+      ...member,
+      memberships: member.memberships.map((mem) => ({
+        ...mem,
+        payment_status: paymentStatusByMembership.get(mem.id) ?? 'CURRENT',
+      })),
+    };
   }
 
   async updateMember(gymId: string, id: string, dto: UpdateMemberDto) {
@@ -757,6 +811,36 @@ export class MembersService {
     ]);
 
     return { message: 'Membresía cancelada' };
+  }
+
+  // El staff a veces necesita corregir el período de una membresía ya asignada
+  // (ej. error de captura, ajuste manual acordado con el cliente) — no cambia
+  // el estado ni el precio, solo las fechas.
+  async updateMembershipDates(
+    gymId: string,
+    memberId: string,
+    membershipId: string,
+    dto: UpdateMembershipDatesDto,
+  ) {
+    const membership = await this.findActiveMembership(gymId, memberId, membershipId);
+
+    const startDate = new Date(dto.startDate);
+    const endDate = new Date(dto.endDate);
+    if (endDate <= startDate) {
+      throw new BadRequestException('La fecha de fin debe ser posterior a la fecha de inicio');
+    }
+
+    return this.prisma.membership.update({
+      where: { id: membership.id },
+      data: {
+        start_date: startDate,
+        end_date: endDate,
+        notes: dto.reason
+          ? `${membership.notes ? membership.notes + ' · ' : ''}Fechas ajustadas: ${dto.reason}`
+          : membership.notes,
+      },
+      include: { type: true },
+    });
   }
 
   // ─── HELPERS PRIVADOS ─────────────────────────────────────────────────────────

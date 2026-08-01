@@ -22,6 +22,7 @@ interface MemberRow {
   activeMemberships: Array<{
     id: string;
     status: string;
+    payment_status?: 'CURRENT' | 'PENDING' | 'OVERDUE';
     end_date: string;
     type: { name: string; billing_frequency: string } | null;
   }>;

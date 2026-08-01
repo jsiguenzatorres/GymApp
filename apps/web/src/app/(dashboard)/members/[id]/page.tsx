@@ -10,6 +10,7 @@ import { WorkoutPlanSection } from '@/components/members/workout-plan-section';
 import { CreditSection } from '@/components/members/credit-section';
 import { HealthDataSection } from '@/components/members/health-data-section';
 import { OnboardingStatusSection } from '@/components/members/onboarding-status';
+import { MemberDetailTabs } from '@/components/members/member-detail-tabs';
 import { revalidatePath } from 'next/cache';
 import { ArrowLeft, Phone, Mail, Calendar, MapPin, Shield } from 'lucide-react';
 
@@ -24,6 +25,7 @@ interface MembershipType {
 interface Membership {
   id: string;
   status: string;
+  payment_status?: 'CURRENT' | 'PENDING' | 'OVERDUE';
   start_date: string;
   end_date: string;
   price_paid: string;
@@ -83,6 +85,42 @@ const MEMBERSHIP_STATUS_CONFIG: Record<string, { label: string; color: string }>
     color: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
   },
 };
+
+const PAYMENT_STATUS_CONFIG: Record<string, { label: string; color: string }> = {
+  CURRENT: {
+    label: 'Al día',
+    color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
+  },
+  PENDING: {
+    label: 'Pago pendiente',
+    color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
+  },
+  OVERDUE: {
+    label: 'En mora',
+    color: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
+  },
+};
+
+function StatusPills({ membership }: { membership: Membership }) {
+  const membershipCfg = MEMBERSHIP_STATUS_CONFIG[membership.status];
+  const paymentCfg = PAYMENT_STATUS_CONFIG[membership.payment_status ?? 'CURRENT'];
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <span
+        className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${membershipCfg?.color ?? 'bg-muted text-muted-foreground'}`}
+        title="Estado de la membresía"
+      >
+        Membresía: {membershipCfg?.label ?? membership.status}
+      </span>
+      <span
+        className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${paymentCfg.color}`}
+        title="Estado del pago"
+      >
+        Pago: {paymentCfg.label}
+      </span>
+    </div>
+  );
+}
 
 const LOYALTY_LABELS: Record<string, string> = {
   bronze: '🥉 Bronce',
@@ -261,11 +299,7 @@ export default async function MemberDetailPage({ params }: PageProps) {
                         {membership.type.billing_frequency}
                       </p>
                     </div>
-                    <span
-                      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${MEMBERSHIP_STATUS_CONFIG[membership.status]?.color ?? 'bg-muted text-muted-foreground'}`}
-                    >
-                      {MEMBERSHIP_STATUS_CONFIG[membership.status]?.label ?? membership.status}
-                    </span>
+                    <StatusPills membership={membership} />
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
@@ -295,6 +329,8 @@ export default async function MemberDetailPage({ params }: PageProps) {
                     memberId={id}
                     membershipId={membership.id}
                     status={membership.status}
+                    startDate={membership.start_date}
+                    endDate={membership.end_date}
                   />
                 </div>
               ))}
@@ -313,82 +349,107 @@ export default async function MemberDetailPage({ params }: PageProps) {
         </div>
       </div>
 
-      {/* Historial de membresías */}
-      {member.memberships.length > 0 && (
-        <div className="rounded-lg border bg-card overflow-hidden">
-          <div className="px-5 py-4 border-b">
-            <h2 className="font-semibold">Historial de Membresías</h2>
-          </div>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b bg-muted/40">
-                <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Plan</th>
-                <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Estado</th>
-                <th className="px-4 py-2.5 text-left font-medium text-muted-foreground hidden sm:table-cell">
-                  Inicio
-                </th>
-                <th className="px-4 py-2.5 text-left font-medium text-muted-foreground hidden sm:table-cell">
-                  Fin
-                </th>
-                <th className="px-4 py-2.5 text-right font-medium text-muted-foreground">Monto</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {member.memberships.map((m) => (
-                <tr key={m.id} className="hover:bg-muted/30">
-                  <td className="px-4 py-3 font-medium">{m.type.name}</td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${MEMBERSHIP_STATUS_CONFIG[m.status]?.color ?? 'bg-muted text-muted-foreground'}`}
-                    >
-                      {MEMBERSHIP_STATUS_CONFIG[m.status]?.label ?? m.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground hidden sm:table-cell">
-                    {formatDate(m.start_date)}
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground hidden sm:table-cell">
-                    {formatDate(m.end_date)}
-                  </td>
-                  <td className="px-4 py-3 text-right font-medium">
-                    {formatCurrency(m.price_paid, m.currency)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* Onboarding status (J5) */}
-      <OnboardingStatusSection memberId={id} />
-
-      {/* Plan de entrenamiento asignado */}
-      <WorkoutPlanSection memberId={id} />
-
-      {/* Add-ons del miembro (NutriPro / NutriElite, etc.) */}
-      <AddonsSection memberId={id} />
-
-      {/* Crédito en cuenta (J2) */}
-      <CreditSection
-        memberId={id}
-        initialBalance={credit.balance}
-        initialHistory={credit.history}
-        fetchAction={fetchCreditAction}
-        createAction={createCreditAction}
+      {/* Resto de secciones — en pestañas para no tener que hacer scroll por
+          todo cuando solo se necesita consultar una cosa puntual */}
+      <MemberDetailTabs
+        tabs={[
+          {
+            id: 'historial',
+            label: 'Historial de Membresías',
+            content:
+              member.memberships.length > 0 ? (
+                <div className="rounded-lg border bg-card overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-muted/40">
+                        <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">
+                          Plan
+                        </th>
+                        <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">
+                          Estado
+                        </th>
+                        <th className="px-4 py-2.5 text-left font-medium text-muted-foreground hidden sm:table-cell">
+                          Inicio
+                        </th>
+                        <th className="px-4 py-2.5 text-left font-medium text-muted-foreground hidden sm:table-cell">
+                          Fin
+                        </th>
+                        <th className="px-4 py-2.5 text-right font-medium text-muted-foreground">
+                          Monto
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {member.memberships.map((m) => (
+                        <tr key={m.id} className="hover:bg-muted/30">
+                          <td className="px-4 py-3 font-medium">{m.type.name}</td>
+                          <td className="px-4 py-3">
+                            <StatusPills membership={m} />
+                          </td>
+                          <td className="px-4 py-3 text-muted-foreground hidden sm:table-cell">
+                            {formatDate(m.start_date)}
+                          </td>
+                          <td className="px-4 py-3 text-muted-foreground hidden sm:table-cell">
+                            {formatDate(m.end_date)}
+                          </td>
+                          <td className="px-4 py-3 text-right font-medium">
+                            {formatCurrency(m.price_paid, m.currency)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground px-1">Sin historial todavía.</p>
+              ),
+          },
+          {
+            id: 'onboarding',
+            label: '📋 Onboarding',
+            content: <OnboardingStatusSection memberId={id} />,
+          },
+          {
+            id: 'entrenamiento',
+            label: 'Plan de Entrenamiento',
+            content: <WorkoutPlanSection memberId={id} />,
+          },
+          {
+            id: 'addons',
+            label: 'Add-ons',
+            content: <AddonsSection memberId={id} />,
+          },
+          {
+            id: 'credito',
+            label: 'Crédito en cuenta',
+            content: (
+              <CreditSection
+                memberId={id}
+                initialBalance={credit.balance}
+                initialHistory={credit.history}
+                fetchAction={fetchCreditAction}
+                createAction={createCreditAction}
+              />
+            ),
+          },
+          {
+            id: 'salud',
+            label: 'Datos de Salud',
+            content: <HealthDataSection memberId={id} />,
+          },
+          {
+            id: 'notas',
+            label: 'Notas',
+            content: member.notes ? (
+              <div className="rounded-lg border bg-card p-5">
+                <p className="text-sm text-foreground">{member.notes}</p>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground px-1">Sin notas.</p>
+            ),
+          },
+        ]}
       />
-
-      {/* Datos de salud (J3) */}
-      <HealthDataSection memberId={id} />
-
-      {member.notes && (
-        <div className="rounded-lg border bg-card p-5">
-          <h2 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide mb-2">
-            Notas
-          </h2>
-          <p className="text-sm text-foreground">{member.notes}</p>
-        </div>
-      )}
     </div>
   );
 }

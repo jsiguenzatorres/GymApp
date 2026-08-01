@@ -16,9 +16,37 @@ interface MemberRow {
   activeMemberships: Array<{
     id: string;
     status: string;
+    payment_status?: 'CURRENT' | 'PENDING' | 'OVERDUE';
     end_date: string;
     type: { name: string; billing_frequency: string } | null;
   }>;
+}
+
+const PAYMENT_STATUS_CONFIG: Record<string, { label: string; color: string }> = {
+  CURRENT: {
+    label: 'Al día',
+    color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
+  },
+  PENDING: {
+    label: 'Pago pendiente',
+    color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
+  },
+  OVERDUE: {
+    label: 'En mora',
+    color: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
+  },
+};
+
+// Peor caso entre todas las membresías activas del miembro — si al menos una
+// está en mora, eso es lo primero que el staff necesita ver.
+function worstPaymentStatus(
+  memberships: MemberRow['activeMemberships'],
+): 'CURRENT' | 'PENDING' | 'OVERDUE' | null {
+  if (memberships.length === 0) return null;
+  const order = { OVERDUE: 0, PENDING: 1, CURRENT: 2 };
+  return memberships
+    .map((m) => m.payment_status ?? 'CURRENT')
+    .sort((a, b) => order[a] - order[b])[0];
 }
 
 function RiskBadge({ score }: { score: number }) {
@@ -101,11 +129,38 @@ export function MembersTable({ members }: { members: MemberRow[] }) {
                 </td>
                 <td className="px-4 py-3 hidden md:table-cell">
                   {member.activeMemberships.length > 0 ? (
-                    <span className="text-foreground">
-                      {member.activeMemberships.length > 2
-                        ? `${member.activeMemberships[0].type?.name ?? '—'} +${member.activeMemberships.length - 1}`
-                        : member.activeMemberships.map((m) => m.type?.name ?? '—').join(', ')}
-                    </span>
+                    <div className="space-y-1">
+                      <span className="text-foreground">
+                        {member.activeMemberships.length > 2
+                          ? `${member.activeMemberships[0].type?.name ?? '—'} +${member.activeMemberships.length - 1}`
+                          : member.activeMemberships.map((m) => m.type?.name ?? '—').join(', ')}
+                      </span>
+                      <div className="flex flex-wrap items-center gap-1">
+                        <span
+                          className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground"
+                          title="Estado de la membresía"
+                        >
+                          {member.activeMemberships.some(
+                            (m) => m.status === 'ACTIVE' || m.status === 'TRIAL',
+                          )
+                            ? 'Membresía activa'
+                            : 'Congelada'}
+                        </span>
+                        {(() => {
+                          const worst = worstPaymentStatus(member.activeMemberships);
+                          if (!worst) return null;
+                          const cfg = PAYMENT_STATUS_CONFIG[worst];
+                          return (
+                            <span
+                              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${cfg.color}`}
+                              title="Estado del pago"
+                            >
+                              {cfg.label}
+                            </span>
+                          );
+                        })()}
+                      </div>
+                    </div>
                   ) : (
                     <span className="text-muted-foreground">Sin plan</span>
                   )}

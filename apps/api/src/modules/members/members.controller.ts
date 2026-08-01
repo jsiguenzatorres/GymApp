@@ -23,6 +23,7 @@ import {
   AssignMembershipDto,
   FreezeMembershipDto,
   CancelMembershipDto,
+  UpdateMembershipDatesDto,
 } from './dto/membership-actions.dto';
 import { ListMembersDto } from './dto/list-members.dto';
 
@@ -213,6 +214,16 @@ export class MembersController {
     @Body() dto: CancelMembershipDto,
   ) {
     return this.membersService.cancelMembership(this.gymId(user), memberId, id, dto);
+  }
+
+  @Patch('members/:memberId/memberships/:id/dates')
+  updateMembershipDates(
+    @CurrentUser() user: JwtPayload,
+    @Param('memberId', ParseUUIDPipe) memberId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateMembershipDatesDto,
+  ) {
+    return this.membersService.updateMembershipDates(this.gymId(user), memberId, id, dto);
   }
 
   // ─── SELF-SERVICE (E3) — el miembro solicita freeze/cancel directo desde la app
