@@ -79,6 +79,10 @@ export class MemberFiscalInfoDto {
 
 export class UpdateMemberDto extends MemberFiscalInfoDto {
   @IsOptional()
+  @IsEmail()
+  email?: string;
+
+  @IsOptional()
   @IsString()
   @MinLength(1)
   @MaxLength(100)

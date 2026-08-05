@@ -8,10 +8,21 @@ import { ArrowLeft } from 'lucide-react';
 interface MemberData {
   first_name: string;
   last_name: string;
+  email: string;
   phone: string | null;
   birthdate: string | null;
   gender: string | null;
   notes: string | null;
+}
+
+interface MemberApiResponse {
+  first_name: string;
+  last_name: string;
+  phone: string | null;
+  birthdate: string | null;
+  gender: string | null;
+  notes: string | null;
+  user: { email: string };
 }
 
 // Valores alineados con CreateMemberDto/UpdateMemberDto del backend (@IsIn(['M','F','X'])).
@@ -33,11 +44,13 @@ export default function EditMemberPage() {
   const [form, setForm] = useState<MemberData>({
     first_name: '',
     last_name: '',
+    email: '',
     phone: '',
     birthdate: '',
     gender: '',
     notes: '',
   });
+  const [initialEmail, setInitialEmail] = useState('');
   const [fetchDone, setFetchDone] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -45,15 +58,17 @@ export default function EditMemberPage() {
   useEffect(() => {
     fetch(`/api/proxy/members/${memberId}`)
       .then((r) => r.json())
-      .then((data: MemberData) => {
+      .then((data: MemberApiResponse) => {
         setForm({
           first_name: data.first_name ?? '',
           last_name: data.last_name ?? '',
+          email: data.user.email ?? '',
           phone: data.phone ?? '',
           birthdate: data.birthdate ? data.birthdate.split('T')[0] : '',
           gender: data.gender ?? '',
           notes: data.notes ?? '',
         });
+        setInitialEmail(data.user.email ?? '');
         setFetchDone(true);
       });
   }, [memberId]);
@@ -71,6 +86,7 @@ export default function EditMemberPage() {
         firstName: form.first_name,
         lastName: form.last_name,
       };
+      if (form.email && form.email !== initialEmail) body.email = form.email;
       if (form.phone) body.phone = form.phone;
       if (form.birthdate) body.birthdate = form.birthdate;
       if (form.gender) body.gender = form.gender;
@@ -140,6 +156,21 @@ export default function EditMemberPage() {
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
             />
           </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium text-gray-700">Correo electrónico</label>
+          <input
+            type="email"
+            value={form.email}
+            onChange={(e) => set('email', e.target.value)}
+            required
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+          />
+          <p className="text-xs text-gray-400">
+            Este es el correo con el que el cliente inicia sesión en la app. Si lo cambias, deberá
+            volver a verificarlo.
+          </p>
         </div>
 
         <div className="space-y-1.5">

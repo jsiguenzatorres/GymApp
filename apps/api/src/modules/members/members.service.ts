@@ -582,23 +582,45 @@ export class MembersService {
   }
 
   async updateMember(gymId: string, id: string, dto: UpdateMemberDto) {
-    await this.findMemberRecord(gymId, id);
-    return this.prisma.member.update({
-      where: { id },
-      data: {
-        ...(dto.firstName !== undefined && { first_name: dto.firstName }),
-        ...(dto.lastName !== undefined && { last_name: dto.lastName }),
-        ...(dto.phone !== undefined && { phone: dto.phone }),
-        ...(dto.birthdate !== undefined && { birthdate: new Date(dto.birthdate) }),
-        ...(dto.gender !== undefined && { gender: dto.gender }),
-        ...(dto.notes !== undefined && { notes: dto.notes }),
-        ...(dto.dui !== undefined && { dui: dto.dui }),
-        ...(dto.duiExpiration !== undefined && { dui_expiration: new Date(dto.duiExpiration) }),
-        ...(dto.address !== undefined && { address: dto.address }),
-        ...(dto.isTaxpayer !== undefined && { is_taxpayer: dto.isTaxpayer }),
-        ...(dto.nit !== undefined && { nit: dto.nit }),
-        ...(dto.nrc !== undefined && { nrc: dto.nrc }),
-      },
+    const member = await this.findMemberRecord(gymId, id);
+
+    if (dto.email !== undefined) {
+      const email = dto.email.toLowerCase().trim();
+      const existing = await this.prisma.user.findUnique({ where: { email } });
+      if (existing && existing.id !== member.user_id) {
+        throw new ConflictException('Ya existe un usuario con ese email');
+      }
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      if (dto.email !== undefined) {
+        await tx.user.update({
+          where: { id: member.user_id },
+          data: {
+            email: dto.email.toLowerCase().trim(),
+            email_verified: false,
+            email_verified_at: null,
+          },
+        });
+      }
+
+      return tx.member.update({
+        where: { id },
+        data: {
+          ...(dto.firstName !== undefined && { first_name: dto.firstName }),
+          ...(dto.lastName !== undefined && { last_name: dto.lastName }),
+          ...(dto.phone !== undefined && { phone: dto.phone }),
+          ...(dto.birthdate !== undefined && { birthdate: new Date(dto.birthdate) }),
+          ...(dto.gender !== undefined && { gender: dto.gender }),
+          ...(dto.notes !== undefined && { notes: dto.notes }),
+          ...(dto.dui !== undefined && { dui: dto.dui }),
+          ...(dto.duiExpiration !== undefined && { dui_expiration: new Date(dto.duiExpiration) }),
+          ...(dto.address !== undefined && { address: dto.address }),
+          ...(dto.isTaxpayer !== undefined && { is_taxpayer: dto.isTaxpayer }),
+          ...(dto.nit !== undefined && { nit: dto.nit }),
+          ...(dto.nrc !== undefined && { nrc: dto.nrc }),
+        },
+      });
     });
   }
 
