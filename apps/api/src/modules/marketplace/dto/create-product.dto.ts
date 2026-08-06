@@ -1,4 +1,17 @@
-import { IsString, IsOptional, IsNumber, IsBoolean, IsUUID, Min, MaxLength } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsNumber,
+  IsBoolean,
+  IsInt,
+  IsUUID,
+  IsArray,
+  ValidateNested,
+  ArrayMinSize,
+  Min,
+  MaxLength,
+} from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class CreateProductDto {
   @IsString() @MaxLength(200) name: string;
@@ -28,12 +41,26 @@ export class CreateCategoryDto {
   @IsOptional() @IsNumber() sort_order?: number;
 }
 
+export class OrderItemDto {
+  @IsUUID() product_id: string;
+  @IsInt() @Min(1) quantity: number;
+}
+
 export class CreateOrderDto {
   @IsUUID() member_id: string;
   @IsOptional() @IsString() notes?: string;
-  items: { product_id: string; quantity: number }[];
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => OrderItemDto)
+  items: OrderItemDto[];
 }
 
 export class UpdateOrderStatusDto {
   @IsString() status: string;
+}
+
+export class AdjustStockDto {
+  @IsInt() delta: number; // positivo = entrada/reabastecimiento, negativo = salida/ajuste
+  @IsOptional() @IsString() @MaxLength(200) reason?: string;
 }

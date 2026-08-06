@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, ShoppingCart, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowLeft, ShoppingCart, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 
 interface OrderItem {
   id: string;
@@ -103,19 +103,28 @@ export default function OrdersPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <Link
-          href="/marketplace"
-          className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 hover:bg-gray-50"
-        >
-          <ArrowLeft className="h-4 w-4 text-gray-500" />
-        </Link>
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Pedidos</h1>
-          <p className="text-sm text-gray-500">
-            {total} pedido{total !== 1 ? 's' : ''} en total
-          </p>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <Link
+            href="/marketplace"
+            className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 hover:bg-gray-50"
+          >
+            <ArrowLeft className="h-4 w-4 text-gray-500" />
+          </Link>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Pedidos</h1>
+            <p className="text-sm text-gray-500">
+              {total} pedido{total !== 1 ? 's' : ''} en total
+            </p>
+          </div>
         </div>
+        <Link
+          href="/marketplace/orders/new"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-2 text-sm font-semibold text-white hover:bg-violet-700 transition-colors shadow-sm"
+        >
+          <Plus className="h-4 w-4" />
+          Nueva venta
+        </Link>
       </div>
 
       {/* Status filter */}

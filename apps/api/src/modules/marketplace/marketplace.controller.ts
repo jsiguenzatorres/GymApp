@@ -25,6 +25,7 @@ import {
   CreateCategoryDto,
   CreateOrderDto,
   UpdateOrderStatusDto,
+  AdjustStockDto,
 } from './dto/create-product.dto';
 import { STAFF_ROLES } from '@gymapp/shared-types';
 
@@ -131,9 +132,30 @@ export class MarketplaceController {
   adjustStock(
     @CurrentUser() user: JwtPayload,
     @Param('id', ParseUUIDPipe) id: string,
-    @Body('delta') delta: number,
+    @Body() dto: AdjustStockDto,
   ) {
-    return this.marketplaceService.adjustStock(this.gymId(user), id, delta);
+    return this.marketplaceService.adjustStock(
+      this.gymId(user),
+      id,
+      dto.delta,
+      user.sub,
+      dto.reason,
+    );
+  }
+
+  @Get('products/:id/stock-movements')
+  listStockMovements(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.marketplaceService.listStockMovements(
+      this.gymId(user),
+      id,
+      page ? parseInt(page) : 1,
+      limit ? parseInt(limit) : 20,
+    );
   }
 
   // ─── ORDERS ───────────────────────────────────────────────────────────────────
@@ -167,7 +189,7 @@ export class MarketplaceController {
       const own = await this.marketplaceService.isOwnMember(gymId, user.sub, dto.member_id);
       if (!own) throw new ForbiddenException('No puedes crear pedidos para otro miembro');
     }
-    return this.marketplaceService.createOrder(gymId, dto);
+    return this.marketplaceService.createOrder(gymId, dto, user.sub);
   }
 
   @Patch('marketplace-orders/:id/status')

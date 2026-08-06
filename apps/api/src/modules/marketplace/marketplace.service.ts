@@ -114,11 +114,60 @@ export class MarketplaceService {
     return this.prisma.product.delete({ where: { id } });
   }
 
-  async adjustStock(gymId: string, id: string, delta: number) {
+  async adjustStock(gymId: string, id: string, delta: number, userId: string, reason?: string) {
     const p = await this.getProduct(gymId, id);
     const newStock = p.stock + delta;
     if (newStock < 0) throw new BadRequestException('Stock insuficiente');
-    return this.prisma.product.update({ where: { id }, data: { stock: newStock } });
+    if (delta === 0) throw new BadRequestException('La cantidad debe ser distinta de 0');
+
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.product.update({ where: { id }, data: { stock: newStock } });
+      await tx.stockMovement.create({
+        data: {
+          gym_id: gymId,
+          product_id: id,
+          type: delta > 0 ? 'IN' : 'OUT',
+          quantity: Math.abs(delta),
+          balance_after: newStock,
+          reason,
+          created_by: userId,
+        },
+      });
+      return updated;
+    });
+  }
+
+  async listStockMovements(gymId: string, productId: string, page = 1, limit = 20) {
+    await this.getProduct(gymId, productId);
+    const skip = (page - 1) * limit;
+    const where = { gym_id: gymId, product_id: productId };
+    const [items, total] = await Promise.all([
+      this.prisma.stockMovement.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { created_at: 'desc' },
+      }),
+      this.prisma.stockMovement.count({ where }),
+    ]);
+
+    const staffIds = [...new Set(items.map((i) => i.created_by).filter(Boolean))] as string[];
+    const staffNames = staffIds.length
+      ? await this.prisma.staff.findMany({
+          where: { user_id: { in: staffIds }, gym_id: gymId },
+          select: { user_id: true, first_name: true, last_name: true },
+        })
+      : [];
+    const staffNameByUserId = new Map(
+      staffNames.map((s) => [s.user_id, `${s.first_name} ${s.last_name}`]),
+    );
+
+    const data = items.map((item) => ({
+      ...item,
+      created_by_name: item.created_by ? (staffNameByUserId.get(item.created_by) ?? null) : null,
+    }));
+
+    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   // ─── ORDERS ───────────────────────────────────────────────────────────────────
@@ -166,7 +215,7 @@ export class MarketplaceService {
     return !!member;
   }
 
-  async createOrder(gymId: string, dto: CreateOrderDto) {
+  async createOrder(gymId: string, dto: CreateOrderDto, createdByUserId?: string) {
     const productIds = dto.items.map((i) => i.product_id);
     const products = await this.prisma.product.findMany({
       where: { id: { in: productIds }, gym_id: gymId, is_active: true },
@@ -213,9 +262,21 @@ export class MarketplaceService {
       });
 
       for (const item of items) {
-        await tx.product.update({
+        const updatedProduct = await tx.product.update({
           where: { id: item.product_id },
           data: { stock: { decrement: item.quantity } },
+        });
+        await tx.stockMovement.create({
+          data: {
+            gym_id: gymId,
+            product_id: item.product_id,
+            type: 'OUT',
+            quantity: item.quantity,
+            balance_after: updatedProduct.stock,
+            reason: `Venta — Orden #${o.id.slice(0, 8)}`,
+            related_order_id: o.id,
+            created_by: createdByUserId,
+          },
         });
       }
 

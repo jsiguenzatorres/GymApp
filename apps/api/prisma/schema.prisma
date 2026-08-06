@@ -150,6 +150,7 @@ model Gym {
   box_delivery_requests BoxDeliveryRequest[]
   challenges            Challenge[]
   rewards               Reward[]
+  stock_movements       StockMovement[]
 
   @@index([saas_plan, is_active])
   @@map("gyms")
@@ -871,6 +872,7 @@ model Product {
   category    ProductCategory? @relation(fields: [category_id], references: [id])
   order_items OrderItem[]
   subscriptions ProductSubscription[]
+  stock_movements StockMovement[]
 
   @@index([gym_id, is_active])
   @@index([gym_id, category_id])
@@ -909,6 +911,27 @@ model OrderItem {
   product Product          @relation(fields: [product_id], references: [id])
 
   @@map("order_items")
+}
+
+// Kardex — bitácora de todo movimiento de stock (entradas por compra, salidas
+// por venta, ajustes manuales) para control interno de inventario.
+model StockMovement {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gym_id           String   @db.Uuid
+  product_id       String   @db.Uuid
+  type             String   @db.VarChar(10) // IN|OUT — dirección del movimiento
+  quantity         Int // magnitud siempre positiva; la dirección la da `type`
+  balance_after    Int // stock resultante justo después de este movimiento
+  reason           String?  @db.VarChar(200)
+  related_order_id String?  @db.Uuid // MarketplaceOrder.id si vino de una venta
+  created_by       String?  @db.Uuid // User.id del staff que hizo el ajuste manual; null si fue automático (venta)
+  created_at       DateTime @default(now())
+
+  gym     Gym     @relation(fields: [gym_id], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [product_id], references: [id], onDelete: Cascade)
+
+  @@index([gym_id, product_id, created_at(sort: Desc)])
+  @@map("stock_movements")
 }
 
 // ─── NUTRICIÓN ────────────────────────────────────────────────────────────────

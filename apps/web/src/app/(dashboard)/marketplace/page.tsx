@@ -1,6 +1,6 @@
 import { serverFetch } from '@/lib/server-api';
 import Link from 'next/link';
-import { Package, ShoppingCart, Tag, TrendingUp, Plus, Edit } from 'lucide-react';
+import { Package, ShoppingCart, Tag, TrendingUp, Plus, Edit, ClipboardList } from 'lucide-react';
 
 interface Product {
   id: string;
@@ -91,6 +91,13 @@ export default async function MarketplacePage() {
           >
             <Tag className="h-4 w-4" />
             Categorías
+          </Link>
+          <Link
+            href="/marketplace/stock"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors shadow-sm"
+          >
+            <ClipboardList className="h-4 w-4" />
+            Ajustar stock
           </Link>
           <Link
             href="/marketplace/products/new"
