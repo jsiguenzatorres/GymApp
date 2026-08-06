@@ -999,6 +999,8 @@ export const ordersApi = {
       `/api/v1/marketplace-orders?page=${page}&limit=20`,
       token,
     ),
+  getReceiptPdfUrl: (orderId: string) =>
+    `${API_URL}/api/v1/marketplace-orders/${orderId}/receipt-pdf`,
 };
 
 // ─── Access log ───────────────────────────────────────────────────────────────

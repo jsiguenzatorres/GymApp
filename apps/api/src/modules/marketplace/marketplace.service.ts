@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import PDFDocument from 'pdfkit';
 import { PrismaService } from '../database/prisma.service';
 import { GeminiService } from '../ai/gemini.service';
 import {
@@ -7,6 +8,14 @@ import {
   CreateOrderDto,
   UpdateOrderStatusDto,
 } from './dto/create-product.dto';
+
+const ORDER_STATUS_LABELS: Record<string, string> = {
+  PENDING: 'Pendiente',
+  CONFIRMED: 'Confirmado',
+  READY: 'Listo',
+  DELIVERED: 'Entregado',
+  CANCELLED: 'Cancelado',
+};
 
 const ORDER_STATUSES = ['PENDING', 'CONFIRMED', 'READY', 'DELIVERED', 'CANCELLED'];
 
@@ -172,9 +181,14 @@ export class MarketplaceService {
 
   // ─── ORDERS ───────────────────────────────────────────────────────────────────
 
-  async listOrders(gymId: string, status?: string, page = 1, limit = 20) {
+  // memberId presente = restringido a "mis pedidos" (llamado por un MEMBER, no staff)
+  async listOrders(gymId: string, status?: string, page = 1, limit = 20, memberId?: string) {
     const skip = (page - 1) * limit;
-    const where = { gym_id: gymId, ...(status ? { status } : {}) };
+    const where = {
+      gym_id: gymId,
+      ...(status ? { status } : {}),
+      ...(memberId ? { member_id: memberId } : {}),
+    };
     const [data, total] = await Promise.all([
       this.prisma.marketplaceOrder.findMany({
         where,
@@ -191,9 +205,9 @@ export class MarketplaceService {
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
-  async getOrder(gymId: string, id: string) {
+  async getOrder(gymId: string, id: string, memberId?: string) {
     const o = await this.prisma.marketplaceOrder.findFirst({
-      where: { id, gym_id: gymId },
+      where: { id, gym_id: gymId, ...(memberId ? { member_id: memberId } : {}) },
       include: {
         member: { select: { id: true, first_name: true, last_name: true } },
         items: {
@@ -205,6 +219,203 @@ export class MarketplaceService {
     });
     if (!o) throw new NotFoundException('Pedido no encontrado');
     return o;
+  }
+
+  async resolveMemberId(gymId: string, userId: string): Promise<string> {
+    const member = await this.prisma.member.findFirst({
+      where: { gym_id: gymId, user_id: userId },
+      select: { id: true },
+    });
+    if (!member) throw new NotFoundException('Miembro no encontrado');
+    return member.id;
+  }
+
+  // Genera el ticket de compra en PDF con los datos reales de la orden — se
+  // genera al vuelo (no se guarda archivo) porque una orden ya creada no
+  // cambia, así que siempre está en sincronía con la BD sin costo de storage.
+  async generateReceiptPdf(gymId: string, orderId: string, memberId?: string): Promise<Buffer> {
+    const [order, gym] = await Promise.all([
+      this.prisma.marketplaceOrder.findFirst({
+        where: { id: orderId, gym_id: gymId, ...(memberId ? { member_id: memberId } : {}) },
+        include: {
+          member: { include: { user: { select: { email: true } } } },
+          items: { include: { product: { select: { name: true, sku: true } } } },
+        },
+      }),
+      this.prisma.gym.findUnique({
+        where: { id: gymId },
+        select: { name: true, address: true, phone: true, tax_id: true, legal_name: true },
+      }),
+    ]);
+    if (!order) throw new NotFoundException('Pedido no encontrado');
+
+    return new Promise<Buffer>((resolve, reject) => {
+      const doc = new PDFDocument({ size: 'A4', margin: 50 });
+      const buffers: Buffer[] = [];
+      doc.on('data', (chunk: Buffer) => buffers.push(chunk));
+      doc.on('end', () => resolve(Buffer.concat(buffers)));
+      doc.on('error', reject);
+
+      const shortId = order.id.slice(0, 8).toUpperCase();
+      const issuedAt = order.created_at.toLocaleString('es-SV', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+
+      // Encabezado — datos del gym
+      doc
+        .fontSize(18)
+        .fillColor('#1d4ed8')
+        .text(gym?.legal_name ?? gym?.name ?? 'GymApp', { align: 'center' });
+      const contactLine = [gym?.address, gym?.phone, gym?.tax_id ? `NIT: ${gym.tax_id}` : null]
+        .filter(Boolean)
+        .join(' · ');
+      if (contactLine) {
+        doc.fontSize(9).fillColor('#6b7280').text(contactLine, { align: 'center' });
+      }
+      doc.moveDown(1);
+      doc
+        .moveTo(50, doc.y)
+        .lineTo(doc.page.width - 50, doc.y)
+        .strokeColor('#e5e7eb')
+        .lineWidth(1)
+        .stroke();
+      doc.moveDown(1);
+
+      // Título
+      doc.fontSize(16).fillColor('#111827').text('Comprobante de Compra', { align: 'center' });
+      doc.moveDown(1);
+
+      // Datos de la orden y del cliente
+      const infoStartY = doc.y;
+      doc.fontSize(9).fillColor('#6b7280').text('N.º de pedido', 50, infoStartY);
+      doc
+        .fontSize(12)
+        .fillColor('#111827')
+        .text(shortId, 50, infoStartY + 12);
+
+      doc.fontSize(9).fillColor('#6b7280').text('Fecha', 300, infoStartY);
+      doc
+        .fontSize(12)
+        .fillColor('#111827')
+        .text(issuedAt, 300, infoStartY + 12);
+
+      const row2Y = infoStartY + 40;
+      doc.fontSize(9).fillColor('#6b7280').text('Cliente', 50, row2Y);
+      doc
+        .fontSize(12)
+        .fillColor('#111827')
+        .text(`${order.member.first_name} ${order.member.last_name}`, 50, row2Y + 12);
+      if (order.member.user?.email) {
+        doc
+          .fontSize(9)
+          .fillColor('#6b7280')
+          .text(order.member.user.email, 50, row2Y + 30);
+      }
+
+      doc.fontSize(9).fillColor('#6b7280').text('Estado', 300, row2Y);
+      doc
+        .fontSize(12)
+        .fillColor('#111827')
+        .text(ORDER_STATUS_LABELS[order.status] ?? order.status, 300, row2Y + 12);
+
+      doc.y = row2Y + 55;
+      doc.moveDown(0.5);
+
+      // Tabla de productos
+      const colProduct = 50;
+      const colQty = 300;
+      const colUnit = 360;
+      const colSubtotal = 460;
+      const tableWidth = doc.page.width - 100;
+
+      const tableHeaderY = doc.y;
+      doc
+        .fontSize(9)
+        .fillColor('#6b7280')
+        .text('Producto', colProduct, tableHeaderY)
+        .text('Cant.', colQty, tableHeaderY)
+        .text('Precio unit.', colUnit, tableHeaderY)
+        .text('Subtotal', colSubtotal, tableHeaderY, { width: 90, align: 'right' });
+      doc
+        .moveTo(50, tableHeaderY + 14)
+        .lineTo(50 + tableWidth, tableHeaderY + 14)
+        .strokeColor('#e5e7eb')
+        .stroke();
+      doc.y = tableHeaderY + 20;
+
+      order.items.forEach((item) => {
+        const rowY = doc.y;
+        doc
+          .fontSize(10)
+          .fillColor('#111827')
+          .text(item.product.name, colProduct, rowY, { width: 230 })
+          .text(String(item.quantity), colQty, rowY)
+          .text(`$${Number(item.unit_price).toFixed(2)}`, colUnit, rowY)
+          .text(`$${Number(item.subtotal).toFixed(2)}`, colSubtotal, rowY, {
+            width: 90,
+            align: 'right',
+          });
+        doc.y = rowY + 18;
+      });
+
+      doc
+        .moveTo(50, doc.y + 2)
+        .lineTo(50 + tableWidth, doc.y + 2)
+        .strokeColor('#e5e7eb')
+        .stroke();
+      doc.moveDown(1);
+
+      // Total
+      const totalY = doc.y;
+      doc.fontSize(13).fillColor('#111827').text('TOTAL', colUnit, totalY);
+      doc
+        .fontSize(13)
+        .fillColor('#111827')
+        .text(`$${Number(order.total).toFixed(2)}`, colSubtotal, totalY, {
+          width: 90,
+          align: 'right',
+        });
+      doc.y = totalY + 25;
+      doc.moveDown(1.5);
+
+      if (order.notes) {
+        doc.fontSize(9).fillColor('#6b7280').text(`Notas: ${order.notes}`);
+        doc.moveDown(1);
+      }
+
+      // Pie de página
+      doc
+        .fontSize(9)
+        .fillColor('#374151')
+        .text('¡Gracias por tu compra!', 50, doc.page.height - 90, {
+          align: 'center',
+          width: doc.page.width - 100,
+        });
+      doc
+        .fontSize(7)
+        .fillColor('#9ca3af')
+        .text(
+          'Este comprobante es un resumen interno de la venta y no constituye una factura fiscal (CF/CCF).',
+          50,
+          doc.page.height - 75,
+          { align: 'center', width: doc.page.width - 100 },
+        );
+      doc
+        .fontSize(7)
+        .fillColor('#9ca3af')
+        .text(
+          `Generado el ${new Date().toLocaleDateString('es-SV', { day: '2-digit', month: 'short', year: 'numeric' })} por GymApp`,
+          50,
+          doc.page.height - 60,
+          { align: 'center', width: doc.page.width - 100 },
+        );
+
+      doc.end();
+    });
   }
 
   async isOwnMember(gymId: string, userId: string, memberId: string): Promise<boolean> {

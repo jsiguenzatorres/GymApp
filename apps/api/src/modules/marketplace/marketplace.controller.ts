@@ -7,12 +7,14 @@ import {
   Param,
   Body,
   Query,
+  Res,
   UseGuards,
   ParseUUIDPipe,
   HttpCode,
   HttpStatus,
   ForbiddenException,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { PlanGuard } from '../../common/guards/plan.guard';
 import { RequiresPlan } from '../../common/decorators/requires-plan.decorator';
@@ -41,6 +43,10 @@ export class MarketplaceController {
   private gymId(user: JwtPayload): string {
     if (!user.gymId) throw new ForbiddenException('Sin contexto de gym');
     return user.gymId;
+  }
+
+  private isStaff(user: JwtPayload): boolean {
+    return (STAFF_ROLES as readonly string[]).includes(user.role);
   }
 
   // ─── STATS ────────────────────────────────────────────────────────────────────
@@ -161,31 +167,56 @@ export class MarketplaceController {
   // ─── ORDERS ───────────────────────────────────────────────────────────────────
 
   @Get('marketplace-orders')
-  listOrders(
+  async listOrders(
     @CurrentUser() user: JwtPayload,
     @Query('status') status?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
+    const gymId = this.gymId(user);
+    const memberId = this.isStaff(user)
+      ? undefined
+      : await this.marketplaceService.resolveMemberId(gymId, user.sub);
     return this.marketplaceService.listOrders(
-      this.gymId(user),
+      gymId,
       status,
       page ? parseInt(page) : 1,
       limit ? parseInt(limit) : 20,
+      memberId,
     );
   }
 
   @Get('marketplace-orders/:id')
-  getOrder(@CurrentUser() user: JwtPayload, @Param('id', ParseUUIDPipe) id: string) {
-    return this.marketplaceService.getOrder(this.gymId(user), id);
+  async getOrder(@CurrentUser() user: JwtPayload, @Param('id', ParseUUIDPipe) id: string) {
+    const gymId = this.gymId(user);
+    const memberId = this.isStaff(user)
+      ? undefined
+      : await this.marketplaceService.resolveMemberId(gymId, user.sub);
+    return this.marketplaceService.getOrder(gymId, id, memberId);
+  }
+
+  @Get('marketplace-orders/:id/receipt-pdf')
+  async downloadReceipt(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Res() res: Response,
+  ) {
+    const gymId = this.gymId(user);
+    const memberId = this.isStaff(user)
+      ? undefined
+      : await this.marketplaceService.resolveMemberId(gymId, user.sub);
+    const buffer = await this.marketplaceService.generateReceiptPdf(gymId, id, memberId);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="ticket-${id.slice(0, 8)}.pdf"`);
+    res.setHeader('Content-Length', buffer.length.toString());
+    res.end(buffer);
   }
 
   @Post('marketplace-orders')
   @HttpCode(HttpStatus.CREATED)
   async createOrder(@CurrentUser() user: JwtPayload, @Body() dto: CreateOrderDto) {
     const gymId = this.gymId(user);
-    const isStaff = (STAFF_ROLES as readonly string[]).includes(user.role);
-    if (!isStaff) {
+    if (!this.isStaff(user)) {
       const own = await this.marketplaceService.isOwnMember(gymId, user.sub, dto.member_id);
       if (!own) throw new ForbiddenException('No puedes crear pedidos para otro miembro');
     }

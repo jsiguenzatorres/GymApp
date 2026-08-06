@@ -50,6 +50,21 @@ async function handler(req: NextRequest, { params }: { params: Promise<{ path: s
     return sessionExpiredResponse();
   }
 
+  const contentType = upstreamRes.headers.get('content-type') ?? '';
+
+  // Respuestas binarias (ej. PDFs generados al vuelo) no pueden pasar por
+  // .text() — corrompe los bytes. Se reenvian tal cual, preservando headers
+  // relevantes para descarga (Content-Disposition).
+  if (!contentType.includes('application/json')) {
+    const arrayBuffer = await upstreamRes.arrayBuffer();
+    const headers: Record<string, string> = {
+      'Content-Type': contentType || 'application/octet-stream',
+    };
+    const disposition = upstreamRes.headers.get('content-disposition');
+    if (disposition) headers['Content-Disposition'] = disposition;
+    return new NextResponse(arrayBuffer, { status: upstreamRes.status, headers });
+  }
+
   const text = await upstreamRes.text();
   const responseInit = {
     status: upstreamRes.status,

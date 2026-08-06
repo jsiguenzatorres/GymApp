@@ -13,6 +13,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import { useAuthStore } from '@/store/auth.store';
 import {
   marketplaceApi,
@@ -69,6 +71,7 @@ export default function MarketplaceScreen() {
   // Orders state
   const [orders, setOrders] = useState<MarketplaceOrder[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
+  const [downloadingReceiptId, setDownloadingReceiptId] = useState<string | null>(null);
 
   // Credit (E5)
   const [creditBalance, setCreditBalance] = useState<number | null>(null);
@@ -117,6 +120,39 @@ export default function MarketplaceScreen() {
       );
     },
     [accessToken],
+  );
+
+  const downloadReceipt = useCallback(
+    async (order: MarketplaceOrder) => {
+      if (!accessToken || downloadingReceiptId) return;
+      setDownloadingReceiptId(order.id);
+      try {
+        const url = ordersApi.getReceiptPdfUrl(order.id);
+        const target = `${FileSystem.cacheDirectory}ticket-${order.id.slice(0, 8)}.pdf`;
+        const result = await FileSystem.downloadAsync(url, target, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        if (result.status !== 200) {
+          Alert.alert('Error', `No se pudo generar el ticket (status ${result.status})`);
+          return;
+        }
+        const canShare = await Sharing.isAvailableAsync();
+        if (canShare) {
+          await Sharing.shareAsync(result.uri, {
+            mimeType: 'application/pdf',
+            dialogTitle: 'Tu ticket de compra',
+            UTI: 'com.adobe.pdf',
+          });
+        } else {
+          Alert.alert('Listo', `Ticket guardado en ${result.uri}`);
+        }
+      } catch (err) {
+        Alert.alert('Error', err instanceof Error ? err.message : 'No se pudo descargar el ticket');
+      } finally {
+        setDownloadingReceiptId(null);
+      }
+    },
+    [accessToken, downloadingReceiptId],
   );
 
   const repeatOrder = useCallback(
@@ -426,13 +462,27 @@ export default function MarketplaceScreen() {
                     <Text style={styles.orderTotal}>
                       Total: ${parseFloat(order.total_amount).toFixed(2)}
                     </Text>
-                    <TouchableOpacity
-                      style={styles.repeatBtn}
-                      onPress={() => repeatOrder(order)}
-                      activeOpacity={0.85}
-                    >
-                      <Text style={styles.repeatBtnText}>🔄 Repetir</Text>
-                    </TouchableOpacity>
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                      <TouchableOpacity
+                        style={styles.ticketBtn}
+                        onPress={() => downloadReceipt(order)}
+                        activeOpacity={0.85}
+                        disabled={downloadingReceiptId === order.id}
+                      >
+                        {downloadingReceiptId === order.id ? (
+                          <ActivityIndicator size="small" color="#1d4ed8" />
+                        ) : (
+                          <Text style={styles.ticketBtnText}>🧾 Ticket</Text>
+                        )}
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.repeatBtn}
+                        onPress={() => repeatOrder(order)}
+                        activeOpacity={0.85}
+                      >
+                        <Text style={styles.repeatBtnText}>🔄 Repetir</Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 </View>
               );
@@ -828,6 +878,18 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   repeatBtnText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  ticketBtn: {
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+    minWidth: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ticketBtnText: { color: '#1d4ed8', fontSize: 12, fontWeight: '700' },
 
   // Subscriptions
   subscribeBtn: {

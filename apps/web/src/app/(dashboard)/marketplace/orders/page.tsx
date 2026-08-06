@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, ShoppingCart, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { ArrowLeft, ShoppingCart, ChevronLeft, ChevronRight, Plus, FileDown } from 'lucide-react';
 
 interface OrderItem {
   id: string;
@@ -195,6 +195,15 @@ export default function OrdersPage() {
                   <span className="text-base font-bold text-gray-900">
                     ${Number(o.total).toFixed(2)}
                   </span>
+                  <a
+                    href={`/api/proxy/marketplace-orders/${o.id}/receipt-pdf`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-xs font-medium text-violet-600 hover:underline"
+                  >
+                    <FileDown className="h-3.5 w-3.5" />
+                    Ticket
+                  </a>
                   <div className="flex gap-1.5">
                     {(nextStatuses[o.status] ?? []).map((ns) => {
                       const label = STATUSES.find((x) => x.value === ns)?.label ?? ns;
