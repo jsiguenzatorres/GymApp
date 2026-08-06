@@ -102,6 +102,10 @@ model Gym {
   founder_plan_type       SaasPlan?
   founder_locked_price    Decimal?  @db.Decimal(10, 2)
   founder_locked_at       DateTime?
+  // Contador atómico para el correlativo interno de tickets del marketplace
+  // (empieza en 1; se incrementa con UPDATE ... SET x = x+1, atómico en Postgres
+  // sin necesidad de locks explícitos aunque haya ventas concurrentes)
+  next_ticket_number      Int       @default(1)
 
   // Metadata
   created_at  DateTime @default(now())
@@ -880,14 +884,16 @@ model Product {
 }
 
 model MarketplaceOrder {
-  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  gym_id     String   @db.Uuid
-  member_id  String   @db.Uuid
-  status     String   @default("PENDING") @db.VarChar(20) // PENDING|CONFIRMED|READY|DELIVERED|CANCELLED
-  total      Decimal  @db.Decimal(10, 2)
-  notes      String?
-  created_at DateTime @default(now())
-  updated_at DateTime @updatedAt
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gym_id        String   @db.Uuid
+  member_id     String   @db.Uuid
+  status        String   @default("PENDING") @db.VarChar(20) // PENDING|CONFIRMED|READY|DELIVERED|CANCELLED
+  total         Decimal  @db.Decimal(10, 2)
+  notes         String?
+  ticket_number Int? // correlativo interno por gym, para reclamos — null en órdenes creadas antes de este campo
+  created_by    String?  @db.Uuid // User.id del staff que registró la venta; null si la creó el miembro desde la app
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
 
   gym    Gym         @relation(fields: [gym_id], references: [id], onDelete: Cascade)
   member Member      @relation(fields: [member_id], references: [id])

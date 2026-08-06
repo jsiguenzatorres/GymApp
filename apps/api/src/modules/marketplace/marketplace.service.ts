@@ -244,10 +244,39 @@ export class MarketplaceService {
       }),
       this.prisma.gym.findUnique({
         where: { id: gymId },
-        select: { name: true, address: true, phone: true, tax_id: true, legal_name: true },
+        select: {
+          name: true,
+          address: true,
+          phone: true,
+          tax_id: true,
+          legal_name: true,
+          logo_url: true,
+        },
       }),
     ]);
     if (!order) throw new NotFoundException('Pedido no encontrado');
+
+    const attendedBy = order.created_by
+      ? await this.prisma.staff.findFirst({
+          where: { user_id: order.created_by, gym_id: gymId },
+          select: { first_name: true, last_name: true },
+        })
+      : null;
+
+    // Logo opcional — si falla la descarga o el formato no es soportado por
+    // pdfkit (solo PNG/JPEG), se omite sin romper la generación del ticket.
+    let logoBuffer: Buffer | null = null;
+    if (gym?.logo_url) {
+      try {
+        const res = await fetch(gym.logo_url);
+        const contentType = res.headers.get('content-type') ?? '';
+        if (res.ok && /image\/(png|jpe?g)/.test(contentType)) {
+          logoBuffer = Buffer.from(await res.arrayBuffer());
+        }
+      } catch {
+        logoBuffer = null;
+      }
+    }
 
     return new Promise<Buffer>((resolve, reject) => {
       const doc = new PDFDocument({ size: 'A4', margin: 50 });
@@ -256,7 +285,9 @@ export class MarketplaceService {
       doc.on('end', () => resolve(Buffer.concat(buffers)));
       doc.on('error', reject);
 
-      const shortId = order.id.slice(0, 8).toUpperCase();
+      const ticketLabel = order.ticket_number
+        ? `N.° ${String(order.ticket_number).padStart(6, '0')}`
+        : `#${order.id.slice(0, 8).toUpperCase()}`;
       const issuedAt = order.created_at.toLocaleString('es-SV', {
         day: '2-digit',
         month: 'short',
@@ -265,7 +296,15 @@ export class MarketplaceService {
         minute: '2-digit',
       });
 
-      // Encabezado — datos del gym
+      // Encabezado — logo (si se pudo descargar) + datos del gym
+      if (logoBuffer) {
+        try {
+          doc.image(logoBuffer, doc.page.width / 2 - 30, doc.y, { fit: [60, 60], align: 'center' });
+          doc.moveDown(4.5);
+        } catch {
+          // Buffer no era una imagen válida para pdfkit — se omite sin interrumpir el ticket
+        }
+      }
       doc
         .fontSize(18)
         .fillColor('#1d4ed8')
@@ -291,11 +330,11 @@ export class MarketplaceService {
 
       // Datos de la orden y del cliente
       const infoStartY = doc.y;
-      doc.fontSize(9).fillColor('#6b7280').text('N.º de pedido', 50, infoStartY);
+      doc.fontSize(9).fillColor('#6b7280').text('Ticket', 50, infoStartY);
       doc
-        .fontSize(12)
-        .fillColor('#111827')
-        .text(shortId, 50, infoStartY + 12);
+        .fontSize(14)
+        .fillColor('#1d4ed8')
+        .text(ticketLabel, 50, infoStartY + 12);
 
       doc.fontSize(9).fillColor('#6b7280').text('Fecha', 300, infoStartY);
       doc
@@ -303,17 +342,20 @@ export class MarketplaceService {
         .fillColor('#111827')
         .text(issuedAt, 300, infoStartY + 12);
 
-      const row2Y = infoStartY + 40;
+      const row2Y = infoStartY + 42;
       doc.fontSize(9).fillColor('#6b7280').text('Cliente', 50, row2Y);
       doc
         .fontSize(12)
         .fillColor('#111827')
         .text(`${order.member.first_name} ${order.member.last_name}`, 50, row2Y + 12);
+      let clientLineY = row2Y + 30;
       if (order.member.user?.email) {
-        doc
-          .fontSize(9)
-          .fillColor('#6b7280')
-          .text(order.member.user.email, 50, row2Y + 30);
+        doc.fontSize(9).fillColor('#6b7280').text(order.member.user.email, 50, clientLineY);
+        clientLineY += 13;
+      }
+      if (order.member.phone) {
+        doc.fontSize(9).fillColor('#6b7280').text(order.member.phone, 50, clientLineY);
+        clientLineY += 13;
       }
 
       doc.fontSize(9).fillColor('#6b7280').text('Estado', 300, row2Y);
@@ -321,8 +363,18 @@ export class MarketplaceService {
         .fontSize(12)
         .fillColor('#111827')
         .text(ORDER_STATUS_LABELS[order.status] ?? order.status, 300, row2Y + 12);
+      if (attendedBy) {
+        doc
+          .fontSize(9)
+          .fillColor('#6b7280')
+          .text('Atendido por', 300, row2Y + 34);
+        doc
+          .fontSize(10)
+          .fillColor('#111827')
+          .text(`${attendedBy.first_name} ${attendedBy.last_name}`, 300, row2Y + 46);
+      }
 
-      doc.y = row2Y + 55;
+      doc.y = Math.max(clientLineY, row2Y + 60) + 5;
       doc.moveDown(0.5);
 
       // Tabla de productos
@@ -387,11 +439,14 @@ export class MarketplaceService {
         doc.moveDown(1);
       }
 
-      // Pie de página
+      // Pie de página — posiciones con margen de sobra respecto al margin
+      // bottom (50) del documento; si el último renglón queda demasiado
+      // pegado al límite, pdfkit interpreta que no cabe y agrega una página
+      // en blanco solo para esa línea.
       doc
         .fontSize(9)
         .fillColor('#374151')
-        .text('¡Gracias por tu compra!', 50, doc.page.height - 90, {
+        .text('¡Gracias por tu compra!', 50, doc.page.height - 115, {
           align: 'center',
           width: doc.page.width - 100,
         });
@@ -399,9 +454,18 @@ export class MarketplaceService {
         .fontSize(7)
         .fillColor('#9ca3af')
         .text(
+          `Conserva este ticket (${ticketLabel}) como referencia para cualquier reclamo.`,
+          50,
+          doc.page.height - 98,
+          { align: 'center', width: doc.page.width - 100 },
+        );
+      doc
+        .fontSize(7)
+        .fillColor('#9ca3af')
+        .text(
           'Este comprobante es un resumen interno de la venta y no constituye una factura fiscal (CF/CCF).',
           50,
-          doc.page.height - 75,
+          doc.page.height - 85,
           { align: 'center', width: doc.page.width - 100 },
         );
       doc
@@ -410,7 +474,7 @@ export class MarketplaceService {
         .text(
           `Generado el ${new Date().toLocaleDateString('es-SV', { day: '2-digit', month: 'short', year: 'numeric' })} por GymApp`,
           50,
-          doc.page.height - 60,
+          doc.page.height - 70,
           { align: 'center', width: doc.page.width - 100 },
         );
 
@@ -458,12 +522,23 @@ export class MarketplaceService {
     }
 
     const order = await this.prisma.$transaction(async (tx) => {
+      // UPDATE ... SET x = x+1 es atómico en Postgres — no hace falta un lock
+      // explícito ni un SELECT previo aunque haya ventas concurrentes del mismo gym.
+      const counter = await tx.gym.update({
+        where: { id: gymId },
+        data: { next_ticket_number: { increment: 1 } },
+        select: { next_ticket_number: true },
+      });
+      const ticketNumber = counter.next_ticket_number - 1;
+
       const o = await tx.marketplaceOrder.create({
         data: {
           gym_id: gymId,
           member_id: dto.member_id,
           total,
           notes: dto.notes,
+          ticket_number: ticketNumber,
+          created_by: createdByUserId,
           items: { create: items },
         },
         include: {
