@@ -246,6 +246,7 @@ export default function HealthDataScreen() {
                             month: 'short',
                             hour: '2-digit',
                             minute: '2-digit',
+                            timeZone: 'UTC',
                           })}
                         </Text>
                       </View>

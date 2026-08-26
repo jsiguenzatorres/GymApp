@@ -668,6 +668,7 @@ export default function SessionScreen() {
                       {new Date(session.date).toLocaleDateString('es-SV', {
                         day: 'numeric',
                         month: 'short',
+                        timeZone: 'UTC',
                       })}
                     </Text>
                     <Text style={styles.historySets} numberOfLines={1}>

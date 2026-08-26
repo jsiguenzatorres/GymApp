@@ -74,7 +74,7 @@ const GAMIFICATION_LABELS: Record<string, string> = {
 };
 
 function fmtDateTime(iso: string) {
-  return new Date(iso).toLocaleString('es-SV');
+  return new Date(iso).toLocaleString('es-SV', { timeZone: 'UTC' });
 }
 
 export function DashboardExportButton({
@@ -135,7 +135,7 @@ export function DashboardExportButton({
       rows: expiringMemberships.map((e) => ({
         miembro: `${e.member.first_name} ${e.member.last_name}`,
         plan: e.type.name,
-        vence: new Date(e.end_date).toLocaleDateString('es-SV'),
+        vence: new Date(e.end_date).toLocaleDateString('es-SV', { timeZone: 'UTC' }),
       })),
     },
     {

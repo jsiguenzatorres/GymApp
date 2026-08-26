@@ -444,6 +444,7 @@ export default function MarketplaceScreen() {
                         day: 'numeric',
                         month: 'short',
                         year: 'numeric',
+                        timeZone: 'UTC',
                       })}
                     </Text>
                     <View style={[styles.statusBadge, { backgroundColor: statusColor + '20' }]}>

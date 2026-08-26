@@ -144,6 +144,7 @@ export default function MonthlyBoxScreen() {
                 {new Date(data.box.month + '-01').toLocaleDateString('es-SV', {
                   month: 'long',
                   year: 'numeric',
+                  timeZone: 'UTC',
                 })}
               </Text>
               {data.box.description && (
@@ -156,6 +157,7 @@ export default function MonthlyBoxScreen() {
                     {new Date(data.box.delivery_date).toLocaleDateString('es-SV', {
                       day: 'numeric',
                       month: 'long',
+                      timeZone: 'UTC',
                     })}
                   </Text>
                 </View>
@@ -197,6 +199,7 @@ export default function MonthlyBoxScreen() {
                     month: 'short',
                     hour: '2-digit',
                     minute: '2-digit',
+                    timeZone: 'UTC',
                   })}
                 </Text>
               </View>

@@ -431,10 +431,11 @@ export default function NewMemberPage() {
                   </p>
                   <p className="text-xs text-violet-600 mt-0.5">
                     Inicia el{' '}
-                    {new Date(startDate + 'T12:00:00').toLocaleDateString('es-SV', {
+                    {new Date(startDate).toLocaleDateString('es-SV', {
                       day: 'numeric',
                       month: 'long',
                       year: 'numeric',
+                      timeZone: 'UTC',
                     })}
                     {' · '}vence en {selectedType.duration_days} días
                   </p>

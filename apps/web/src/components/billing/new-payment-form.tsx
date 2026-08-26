@@ -238,7 +238,11 @@ export function NewPaymentForm() {
           invoiceType: form.invoiceType || undefined,
           description: form.description || undefined,
           notes: form.notes || undefined,
-          paidAt: form.paidAt ? new Date(form.paidAt).toISOString() : undefined,
+          // form.paidAt viene de un <input type="datetime-local"> ("YYYY-MM-DDTHH:mm").
+          // Construimos el ISO agregando el sufijo literalmente — nunca pasar por
+          // new Date(...).toISOString(), que reinterpreta el valor con la zona
+          // horaria del navegador del operador y lo desplaza.
+          paidAt: form.paidAt ? `${form.paidAt}:00.000Z` : undefined,
         }),
       });
 
@@ -356,7 +360,8 @@ export function NewPaymentForm() {
             <option value="">— Selecciona una membresía —</option>
             {selectedMember.activeMemberships.map((m) => (
               <option key={m.id} value={m.id}>
-                {m.type.name} — vence {new Date(m.end_date).toLocaleDateString('es-SV')}
+                {m.type.name} —{' '}
+                {new Date(m.end_date).toLocaleDateString('es-SV', { timeZone: 'UTC' })}
               </option>
             ))}
           </select>

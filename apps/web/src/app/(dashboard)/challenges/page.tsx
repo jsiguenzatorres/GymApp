@@ -135,6 +135,7 @@ export default async function ChallengesPage() {
                     day: 'numeric',
                     month: 'short',
                     year: 'numeric',
+                    timeZone: 'UTC',
                   })}{' '}
                   ({daysLeft}d restantes)
                 </p>

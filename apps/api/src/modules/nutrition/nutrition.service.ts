@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, ForbiddenException, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
+import { startOfGymDay, endOfGymDay } from '../../common/utils/gym-time.util';
 import { GeminiService } from '../ai/gemini.service';
 import { AiFallbackService } from '../ai/ai-fallback.service';
 import { StorageService } from '../storage/storage.service';
@@ -411,11 +412,9 @@ export class NutritionService {
 
   /** Devuelve totales calóricos por día en un rango (default últimos 30 días). */
   async getDiaryRange(gymId: string, memberId: string, days = 30) {
-    const end = new Date();
-    end.setHours(23, 59, 59, 999);
-    const start = new Date(end);
-    start.setDate(start.getDate() - (days - 1));
-    start.setHours(0, 0, 0, 0);
+    const end = endOfGymDay();
+    const start = startOfGymDay();
+    start.setUTCDate(start.getUTCDate() - (days - 1));
 
     const entries = await this.prisma.foodDiaryEntry.findMany({
       where: { gym_id: gymId, member_id: memberId, date: { gte: start, lte: end } },
@@ -517,8 +516,7 @@ export class NutritionService {
     });
     if (!plan) return { has_plan: false as const };
 
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
+    const startOfDay = startOfGymDay();
 
     const sessionsToday = await this.prisma.workoutSession.count({
       where: { gym_id: gymId, member_id: memberId, started_at: { gte: startOfDay } },

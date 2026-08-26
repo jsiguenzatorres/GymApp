@@ -73,6 +73,7 @@ export default function BlogPostScreen() {
                 day: 'numeric',
                 month: 'long',
                 year: 'numeric',
+                timeZone: 'UTC',
               })}
             </Text>
           )}

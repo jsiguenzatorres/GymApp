@@ -45,6 +45,7 @@ function fmtDate(iso: string) {
     day: 'numeric',
     month: 'short',
     year: 'numeric',
+    timeZone: 'UTC',
   });
 }
 

@@ -35,7 +35,17 @@ export default function AssignMembershipPage() {
 
   const [types, setTypes] = useState<MembershipType[]>([]);
   const [selected, setSelected] = useState<string>('');
-  const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
+  // "Hoy" para prellenar un <input type="date">. Usamos los getters LOCALES
+  // (no toISOString(), que convierte a UTC) — en El Salvador (UTC-6), entre
+  // las 6pm y medianoche, toISOString().split('T')[0] ya da la fecha de
+  // "mañana" en UTC en vez del día calendario real del operador.
+  const [startDate, setStartDate] = useState(() => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  });
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState(false);

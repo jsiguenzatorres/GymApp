@@ -215,6 +215,7 @@ export default async function MonthlyBoxesPage() {
                       {new Date(b.delivery_date).toLocaleDateString('es-SV', {
                         day: 'numeric',
                         month: 'long',
+                        timeZone: 'UTC',
                       })}
                     </p>
                   )}

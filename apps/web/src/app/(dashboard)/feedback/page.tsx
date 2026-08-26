@@ -57,6 +57,7 @@ function formatMonth(ym: string) {
   return new Date(Number(year), Number(month) - 1).toLocaleDateString('es-SV', {
     month: 'short',
     year: '2-digit',
+    timeZone: 'UTC',
   });
 }
 
@@ -265,6 +266,7 @@ export default async function FeedbackPage({
                               day: 'numeric',
                               month: 'short',
                               year: 'numeric',
+                              timeZone: 'UTC',
                             })}
                           </p>
                         </div>

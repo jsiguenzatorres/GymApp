@@ -146,12 +146,17 @@ function LoadEvolutionChart({ history }: { history: ExerciseHistorySession[] }) 
         }}
       >
         <Text style={{ fontSize: 10, color: '#9ca3af' }}>
-          {points[0].date.toLocaleDateString('es-SV', { day: '2-digit', month: 'short' })}
+          {points[0].date.toLocaleDateString('es-SV', {
+            day: '2-digit',
+            month: 'short',
+            timeZone: 'UTC',
+          })}
         </Text>
         <Text style={{ fontSize: 10, color: '#9ca3af' }}>
           {points[points.length - 1].date.toLocaleDateString('es-SV', {
             day: '2-digit',
             month: 'short',
+            timeZone: 'UTC',
           })}
         </Text>
       </View>

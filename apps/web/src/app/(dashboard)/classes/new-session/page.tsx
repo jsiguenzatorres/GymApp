@@ -31,7 +31,11 @@ async function createSessionAction(formData: FormData) {
     method: 'POST',
     body: JSON.stringify({
       class_type_id,
-      scheduled_at: new Date(scheduled_at).toISOString(),
+      // scheduled_at viene de un <input type="datetime-local"> ("YYYY-MM-DDTHH:mm").
+      // Agregamos el sufijo literalmente en vez de pasar por
+      // new Date(...).toISOString(), que reinterpreta el valor con la zona
+      // horaria del navegador/servidor y lo desplaza.
+      scheduled_at: `${scheduled_at}:00.000Z`,
       capacity,
       trainer_id: trainer_id || undefined,
       room: room || undefined,
@@ -53,11 +57,17 @@ export default async function NewSessionPage() {
     (s) => s.is_active && ['TRAINER', 'GYM_ADMIN', 'GYM_OWNER'].includes(s.role),
   );
 
-  // Default datetime: tomorrow 7am
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  tomorrow.setHours(7, 0, 0, 0);
-  const defaultDatetime = tomorrow.toISOString().slice(0, 16);
+  // Default datetime: mañana a las 7:00am hora de El Salvador (UTC-6 fijo,
+  // sin horario de verano). Este es un Server Component — `new Date()` corre
+  // en el reloj/zona horaria del servidor (usualmente UTC en la nube), no en
+  // la del operador. Para no depender de esa zona horaria, calculamos "hoy"
+  // restando el offset fijo de El Salvador y operamos siempre en UTC.
+  const nowInElSalvador = new Date(Date.now() - 6 * 60 * 60 * 1000);
+  nowInElSalvador.setUTCDate(nowInElSalvador.getUTCDate() + 1);
+  const y = nowInElSalvador.getUTCFullYear();
+  const m = String(nowInElSalvador.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(nowInElSalvador.getUTCDate()).padStart(2, '0');
+  const defaultDatetime = `${y}-${m}-${d}T07:00`;
 
   return (
     <div className="p-6 max-w-xl">

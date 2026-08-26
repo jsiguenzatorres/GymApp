@@ -99,7 +99,11 @@ export default function CouponsPage() {
           max_uses_total: form.max_uses_total ? parseInt(form.max_uses_total, 10) : undefined,
           max_uses_per_member: parseInt(form.max_uses_per_member, 10) || 1,
           first_time_only: form.first_time_only,
-          expires_at: form.expires_at ? new Date(form.expires_at).toISOString() : undefined,
+          // form.expires_at viene de un <input type="date"> ("YYYY-MM-DD").
+          // Agregamos el sufijo literalmente en vez de pasar por
+          // new Date(...).toISOString(), que reinterpreta el valor con la zona
+          // horaria del navegador del operador y puede desplazar el día.
+          expires_at: form.expires_at ? `${form.expires_at}T00:00:00.000Z` : undefined,
         }),
       });
       if (res.ok) {
@@ -304,7 +308,8 @@ export default function CouponsPage() {
                   {' · '}
                   {c.times_used} usado(s){c.max_uses_total ? ` de ${c.max_uses_total}` : ''}
                   {c.first_time_only && ' · solo miembros nuevos'}
-                  {c.expires_at && ` · vence ${new Date(c.expires_at).toLocaleDateString()}`}
+                  {c.expires_at &&
+                    ` · vence ${new Date(c.expires_at).toLocaleDateString('es-SV', { timeZone: 'UTC' })}`}
                 </p>
               </div>
               <button

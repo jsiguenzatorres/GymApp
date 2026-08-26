@@ -135,6 +135,7 @@ export default async function WebhooksPage({
                       month: 'short',
                       hour: '2-digit',
                       minute: '2-digit',
+                      timeZone: 'UTC',
                     })}
                   </td>
                   <td className="px-4 py-2">

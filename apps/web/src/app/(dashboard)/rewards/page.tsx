@@ -107,7 +107,7 @@ export default async function RewardsPage() {
                   </p>
                   <p className="text-xs text-gray-500">
                     {r.reward.name} · {r.points_spent} pts ·{' '}
-                    {new Date(r.redeemed_at).toLocaleDateString('es-SV')}
+                    {new Date(r.redeemed_at).toLocaleDateString('es-SV', { timeZone: 'UTC' })}
                   </p>
                 </div>
                 <form action={markRedemptionAction} className="inline">

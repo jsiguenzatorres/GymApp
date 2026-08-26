@@ -96,7 +96,13 @@ export default function PhotoAnalyzer({ memberId }: { memberId: string }) {
         return;
       }
 
-      const today = new Date().toISOString().split('T')[0];
+      // Día calendario de "hoy" para el registro en el diario de alimentos.
+      // Usamos los getters LOCALES (no toISOString(), que convierte a UTC) —
+      // en El Salvador (UTC-6), entre las 6pm y medianoche,
+      // toISOString().split('T')[0] ya da la fecha de "mañana" en UTC en vez
+      // del día real en que el miembro comió.
+      const now = new Date();
+      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
       const logRes = await fetch(`/api/proxy/members/${memberId}/food-diary`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

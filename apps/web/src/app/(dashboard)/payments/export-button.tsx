@@ -41,7 +41,7 @@ const PAYMENT_TYPE_LABELS: Record<string, string> = {
 
 function fmtDate(iso: string | null) {
   if (!iso) return '';
-  return new Date(iso).toLocaleString('es-SV');
+  return new Date(iso).toLocaleString('es-SV', { timeZone: 'UTC' });
 }
 
 export function PaymentsExportButton({

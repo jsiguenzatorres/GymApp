@@ -198,6 +198,7 @@ export function CreditSection({
                         month: 'short',
                         hour: '2-digit',
                         minute: '2-digit',
+                        timeZone: 'UTC',
                       })}
                       {tx.note && ` · ${tx.note}`}
                     </p>

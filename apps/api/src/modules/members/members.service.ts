@@ -8,6 +8,7 @@ import {
 import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
 import { PrismaService } from '../database/prisma.service';
+import { gymNow } from '../../common/utils/gym-time.util';
 import { EmailService } from '../notifications/email.service';
 import { StorageService } from '../storage/storage.service';
 import { CouponsService } from '../coupons/coupons.service';
@@ -280,7 +281,7 @@ export class MembersService {
     });
     if (!member) throw new NotFoundException('Perfil de miembro no encontrado');
 
-    const now = new Date();
+    const now = gymNow();
 
     // 1) Sesiones de los últimos 60 días (para racha + semana en una sola query)
     const sixtyDaysAgo = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
@@ -370,7 +371,7 @@ export class MembersService {
     });
     if (!member) throw new NotFoundException('Perfil de miembro no encontrado');
 
-    const now = new Date();
+    const now = gymNow();
     const startOfThisWeek = new Date(now);
     const dayOfWeek = (startOfThisWeek.getDay() + 6) % 7; // lunes = 0
     startOfThisWeek.setDate(startOfThisWeek.getDate() - dayOfWeek);
@@ -705,7 +706,7 @@ export class MembersService {
   // Membresías activas que vencen dentro de los próximos N días — para el
   // widget "requiere tu atención hoy" del dashboard de staff.
   async getExpiringMemberships(gymId: string, days = 7) {
-    const now = new Date();
+    const now = gymNow();
     const until = new Date(now.getTime() + days * 86_400_000);
     return this.prisma.membership.findMany({
       where: { gym_id: gymId, status: 'ACTIVE', end_date: { gte: now, lte: until } },

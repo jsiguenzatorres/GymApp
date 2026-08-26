@@ -47,6 +47,7 @@ function fmtTime(iso: string) {
     month: 'short',
     hour: '2-digit',
     minute: '2-digit',
+    timeZone: 'UTC',
   });
 }
 
@@ -225,7 +226,7 @@ export default async function CrmPage() {
                         : '—'}
                     </td>
                     <td className="whitespace-nowrap py-2.5 text-xs text-gray-500">
-                      {new Date(i.occurred_at).toLocaleDateString('es-SV')}
+                      {new Date(i.occurred_at).toLocaleDateString('es-SV', { timeZone: 'UTC' })}
                     </td>
                   </tr>
                 ))}

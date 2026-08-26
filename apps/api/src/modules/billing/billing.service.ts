@@ -1,6 +1,7 @@
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
+import { gymNow, startOfGymMonth } from '../../common/utils/gym-time.util';
 import { StripeService } from './stripe.service';
 import { MercadoPagoService } from './mercadopago.service';
 import { StorageService } from '../storage/storage.service';
@@ -390,10 +391,11 @@ Si no puedes leer el documento, devuelve todos los campos en null excepto "note"
   // ─── BILLING SUMMARY (para dashboard) ────────────────────────────────────────
 
   async getBillingSummary(gymId: string) {
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
+    const now = gymNow();
+    const startOfMonth = startOfGymMonth(now);
+    const prevMonthAnchor = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
+    const startOfLastMonth = startOfGymMonth(prevMonthAnchor);
+    const endOfLastMonth = new Date(startOfMonth.getTime() - 1);
 
     const [thisMonth, lastMonth, pending, failedCount, draftCount] = await Promise.all([
       // Total cobrado este mes

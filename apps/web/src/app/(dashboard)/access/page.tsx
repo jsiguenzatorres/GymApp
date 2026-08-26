@@ -62,6 +62,7 @@ function fmtDateTime(iso: string) {
     second: '2-digit',
     day: 'numeric',
     month: 'short',
+    timeZone: 'UTC',
   });
 }
 

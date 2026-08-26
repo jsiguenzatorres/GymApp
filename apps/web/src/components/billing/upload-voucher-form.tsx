@@ -187,7 +187,8 @@ export function UploadVoucherForm() {
             <option value="">— Selecciona una membresía —</option>
             {selectedMember.activeMemberships.map((m) => (
               <option key={m.id} value={m.id}>
-                {m.type.name} — vence {new Date(m.end_date).toLocaleDateString('es-SV')}
+                {m.type.name} —{' '}
+                {new Date(m.end_date).toLocaleDateString('es-SV', { timeZone: 'UTC' })}
               </option>
             ))}
           </select>

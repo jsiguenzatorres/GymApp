@@ -113,6 +113,7 @@ export default async function SettingsPage() {
                       day: 'numeric',
                       month: 'long',
                       year: 'numeric',
+                      timeZone: 'UTC',
                     })}
                   </p>
                 )}

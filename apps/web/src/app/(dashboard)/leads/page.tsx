@@ -57,7 +57,11 @@ function timeAgo(iso: string) {
   if (days === 0) return 'Hoy';
   if (days === 1) return 'Ayer';
   if (days < 7) return `Hace ${days} días`;
-  return new Date(iso).toLocaleDateString('es-SV', { day: 'numeric', month: 'short' });
+  return new Date(iso).toLocaleDateString('es-SV', {
+    day: 'numeric',
+    month: 'short',
+    timeZone: 'UTC',
+  });
 }
 
 const PIPELINE_STEPS = ['NEW', 'CONTACTED', 'INTERESTED', 'TRIAL', 'CONVERTED'];

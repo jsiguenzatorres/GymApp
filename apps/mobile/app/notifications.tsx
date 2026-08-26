@@ -42,7 +42,7 @@ function getRelativeTime(dateStr: string): string {
   if (diffHour < 24) return `hace ${diffHour} h`;
   if (diffDay === 1) return 'ayer';
   if (diffDay < 30) return `${diffDay} días`;
-  return date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+  return date.toLocaleDateString('es-SV', { day: 'numeric', month: 'short', timeZone: 'UTC' });
 }
 
 export default function NotificationsScreen() {

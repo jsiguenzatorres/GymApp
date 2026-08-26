@@ -152,6 +152,7 @@ export default async function AdminSubscriptionsPage({
                     {new Date(s.next_delivery_at).toLocaleDateString('es-SV', {
                       day: 'numeric',
                       month: 'short',
+                      timeZone: 'UTC',
                     })}
                   </td>
                   <td className="px-4 py-2 text-xs text-center font-semibold">

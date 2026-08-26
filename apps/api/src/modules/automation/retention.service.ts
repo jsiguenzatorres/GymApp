@@ -4,6 +4,7 @@ import { Cron } from '@nestjs/schedule';
 import { OnEvent } from '@nestjs/event-emitter';
 import { PrismaService } from '../database/prisma.service';
 import { NotificationService } from '../notifications/notification.service';
+import { gymNow } from '../../common/utils/gym-time.util';
 
 const DAY = 86_400_000;
 
@@ -35,7 +36,7 @@ export class RetentionService {
 
   // ─── DAILY CRON — 9am ────────────────────────────────────────────────────────
 
-  @Cron('0 9 * * *')
+  @Cron('0 9 * * *', { timeZone: 'America/El_Salvador' })
   async runDailyWorkflows() {
     const gyms = await this.prisma.gym.findMany({
       where: { is_active: true },
@@ -101,9 +102,9 @@ export class RetentionService {
 
   async wf002Birthdays(gymId: string) {
     try {
-      const today = new Date();
-      const month = today.getMonth() + 1;
-      const day = today.getDate();
+      const today = gymNow();
+      const month = today.getUTCMonth() + 1;
+      const day = today.getUTCDate();
 
       // Find members whose birthdate matches today (month and day)
       const members = await this.prisma.$queryRaw<

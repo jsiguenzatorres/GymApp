@@ -1,6 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { AiFallbackService } from '../ai/ai-fallback.service';
+import {
+  gymNow,
+  startOfGymMonth,
+  endOfGymMonth,
+  startOfGymDay,
+} from '../../common/utils/gym-time.util';
 
 @Injectable()
 export class AnalyticsService {
@@ -14,10 +20,11 @@ export class AnalyticsService {
   // ─── DASHBOARD KPIs ──────────────────────────────────────────────────────────
 
   async getDashboard(gymId: string) {
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const startOfPrevMon = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const endOfPrevMon = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
+    const now = gymNow();
+    const startOfMonth = startOfGymMonth(now);
+    const prevMonthAnchor = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
+    const startOfPrevMon = startOfGymMonth(prevMonthAnchor);
+    const endOfPrevMon = endOfGymMonth(prevMonthAnchor);
     const sevenDaysAgo = new Date(now.getTime() - 7 * 86_400_000);
 
     const [
@@ -204,9 +211,9 @@ export class AnalyticsService {
       start = new Date(y, 0, 1);
       end = new Date(y, 11, 31, 23, 59, 59, 999);
     } else {
-      const now = new Date();
-      start = new Date(now.getFullYear(), now.getMonth(), 1);
-      end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+      const now = gymNow();
+      start = startOfGymMonth(now);
+      end = endOfGymMonth(now);
     }
 
     const durationMs = end.getTime() - start.getTime();
@@ -440,8 +447,7 @@ export class AnalyticsService {
 
   async takeSnapshot(gymId: string) {
     const dashboard = await this.getDashboard(gymId);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const today = startOfGymDay();
 
     const entries = [
       { key: 'active_members', value: dashboard.kpis.activeMembers },

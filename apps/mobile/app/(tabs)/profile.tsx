@@ -47,6 +47,7 @@ function formatDate(d: string) {
     day: 'numeric',
     month: 'long',
     year: 'numeric',
+    timeZone: 'UTC',
   });
 }
 
@@ -289,10 +290,12 @@ export default function ProfileTab() {
                           day: 'numeric',
                           month: 'short',
                           year: 'numeric',
+                          timeZone: 'UTC',
                         })}{' '}
                         {new Date(log.created_at).toLocaleTimeString('es-SV', {
                           hour: '2-digit',
                           minute: '2-digit',
+                          timeZone: 'UTC',
                         })}
                       </Text>
                     </View>

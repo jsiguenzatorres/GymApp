@@ -51,6 +51,7 @@ function fmtDate(iso: string) {
     day: 'numeric',
     month: 'long',
     year: 'numeric',
+    timeZone: 'UTC',
   });
 }
 
@@ -60,6 +61,7 @@ function fmtDateTime(iso: string) {
     month: 'short',
     hour: '2-digit',
     minute: '2-digit',
+    timeZone: 'UTC',
   });
 }
 

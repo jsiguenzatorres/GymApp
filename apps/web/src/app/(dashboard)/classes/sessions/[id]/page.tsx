@@ -37,6 +37,7 @@ function fmtDateTime(iso: string) {
     month: 'short',
     hour: '2-digit',
     minute: '2-digit',
+    timeZone: 'UTC',
   });
 }
 
@@ -202,7 +203,9 @@ export default async function SessionRosterPage({ params }: { params: Promise<{ 
                     </span>
                   </td>
                   <td className="px-5 py-3 text-right text-xs text-gray-400">
-                    {e.checked_in_at ? new Date(e.checked_in_at).toLocaleTimeString('es-SV') : '—'}
+                    {e.checked_in_at
+                      ? new Date(e.checked_in_at).toLocaleTimeString('es-SV', { timeZone: 'UTC' })
+                      : '—'}
                   </td>
                 </tr>
               ))}

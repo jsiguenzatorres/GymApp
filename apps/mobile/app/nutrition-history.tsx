@@ -27,12 +27,13 @@ function formatDate(iso: string) {
     month: 'long',
     year: 'numeric',
     weekday: 'long',
+    timeZone: 'UTC',
   });
 }
 
 function shortDay(iso: string) {
   const d = new Date(iso + 'T00:00:00');
-  return d.toLocaleDateString('es-SV', { day: '2-digit', month: 'short' });
+  return d.toLocaleDateString('es-SV', { day: '2-digit', month: 'short', timeZone: 'UTC' });
 }
 
 export default function NutritionHistoryScreen() {

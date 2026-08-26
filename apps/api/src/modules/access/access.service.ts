@@ -4,6 +4,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { createHmac, randomBytes } from 'crypto';
 import * as QRCode from 'qrcode';
 import { PrismaService } from '../database/prisma.service';
+import { startOfGymDay } from '../../common/utils/gym-time.util';
 
 const QR_TTL_MS = 60_000; // 60 segundos
 const NONCE_WINDOW = 120_000; // 2 minutos para dedup de nonces
@@ -304,8 +305,7 @@ export class AccessService {
   }
 
   async getAccessStats(gymId: string) {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const today = startOfGymDay();
     const weekAgo = new Date(today.getTime() - 7 * 86_400_000);
 
     const [

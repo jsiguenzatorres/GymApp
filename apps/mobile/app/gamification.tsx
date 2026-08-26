@@ -207,6 +207,7 @@ export default function GamificationScreen() {
                           day: '2-digit',
                           month: 'short',
                           year: 'numeric',
+                          timeZone: 'UTC',
                         })}
                       </Text>
                     </View>
@@ -284,6 +285,7 @@ export default function GamificationScreen() {
                       {new Date(badge.earned_at).toLocaleDateString('es-SV', {
                         day: '2-digit',
                         month: 'short',
+                        timeZone: 'UTC',
                       })}
                     </Text>
                   </View>

@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../database/prisma.service';
+import { gymNow } from '../../common/utils/gym-time.util';
 import { RagService } from '../ai/rag.service';
 import { ConversationService } from '../ai/conversation.service';
 import { AiFallbackService } from '../ai/ai-fallback.service';
@@ -677,7 +678,7 @@ export class WorkoutService {
   // ─── WORKOUT STATS (para dashboard) ──────────────────────────────────────────
 
   async getWorkoutStats(gymId: string) {
-    const now = new Date();
+    const now = gymNow();
     const startOfWeek = new Date(now);
     startOfWeek.setDate(now.getDate() - now.getDay());
     startOfWeek.setHours(0, 0, 0, 0);

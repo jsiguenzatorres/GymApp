@@ -132,7 +132,7 @@ export default async function BlogPage() {
                   <p className="mt-2 text-xs text-gray-400">
                     /blog/{p.slug} ·{' '}
                     {p.published_at
-                      ? new Date(p.published_at).toLocaleDateString('es-SV')
+                      ? new Date(p.published_at).toLocaleDateString('es-SV', { timeZone: 'UTC' })
                       : 'sin publicar'}
                   </p>
                   <div className="mt-3 flex gap-2">

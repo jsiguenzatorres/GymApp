@@ -65,6 +65,7 @@ export default function BlogScreen() {
                       {new Date(p.published_at).toLocaleDateString('es-SV', {
                         day: 'numeric',
                         month: 'short',
+                        timeZone: 'UTC',
                       })}
                     </Text>
                   )}

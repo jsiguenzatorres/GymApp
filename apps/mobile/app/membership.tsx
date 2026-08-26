@@ -77,6 +77,7 @@ export default function MembershipScreen() {
         `Tu membresía está pausada hasta ${new Date(res.freezeEndsAt).toLocaleDateString('es-SV', {
           day: 'numeric',
           month: 'long',
+          timeZone: 'UTC',
         })}`,
       );
       await load();
@@ -172,6 +173,7 @@ export default function MembershipScreen() {
                     {new Date(currentMembership.start_date).toLocaleDateString('es-SV', {
                       day: 'numeric',
                       month: 'short',
+                      timeZone: 'UTC',
                     })}
                   </Text>
                 </View>
@@ -181,6 +183,7 @@ export default function MembershipScreen() {
                     {new Date(currentMembership.end_date).toLocaleDateString('es-SV', {
                       day: 'numeric',
                       month: 'short',
+                      timeZone: 'UTC',
                     })}
                   </Text>
                 </View>

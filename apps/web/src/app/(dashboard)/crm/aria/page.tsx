@@ -10,6 +10,10 @@ interface Message {
   ts: number;
 }
 
+// Nota: `ts` aquí es Date.now() real del cliente (timestamp de mensaje de
+// chat en vivo), NO una fecha del backend en la convención "literal SV con
+// sufijo Z" — por eso NO se fuerza timeZone: 'UTC', debe mostrarse en la
+// hora real del navegador del operador.
 function fmtTime(ts: number) {
   return new Date(ts).toLocaleTimeString('es-SV', { hour: '2-digit', minute: '2-digit' });
 }

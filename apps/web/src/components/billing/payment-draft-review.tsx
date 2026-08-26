@@ -99,7 +99,11 @@ export function PaymentDraftReview({ payment }: { payment: DraftPayment }) {
           voucherNumber: form.voucherNumber || undefined,
           paymentType: form.paymentType,
           invoiceType: form.invoiceType || undefined,
-          paidAt: form.paidAt ? new Date(form.paidAt).toISOString() : undefined,
+          // form.paidAt viene de un <input type="datetime-local"> ("YYYY-MM-DDTHH:mm").
+          // Construimos el ISO agregando el sufijo literalmente — nunca pasar por
+          // new Date(...).toISOString(), que reinterpreta el valor con la zona
+          // horaria del navegador del operador y lo desplaza.
+          paidAt: form.paidAt ? `${form.paidAt}:00.000Z` : undefined,
           description: form.description || undefined,
           notes: form.notes || undefined,
         }),

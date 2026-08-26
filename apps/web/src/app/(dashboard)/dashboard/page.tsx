@@ -159,11 +159,19 @@ function GrowthBadge({ value }: { value: number }) {
 }
 
 function fmtTime(iso: string) {
-  return new Date(iso).toLocaleTimeString('es-SV', { hour: '2-digit', minute: '2-digit' });
+  return new Date(iso).toLocaleTimeString('es-SV', {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'UTC',
+  });
 }
 
 function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString('es-SV', { day: 'numeric', month: 'short' });
+  return new Date(iso).toLocaleDateString('es-SV', {
+    day: 'numeric',
+    month: 'short',
+    timeZone: 'UTC',
+  });
 }
 
 function AttentionRow({

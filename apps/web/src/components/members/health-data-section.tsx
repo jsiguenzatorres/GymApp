@@ -77,6 +77,7 @@ export async function HealthDataSection({ memberId }: { memberId: string }) {
                   {new Date(latest.recorded_at).toLocaleDateString('es-SV', {
                     day: '2-digit',
                     month: 'short',
+                    timeZone: 'UTC',
                   })}
                 </p>
               )}
@@ -143,6 +144,7 @@ export async function HealthDataSection({ memberId }: { memberId: string }) {
                       month: 'short',
                       hour: '2-digit',
                       minute: '2-digit',
+                      timeZone: 'UTC',
                     })}
                   </span>
                 </li>

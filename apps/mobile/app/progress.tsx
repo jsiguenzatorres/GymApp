@@ -140,7 +140,12 @@ function computeLongestStreak(sessions: SessionSummary[]): number {
 
 function formatDate(iso: string): string {
   const d = new Date(iso);
-  return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
+  return d.toLocaleDateString('es-SV', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
 }
 
 // ─── Volume Chart (8 weeks) ──────────────────────────────────────────────────

@@ -137,6 +137,7 @@ export default function SubscriptionsScreen() {
                       {next.toLocaleDateString('es-SV', {
                         day: 'numeric',
                         month: 'long',
+                        timeZone: 'UTC',
                       })}
                     </Text>
                   </View>

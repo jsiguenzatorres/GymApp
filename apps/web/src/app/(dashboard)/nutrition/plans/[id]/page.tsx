@@ -560,7 +560,9 @@ export default function PlanDetailPage({ params }: { params: Promise<{ id: strin
                   key={h.id}
                   className="text-[11px] text-gray-500 border-b border-gray-100 pb-1.5 last:border-0"
                 >
-                  <span className="text-gray-400">{new Date(h.changed_at).toLocaleString()}</span>
+                  <span className="text-gray-400">
+                    {new Date(h.changed_at).toLocaleString('es-SV', { timeZone: 'UTC' })}
+                  </span>
                   {' — '}
                   <strong>{h.name}</strong> ({GOAL_LABELS[h.goal] ?? h.goal}) · {h.kcal_target} kcal
                   · P:{h.protein_g}g C:{h.carbs_g}g G:{h.fat_g}g
@@ -894,7 +896,7 @@ export default function PlanDetailPage({ params }: { params: Promise<{ id: strin
                       Ver documento
                     </a>
                     <span className="text-[10px] text-gray-400">
-                      {new Date(lab.created_at).toLocaleDateString()}
+                      {new Date(lab.created_at).toLocaleDateString('es-SV', { timeZone: 'UTC' })}
                     </span>
                   </div>
                   {lab.reviewed_by_nutritionist ? (

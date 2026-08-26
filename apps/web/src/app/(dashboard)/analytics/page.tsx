@@ -294,16 +294,18 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
 
   const kpis = dashboard?.kpis;
   const periodLabel = finance
-    ? new Date(finance.period.start + 'T12:00:00').toLocaleDateString('es-SV', {
+    ? new Date(finance.period.start).toLocaleDateString('es-SV', {
         day: params.from ? 'numeric' : undefined,
         month: 'long',
         year: 'numeric',
+        timeZone: 'UTC',
       }) +
       (finance.period.start.slice(0, 7) !== finance.period.end.slice(0, 7)
-        ? ` — ${new Date(finance.period.end + 'T12:00:00').toLocaleDateString('es-SV', {
+        ? ` — ${new Date(finance.period.end).toLocaleDateString('es-SV', {
             day: 'numeric',
             month: 'long',
             year: 'numeric',
+            timeZone: 'UTC',
           })}`
         : '')
     : '';

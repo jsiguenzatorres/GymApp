@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../database/prisma.service';
+import { startOfGymDay } from '../../common/utils/gym-time.util';
 import { NotificationService } from '../notifications/notification.service';
 import { NutritionService } from '../nutrition/nutrition.service';
 import { AddonsService } from '../addons/addons.service';
@@ -71,8 +72,7 @@ export class ScheduledTasksService {
         },
       });
 
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      const today = startOfGymDay();
 
       for (const pref of prefs) {
         try {

@@ -64,12 +64,18 @@ function formatDate(iso: string): string {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
+    timeZone: 'UTC',
   });
 }
 
 function formatTime(iso: string): string {
   const d = new Date(iso);
-  return d.toLocaleTimeString('es-SV', { hour: '2-digit', minute: '2-digit', hour12: true });
+  return d.toLocaleTimeString('es-SV', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+    timeZone: 'UTC',
+  });
 }
 
 function statusLabel(status: Appointment['status']): string {
