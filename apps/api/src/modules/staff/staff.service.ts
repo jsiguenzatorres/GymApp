@@ -260,6 +260,168 @@ export class StaffService {
     });
   }
 
+  // ─── BUSCADOR DE DISPONIBILIDAD (Fase 3 del calendario de agenda) ──────────
+  // Cruza el horario de trabajo (StaffAvailability) contra lo ya ocupado
+  // (Appointment + ClassSession) ese día — sin fechas puntuales de excepción,
+  // igual que el horario de trabajo del que depende.
+
+  async getAvailableSlots(gymId: string, staffId: string, dateStr: string, durationMin: number) {
+    const staff = await this.prisma.staff.findFirst({ where: { id: staffId, gym_id: gymId } });
+    if (!staff) throw new NotFoundException('Staff no encontrado');
+
+    const dayStart = new Date(`${dateStr}T00:00:00.000Z`);
+    if (Number.isNaN(dayStart.getTime())) {
+      throw new BadRequestException('date inválida (formato esperado YYYY-MM-DD)');
+    }
+    const dayEnd = new Date(`${dateStr}T23:59:59.999Z`);
+    const dayOfWeek = dayStart.getUTCDay();
+
+    const blocks = await this.prisma.staffAvailability.findMany({
+      where: { gym_id: gymId, staff_id: staffId, day_of_week: dayOfWeek, is_active: true },
+    });
+    if (blocks.length === 0) {
+      return { date: dateStr, durationMin, hasAvailability: false, freeRanges: [] };
+    }
+
+    const { workRanges, busyRanges } = await this.loadDaySchedule(
+      gymId,
+      staffId,
+      dateStr,
+      blocks,
+      dayStart,
+      dayEnd,
+    );
+
+    const minMs = durationMin * 60_000;
+    const freeRanges: { start: Date; end: Date }[] = [];
+
+    for (const work of workRanges) {
+      let cursor = work.start;
+      const relevant = busyRanges.filter((b) => b.start < work.end && b.end > work.start);
+      for (const busy of relevant) {
+        const busyStart = busy.start < work.start ? work.start : busy.start;
+        if (busyStart.getTime() - cursor.getTime() >= minMs) {
+          freeRanges.push({ start: cursor, end: busyStart });
+        }
+        if (busy.end > cursor) cursor = busy.end;
+      }
+      if (work.end.getTime() - cursor.getTime() >= minMs) {
+        freeRanges.push({ start: cursor, end: work.end });
+      }
+    }
+
+    return {
+      date: dateStr,
+      durationMin,
+      hasAvailability: freeRanges.length > 0,
+      freeRanges: freeRanges.map((r) => ({
+        start: r.start.toISOString(),
+        end: r.end.toISOString(),
+      })),
+    };
+  }
+
+  async checkAvailability(
+    gymId: string,
+    staffId: string,
+    scheduledAtIso: string,
+    durationMin: number,
+  ) {
+    const staff = await this.prisma.staff.findFirst({ where: { id: staffId, gym_id: gymId } });
+    if (!staff) throw new NotFoundException('Staff no encontrado');
+
+    const proposedStart = new Date(scheduledAtIso);
+    if (Number.isNaN(proposedStart.getTime())) {
+      throw new BadRequestException('scheduledAt inválido (formato esperado ISO 8601)');
+    }
+    const proposedEnd = new Date(proposedStart.getTime() + durationMin * 60_000);
+    const dateStr = proposedStart.toISOString().slice(0, 10);
+    const dayStart = new Date(`${dateStr}T00:00:00.000Z`);
+    const dayEnd = new Date(`${dateStr}T23:59:59.999Z`);
+    const dayOfWeek = proposedStart.getUTCDay();
+
+    const blocks = await this.prisma.staffAvailability.findMany({
+      where: { gym_id: gymId, staff_id: staffId, day_of_week: dayOfWeek, is_active: true },
+    });
+
+    // Sin horario configurado: no hay contra qué validar el horario laboral
+    // — se asume permitido y solo se valida contra choques reales, igual que
+    // el calendario visual (que tampoco sombrea nada si no hay horario).
+    if (blocks.length > 0) {
+      const withinWork = blocks.some((b) => {
+        const wStart = new Date(`${dateStr}T${b.start_time}:00.000Z`);
+        const wEnd = new Date(`${dateStr}T${b.end_time}:00.000Z`);
+        return proposedStart >= wStart && proposedEnd <= wEnd;
+      });
+      if (!withinWork) {
+        return { available: false, reason: 'Fuera del horario de trabajo configurado' };
+      }
+    }
+
+    const { busyRanges } = await this.loadDaySchedule(
+      gymId,
+      staffId,
+      dateStr,
+      blocks,
+      dayStart,
+      dayEnd,
+    );
+    const overlap = busyRanges.find((b) => proposedStart < b.end && proposedEnd > b.start);
+    if (overlap) {
+      return { available: false, reason: 'Ya tiene otra actividad agendada en ese horario' };
+    }
+
+    return { available: true };
+  }
+
+  private async loadDaySchedule(
+    gymId: string,
+    staffId: string,
+    dateStr: string,
+    blocks: { start_time: string; end_time: string }[],
+    dayStart: Date,
+    dayEnd: Date,
+  ) {
+    const [appointments, classSessions] = await Promise.all([
+      this.prisma.appointment.findMany({
+        where: {
+          gym_id: gymId,
+          staff_id: staffId,
+          status: { notIn: ['CANCELLED', 'REJECTED'] },
+          scheduled_at: { gte: dayStart, lte: dayEnd },
+        },
+        select: { scheduled_at: true, duration_min: true },
+      }),
+      this.prisma.classSession.findMany({
+        where: {
+          gym_id: gymId,
+          trainer_id: staffId,
+          status: { not: 'CANCELLED' },
+          scheduled_at: { gte: dayStart, lte: dayEnd },
+        },
+        select: { scheduled_at: true, duration_minutes: true },
+      }),
+    ]);
+
+    const workRanges = blocks.map((b) => ({
+      start: new Date(`${dateStr}T${b.start_time}:00.000Z`),
+      end: new Date(`${dateStr}T${b.end_time}:00.000Z`),
+    }));
+
+    const busyRanges = [
+      ...appointments.map((a) => ({
+        start: a.scheduled_at,
+        end: new Date(a.scheduled_at.getTime() + a.duration_min * 60_000),
+      })),
+      ...classSessions.map((c) => ({
+        start: c.scheduled_at,
+        end: new Date(c.scheduled_at.getTime() + c.duration_minutes * 60_000),
+      })),
+    ].sort((a, b) => a.start.getTime() - b.start.getTime());
+
+    return { workRanges, busyRanges };
+  }
+
   private generateTempPassword(): string {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#';
     return Array.from({ length: 12 }, () => chars[Math.floor(Math.random() * chars.length)]).join(

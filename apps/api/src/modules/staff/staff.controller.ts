@@ -11,6 +11,7 @@ import {
   ParseUUIDPipe,
   UseGuards,
   ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import { StaffService } from './staff.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -159,5 +160,44 @@ export class StaffController {
   ) {
     if (!this.isStaff(user)) throw new ForbiddenException('Solo staff puede editar horarios');
     return this.staffService.setAvailability(this.gymId(user), id, body.blocks ?? []);
+  }
+
+  // GET /api/v1/staff/:id/available-slots?date=YYYY-MM-DD&durationMin=60
+  // Fase 3 — "búscame un hueco de X minutos con este entrenador ese día".
+  @Get(':id/available-slots')
+  getAvailableSlots(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('date') date: string,
+    @Query('durationMin') durationMin: string | undefined,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    if (!this.isStaff(user)) throw new ForbiddenException('Solo staff puede buscar disponibilidad');
+    if (!date) throw new BadRequestException('date es requerido (YYYY-MM-DD)');
+    return this.staffService.getAvailableSlots(
+      this.gymId(user),
+      id,
+      date,
+      durationMin ? parseInt(durationMin, 10) : 60,
+    );
+  }
+
+  // GET /api/v1/staff/:id/check-availability?scheduledAt=ISO&durationMin=60
+  // Fase 3 — valida un horario específico propuesto antes de asignarlo.
+  @Get(':id/check-availability')
+  checkAvailability(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('scheduledAt') scheduledAt: string,
+    @Query('durationMin') durationMin: string | undefined,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    if (!this.isStaff(user))
+      throw new ForbiddenException('Solo staff puede consultar disponibilidad');
+    if (!scheduledAt) throw new BadRequestException('scheduledAt es requerido (ISO 8601)');
+    return this.staffService.checkAvailability(
+      this.gymId(user),
+      id,
+      scheduledAt,
+      durationMin ? parseInt(durationMin, 10) : 60,
+    );
   }
 }

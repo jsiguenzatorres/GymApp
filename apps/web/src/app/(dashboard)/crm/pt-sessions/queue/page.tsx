@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import { serverFetch } from '@/lib/server-api';
 import { revalidatePath } from 'next/cache';
-import { Clock, Check, X, UserPlus, ArrowLeft, CalendarDays } from 'lucide-react';
+import { Clock, Check, X, ArrowLeft, CalendarDays } from 'lucide-react';
+import { AssignTrainerForm } from '@/components/crm/assign-trainer-form';
 
 interface PendingPtRequest {
   id: string;
@@ -35,17 +36,6 @@ export default async function PtSessionsQueuePage() {
   ]);
   const list = requests ?? [];
   const trainerList = trainers ?? [];
-
-  async function assign(id: string, formData: FormData) {
-    'use server';
-    const trainerId = formData.get('trainerId') as string;
-    if (!trainerId) return;
-    await serverFetch(`/api/v1/pt-sessions/${id}/assign-trainer`, {
-      method: 'PATCH',
-      body: JSON.stringify({ trainerId }),
-    });
-    revalidatePath('/crm/pt-sessions/queue');
-  }
 
   async function confirm(id: string) {
     'use server';
@@ -152,30 +142,12 @@ export default async function PtSessionsQueuePage() {
                     </div>
                   </div>
                 ) : (
-                  <form action={assign.bind(null, r.id)} className="flex items-center gap-2">
-                    <select
-                      name="trainerId"
-                      required
-                      defaultValue=""
-                      className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs text-gray-700 outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500"
-                    >
-                      <option value="" disabled>
-                        Elegir entrenador...
-                      </option>
-                      {trainerList.map((t) => (
-                        <option key={t.id} value={t.id}>
-                          {t.first_name} {t.last_name}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      type="submit"
-                      className="inline-flex items-center gap-1 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-violet-700"
-                    >
-                      <UserPlus className="h-3.5 w-3.5" />
-                      Asignar
-                    </button>
-                  </form>
+                  <AssignTrainerForm
+                    requestId={r.id}
+                    scheduledAt={r.scheduled_at}
+                    durationMin={r.duration_min}
+                    trainers={trainerList}
+                  />
                 )}
               </li>
             ))}

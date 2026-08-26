@@ -8,7 +8,16 @@ import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import esLocale from '@fullcalendar/core/locales/es';
 import type { EventInput } from '@fullcalendar/core';
-import { ArrowLeft, Loader2, Clock, Plus, Trash2 } from 'lucide-react';
+import {
+  ArrowLeft,
+  Loader2,
+  Clock,
+  Plus,
+  Trash2,
+  Search,
+  CheckCircle2,
+  XCircle,
+} from 'lucide-react';
 
 interface StaffOption {
   id: string;
@@ -30,6 +39,18 @@ interface AvailabilityBlock {
   dayOfWeek: number;
   startTime: string;
   endTime: string;
+}
+
+interface FreeRange {
+  start: string;
+  end: string;
+}
+
+interface AvailableSlotsResponse {
+  date: string;
+  durationMin: number;
+  hasAvailability: boolean;
+  freeRanges: FreeRange[];
 }
 
 // Mismo código de colores propuesto para el calendario: PENDING = asignada
@@ -79,6 +100,13 @@ export function StaffCalendarView({ role, title, subtitle, backHref, emptyStaffL
   const [scheduleDraft, setScheduleDraft] = useState<AvailabilityBlock[]>([]);
   const [savingSchedule, setSavingSchedule] = useState(false);
   const [loadingSchedule, setLoadingSchedule] = useState(false);
+
+  // Buscador de disponibilidad (Fase 3)
+  const [showFinder, setShowFinder] = useState(false);
+  const [finderDate, setFinderDate] = useState('');
+  const [finderDuration, setFinderDuration] = useState('60');
+  const [finderResult, setFinderResult] = useState<AvailableSlotsResponse | null>(null);
+  const [finderLoading, setFinderLoading] = useState(false);
 
   useEffect(() => {
     fetch(`/api/proxy/staff?role=${role}&isActive=true`)
@@ -165,6 +193,8 @@ export function StaffCalendarView({ role, title, subtitle, backHref, emptyStaffL
 
   useEffect(() => {
     setEditingSchedule(false);
+    setShowFinder(false);
+    setFinderResult(null);
     loadAvailability(selectedStaffId);
     const api = calendarRef.current?.getApi();
     if (api && selectedStaffId) {
@@ -211,6 +241,33 @@ export function StaffCalendarView({ role, title, subtitle, backHref, emptyStaffL
     } finally {
       setSavingSchedule(false);
     }
+  }
+
+  async function searchAvailability() {
+    if (!selectedStaffId || !finderDate) return;
+    setFinderLoading(true);
+    setFinderResult(null);
+    try {
+      const res = await fetch(
+        `/api/proxy/staff/${selectedStaffId}/available-slots?date=${finderDate}&durationMin=${finderDuration}`,
+      );
+      if (res.ok) {
+        setFinderResult((await res.json()) as AvailableSlotsResponse);
+      }
+    } finally {
+      setFinderLoading(false);
+    }
+  }
+
+  function fmtSlotTime(iso: string) {
+    // timeZone: 'UTC' — mismo motivo que timeZone="UTC" en FullCalendar más
+    // abajo: todo el módulo trata los horarios como "HH:mm literal", sin
+    // conversión de zona horaria.
+    return new Date(iso).toLocaleTimeString('es-SV', {
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'UTC',
+    });
   }
 
   // FullCalendar sombrea automáticamente todo lo que NO cae dentro de
@@ -261,8 +318,84 @@ export function StaffCalendarView({ role, title, subtitle, backHref, emptyStaffL
             <Clock className="h-4 w-4" />
             Editar horario
           </button>
+          <button
+            type="button"
+            onClick={() => setShowFinder((v) => !v)}
+            disabled={!selectedStaffId}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+          >
+            <Search className="h-4 w-4" />
+            Buscar disponibilidad
+          </button>
         </div>
       </div>
+
+      {showFinder && (
+        <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm space-y-4">
+          <p className="text-sm font-semibold text-gray-900">
+            Buscar disponibilidad — {staffList.find((s) => s.id === selectedStaffId)?.first_name}
+          </p>
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-gray-500">Fecha</label>
+              <input
+                type="date"
+                value={finderDate}
+                onChange={(e) => setFinderDate(e.target.value)}
+                className="rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-gray-500">Duración (min)</label>
+              <input
+                type="number"
+                min="15"
+                step="15"
+                value={finderDuration}
+                onChange={(e) => setFinderDuration(e.target.value)}
+                className="w-24 rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={searchAvailability}
+              disabled={!finderDate || finderLoading}
+              className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-50"
+            >
+              {finderLoading ? 'Buscando...' : 'Buscar'}
+            </button>
+          </div>
+
+          {finderResult && (
+            <div className="pt-1">
+              {!finderResult.hasAvailability ? (
+                <p className="flex items-center gap-1.5 text-sm text-red-600">
+                  <XCircle className="h-4 w-4" />
+                  Sin disponibilidad ese día para {finderResult.durationMin} min (fuera de horario
+                  de trabajo o completo)
+                </p>
+              ) : (
+                <div className="space-y-1.5">
+                  <p className="flex items-center gap-1.5 text-sm font-medium text-emerald-700">
+                    <CheckCircle2 className="h-4 w-4" />
+                    Huecos libres de al menos {finderResult.durationMin} min:
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {finderResult.freeRanges.map((r, i) => (
+                      <span
+                        key={i}
+                        className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700"
+                      >
+                        {fmtSlotTime(r.start)} – {fmtSlotTime(r.end)}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {editingSchedule && (
         <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm space-y-4">
@@ -396,6 +529,15 @@ export function StaffCalendarView({ role, title, subtitle, backHref, emptyStaffL
           slotMaxTime="22:00:00"
           allDaySlot={false}
           nowIndicator
+          // El horario de trabajo se guarda y calcula en el backend como
+          // "HH:mm literal" (sin conversión de zona horaria — un solo gym,
+          // una sola zona horaria). FullCalendar por defecto interpretaría
+          // los timestamps ISO y los businessHours en la zona horaria LOCAL
+          // del navegador, lo que podría desalinear el sombreado visual del
+          // buscador de disponibilidad (que sí calcula en UTC "literal").
+          // Forzamos timeZone="UTC" para que todo el calendario use la misma
+          // convención que el backend, sin conversiones.
+          timeZone="UTC"
           events={events}
           businessHours={businessHours.length > 0 ? businessHours : undefined}
           datesSet={handleDatesSet}
