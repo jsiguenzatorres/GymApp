@@ -18,7 +18,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { CreateInteractionDto } from './dto/create-interaction.dto';
 import { CreateAppointmentDto, UpdateAppointmentStatusDto } from './dto/create-appointment.dto';
-import { RequestPtSessionDto } from './dto/request-pt-session.dto';
+import { RequestPtSessionDto, AssignTrainerDto } from './dto/request-pt-session.dto';
 import { STAFF_ROLES } from '@gymapp/shared-types';
 
 @UseGuards(JwtAuthGuard)
@@ -142,6 +142,19 @@ export class CrmController {
   getGymPendingPtRequests(@CurrentUser() user: JwtPayload) {
     if (!user.staffId) throw new ForbiddenException('Solo staff puede ver solicitudes PT');
     return this.crmService.getGymPendingPtRequests(this.gymId(user));
+  }
+
+  // PATCH /api/v1/pt-sessions/:id/assign-trainer — el operador asigna (o
+  // reasigna) el entrenador de una solicitud que el miembro dejó sin elegir.
+  @UseGuards(RolesGuard)
+  @Roles(...STAFF_ROLES)
+  @Patch('pt-sessions/:id/assign-trainer')
+  assignTrainer(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: AssignTrainerDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.crmService.assignTrainer(this.gymId(user), id, dto.trainerId);
   }
 
   // PATCH /api/v1/pt-sessions/:id/check-in

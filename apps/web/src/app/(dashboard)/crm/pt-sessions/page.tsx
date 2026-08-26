@@ -1,6 +1,7 @@
+import Link from 'next/link';
 import { serverFetch } from '@/lib/server-api';
 import { revalidatePath } from 'next/cache';
-import { Clock, Check, X } from 'lucide-react';
+import { Clock, Check, X, ArrowRight } from 'lucide-react';
 
 interface PendingPtRequest {
   id: string;
@@ -44,11 +45,20 @@ export default async function PtSessionsPage() {
 
   return (
     <div className="space-y-6 p-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Solicitudes de sesión PT</h1>
-        <p className="text-sm text-gray-500">
-          Miembros que solicitaron una sesión individual contigo — confírmalas o recházalas.
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Solicitudes de sesión PT</h1>
+          <p className="text-sm text-gray-500">
+            Miembros que solicitaron una sesión individual contigo — confírmalas o recházalas.
+          </p>
+        </div>
+        <Link
+          href="/crm/pt-sessions/queue"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+        >
+          Cola de asignación del gym
+          <ArrowRight className="h-4 w-4" />
+        </Link>
       </div>
 
       <section className="rounded-xl border border-gray-100 bg-white shadow-sm">

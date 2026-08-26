@@ -163,11 +163,16 @@ export class CrmService {
   async requestPtSession(gymId: string, userId: string, dto: RequestPtSessionDto) {
     const memberId = await this.resolveMemberId(gymId, userId);
 
-    const trainer = await this.prisma.staff.findFirst({
-      where: { id: dto.trainerId, gym_id: gymId, is_active: true },
-      select: { id: true, user_id: true, first_name: true, last_name: true },
-    });
-    if (!trainer) throw new NotFoundException('Entrenador no encontrado');
+    // trainerId es opcional: el miembro puede proponer solo día/hora y dejar
+    // que el operador asigne el entrenador después (ver assignTrainer).
+    let trainer: { id: string; user_id: string } | null = null;
+    if (dto.trainerId) {
+      trainer = await this.prisma.staff.findFirst({
+        where: { id: dto.trainerId, gym_id: gymId, is_active: true },
+        select: { id: true, user_id: true },
+      });
+      if (!trainer) throw new NotFoundException('Entrenador no encontrado');
+    }
 
     const member = await this.prisma.member.findFirst({
       where: { id: memberId },
@@ -178,7 +183,7 @@ export class CrmService {
       data: {
         gym_id: gymId,
         member_id: memberId,
-        staff_id: trainer.id,
+        staff_id: trainer?.id,
         title: `Sesión PT — ${member?.first_name} ${member?.last_name}`,
         appointment_type: 'TRAINING',
         status: 'PENDING',
@@ -189,20 +194,64 @@ export class CrmService {
       include: { staff: { select: { first_name: true, last_name: true } } },
     });
 
+    if (trainer) {
+      await this.notification
+        .create({
+          gymId,
+          userId: trainer.user_id,
+          type: 'PT_SESSION_REQUESTED',
+          title: 'Nueva solicitud de sesión PT',
+          body: `${member?.first_name} ${member?.last_name} solicitó una sesión para el ${new Date(dto.requestedAt).toLocaleString('es-SV')}.`,
+          data: { appointmentId: appointment.id },
+        })
+        .catch(() => {
+          // fire-and-forget
+        });
+    }
+
+    return appointment;
+  }
+
+  // El operador asigna (o reasigna) el entrenador de una sesión PT que el
+  // miembro propuso sin elegir con quién entrenar. Separado de
+  // updateAppointmentStatus porque asignar y confirmar pueden ser pasos
+  // distintos en el tiempo (ej. asignar ahora, confirmar tras coordinar con
+  // el entrenador).
+  async assignTrainer(gymId: string, appointmentId: string, trainerId: string) {
+    const appointment = await this.prisma.appointment.findFirst({
+      where: { id: appointmentId, gym_id: gymId, appointment_type: 'TRAINING' },
+    });
+    if (!appointment) throw new NotFoundException('Sesión no encontrada');
+
+    const trainer = await this.prisma.staff.findFirst({
+      where: { id: trainerId, gym_id: gymId, is_active: true },
+      select: { id: true, user_id: true, first_name: true, last_name: true },
+    });
+    if (!trainer) throw new NotFoundException('Entrenador no encontrado');
+
+    const updated = await this.prisma.appointment.update({
+      where: { id: appointmentId },
+      data: { staff_id: trainer.id },
+      include: {
+        member: { select: { id: true, first_name: true, last_name: true } },
+        staff: { select: { id: true, first_name: true, last_name: true } },
+      },
+    });
+
     await this.notification
       .create({
         gymId,
         userId: trainer.user_id,
         type: 'PT_SESSION_REQUESTED',
-        title: 'Nueva solicitud de sesión PT',
-        body: `${member?.first_name} ${member?.last_name} solicitó una sesión para el ${new Date(dto.requestedAt).toLocaleString('es-SV')}.`,
-        data: { appointmentId: appointment.id },
+        title: 'Nueva sesión PT asignada',
+        body: `Se te asignó una sesión con ${updated.member.first_name} ${updated.member.last_name} el ${appointment.scheduled_at.toLocaleString('es-SV')}.`,
+        data: { appointmentId },
       })
       .catch(() => {
         // fire-and-forget
       });
 
-    return appointment;
+    return updated;
   }
 
   async getMyPtSessions(gymId: string, userId: string) {
