@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { serverFetch } from '@/lib/server-api';
 import { revalidatePath } from 'next/cache';
-import { Clock, Check, X, UserPlus, ArrowLeft } from 'lucide-react';
+import { Clock, Check, X, UserPlus, ArrowLeft, CalendarDays } from 'lucide-react';
 
 interface PendingPtRequest {
   id: string;
@@ -77,13 +77,22 @@ export default async function PtSessionsQueuePage() {
             a las que no lo tienen, o confirma/rechaza las ya asignadas.
           </p>
         </div>
-        <Link
-          href="/crm/pt-sessions"
-          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Mis solicitudes
-        </Link>
+        <div className="flex gap-2">
+          <Link
+            href="/crm/pt-sessions/calendar"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            <CalendarDays className="h-4 w-4" />
+            Ver calendario
+          </Link>
+          <Link
+            href="/crm/pt-sessions"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Mis solicitudes
+          </Link>
+        </div>
       </div>
 
       {unassignedCount > 0 && (

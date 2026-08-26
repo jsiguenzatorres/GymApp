@@ -60,8 +60,11 @@ export class StaffService {
       include: { user: { select: { id: true, email: true, role: true, last_login_at: true } } },
     });
 
-    // Filtrar por rol después del join (role vive en User)
-    const filtered = filter.role ? staffList.filter((s) => s.user.role === filter.role) : staffList;
+    // Filtrar por rol después del join (role vive en User) — acepta uno o
+    // varios roles separados por coma (ej. "TRAINER,NUTRITIONIST") para
+    // selectores que combinan ambos, como el calendario de agendamiento.
+    const roles = filter.role?.split(',').map((r) => r.trim());
+    const filtered = roles ? staffList.filter((s) => roles.includes(s.user.role)) : staffList;
 
     return filtered;
   }

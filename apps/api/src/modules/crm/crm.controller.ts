@@ -94,6 +94,20 @@ export class CrmController {
     return this.crmService.createAppointment(gymId, dto);
   }
 
+  // GET /api/v1/staff/:id/calendar — Fase 1 del calendario por
+  // entrenador/nutricionista: solo lectura de lo ya agendado, staff-only.
+  @UseGuards(RolesGuard)
+  @Roles(...STAFF_ROLES)
+  @Get('staff/:id/calendar')
+  getStaffCalendar(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('from') from: string | undefined,
+    @Query('to') to: string | undefined,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.crmService.getStaffCalendar(this.gymId(user), id, from, to);
+  }
+
   // PATCH /api/v1/appointments/:id/status
   // Staff-only — confirmar/rechazar/completar/marcar no-show es una decisión del
   // gym, no del miembro (que hoy no tiene ningún botón de cancelar en la app).

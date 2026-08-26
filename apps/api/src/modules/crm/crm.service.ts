@@ -126,6 +126,30 @@ export class CrmService {
     });
   }
 
+  // Fase 1 del calendario de entrenadores/nutricionistas: solo lectura de lo
+  // ya agendado (sesiones PT + citas de nutrición), sin validar disponibilidad
+  // todavía — eso llega en la Fase 2 junto con el horario de trabajo del staff.
+  async getStaffCalendar(gymId: string, staffId: string, from?: string, to?: string) {
+    const staff = await this.prisma.staff.findFirst({ where: { id: staffId, gym_id: gymId } });
+    if (!staff) throw new NotFoundException('Staff no encontrado');
+
+    const fromDate = from ? new Date(from) : new Date();
+    const toDate = to ? new Date(to) : new Date(fromDate.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+    return this.prisma.appointment.findMany({
+      where: {
+        gym_id: gymId,
+        staff_id: staffId,
+        appointment_type: { in: ['TRAINING', 'NUTRITION'] },
+        scheduled_at: { gte: fromDate, lte: toDate },
+      },
+      orderBy: { scheduled_at: 'asc' },
+      include: {
+        member: { select: { id: true, first_name: true, last_name: true } },
+      },
+    });
+  }
+
   async updateAppointmentStatus(
     gymId: string,
     appointmentId: string,
