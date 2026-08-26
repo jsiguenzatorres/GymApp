@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Search, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
+import { MiniStaffCalendar } from '@/components/staff/mini-staff-calendar';
 
 interface Member {
   id: string;
@@ -313,6 +314,14 @@ export default function NewAppointmentPage() {
             )}
           </div>
         </div>
+
+        {/* Mini-calendario visual del entrenador seleccionado — muestra sus
+            citas/clases existentes y su horario de trabajo (si lo tiene
+            configurado); un clic en un hueco libre llena fecha/hora abajo.
+            Complementa el badge de texto de arriba, no lo reemplaza. */}
+        {form.staffId && (
+          <MiniStaffCalendar staffId={form.staffId} onSlotClick={(dt) => set('scheduledAt', dt)} />
+        )}
 
         {/* Date + Duration */}
         <div className="grid grid-cols-2 gap-4">
