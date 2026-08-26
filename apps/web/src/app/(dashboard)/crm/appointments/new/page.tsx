@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Search } from 'lucide-react';
+import { ArrowLeft, Search, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
 
 interface Member {
   id: string;
@@ -13,8 +13,26 @@ interface Member {
 
 interface StaffMember {
   id: string;
-  user: { first_name: string; last_name: string };
-  position: string;
+  first_name: string;
+  last_name: string;
+}
+
+type AvailabilityState =
+  | { status: 'idle' }
+  | { status: 'checking' }
+  | { status: 'available' }
+  | { status: 'unavailable'; reason: string };
+
+// El resto del sistema de calendario (horario de trabajo, StaffAvailability,
+// FullCalendar forzado a timeZone="UTC") trata las horas como "literal, sin
+// conversión de zona horaria" — un solo gym, una sola zona horaria. Un
+// <input type="datetime-local"> + `new Date(...).toISOString()` SÍ convierte
+// usando la zona horaria del navegador del operador, lo que desalinearía la
+// hora guardada/consultada respecto a como se interpreta en todo lo demás.
+// Esta función toma el valor literal "YYYY-MM-DDTHH:mm" del input y le agrega
+// directamente ":00.000Z", sin pasar por ninguna conversión de zona horaria.
+function toLiteralIso(datetimeLocalValue: string): string {
+  return `${datetimeLocalValue}:00.000Z`;
 }
 
 const TYPE_OPTIONS = [
@@ -47,6 +65,7 @@ export default function NewAppointmentPage() {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [availability, setAvailability] = useState<AvailabilityState>({ status: 'idle' });
 
   useEffect(() => {
     fetch('/api/proxy/staff?limit=50')
@@ -87,6 +106,41 @@ export default function NewAppointmentPage() {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
+  // Chequeo de disponibilidad en vivo — mismo endpoint que usa la cola de
+  // asignación (/crm/pt-sessions/queue), aquí disparado al elegir
+  // entrenador + fecha/hora directamente al crear la cita.
+  const checkSeq = useRef(0);
+  useEffect(() => {
+    if (!form.staffId || !form.scheduledAt) {
+      setAvailability({ status: 'idle' });
+      return;
+    }
+    const seq = ++checkSeq.current;
+    const t = setTimeout(async () => {
+      setAvailability({ status: 'checking' });
+      try {
+        const scheduledAtIso = toLiteralIso(form.scheduledAt);
+        const res = await fetch(
+          `/api/proxy/staff/${form.staffId}/check-availability?scheduledAt=${encodeURIComponent(scheduledAtIso)}&durationMin=${form.durationMin}`,
+        );
+        if (seq !== checkSeq.current) return;
+        if (!res.ok) {
+          setAvailability({ status: 'idle' });
+          return;
+        }
+        const data = (await res.json()) as { available: boolean; reason?: string };
+        setAvailability(
+          data.available
+            ? { status: 'available' }
+            : { status: 'unavailable', reason: data.reason ?? 'No disponible' },
+        );
+      } catch {
+        if (seq === checkSeq.current) setAvailability({ status: 'idle' });
+      }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [form.staffId, form.scheduledAt, form.durationMin]);
+
   function set(field: string, value: string | number) {
     setForm((prev) => ({ ...prev, [field]: value }));
   }
@@ -104,7 +158,7 @@ export default function NewAppointmentPage() {
         memberId: selectedMember.id,
         title: form.title,
         appointmentType: form.appointmentType,
-        scheduledAt: new Date(form.scheduledAt).toISOString(),
+        scheduledAt: toLiteralIso(form.scheduledAt),
         durationMin: Number(form.durationMin),
       };
       if (form.staffId) body.staffId = form.staffId;
@@ -238,10 +292,25 @@ export default function NewAppointmentPage() {
               <option value="">Sin asignar</option>
               {staff.map((s) => (
                 <option key={s.id} value={s.id}>
-                  {s.user.first_name} {s.user.last_name}
+                  {s.first_name} {s.last_name}
                 </option>
               ))}
             </select>
+            {availability.status === 'checking' && (
+              <p className="flex items-center gap-1 text-xs text-gray-400">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Consultando disponibilidad...
+              </p>
+            )}
+            {availability.status === 'available' && (
+              <p className="flex items-center gap-1 text-xs font-medium text-emerald-600">
+                <CheckCircle2 className="h-3.5 w-3.5" /> Disponible
+              </p>
+            )}
+            {availability.status === 'unavailable' && (
+              <p className="flex items-center gap-1 text-xs font-medium text-red-600">
+                <XCircle className="h-3.5 w-3.5" /> {availability.reason}
+              </p>
+            )}
           </div>
         </div>
 
