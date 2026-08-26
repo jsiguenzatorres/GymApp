@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Patch,
+  Put,
   Delete,
   Body,
   Param,
@@ -136,5 +137,27 @@ export class StaffController {
   @Delete(':id')
   deactivate(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: JwtPayload) {
     return this.staffService.deactivate(this.gymId(user), id);
+  }
+
+  // GET /api/v1/staff/:id/availability — horario de trabajo recurrente.
+  // Staff-only: es información operativa del calendario, no algo que un
+  // miembro necesite leer crudo.
+  @Get(':id/availability')
+  getAvailability(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: JwtPayload) {
+    if (!this.isStaff(user)) throw new ForbiddenException('Solo staff puede ver horarios');
+    return this.staffService.getAvailability(this.gymId(user), id);
+  }
+
+  // PUT /api/v1/staff/:id/availability — reemplaza el horario completo. Lo
+  // define el operador desde el panel web (hoy no existe un panel propio
+  // para que el staff lo autogestione).
+  @Put(':id/availability')
+  setAvailability(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: { blocks: { dayOfWeek: number; startTime: string; endTime: string }[] },
+    @CurrentUser() user: JwtPayload,
+  ) {
+    if (!this.isStaff(user)) throw new ForbiddenException('Solo staff puede editar horarios');
+    return this.staffService.setAvailability(this.gymId(user), id, body.blocks ?? []);
   }
 }

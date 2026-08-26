@@ -129,6 +129,9 @@ export class CrmService {
   // Fase 1 del calendario de entrenadores/nutricionistas: solo lectura de lo
   // ya agendado (sesiones PT + citas de nutrición), sin validar disponibilidad
   // todavía — eso llega en la Fase 2 junto con el horario de trabajo del staff.
+  // Devuelve sesiones PT + citas de nutrición + clases grupales asignadas al
+  // staff, en una forma unificada (kind distingue el origen) para que el
+  // calendario del frontend no tenga que conocer dos formas distintas.
   async getStaffCalendar(gymId: string, staffId: string, from?: string, to?: string) {
     const staff = await this.prisma.staff.findFirst({ where: { id: staffId, gym_id: gymId } });
     if (!staff) throw new NotFoundException('Staff no encontrado');
@@ -136,18 +139,47 @@ export class CrmService {
     const fromDate = from ? new Date(from) : new Date();
     const toDate = to ? new Date(to) : new Date(fromDate.getTime() + 30 * 24 * 60 * 60 * 1000);
 
-    return this.prisma.appointment.findMany({
-      where: {
-        gym_id: gymId,
-        staff_id: staffId,
-        appointment_type: { in: ['TRAINING', 'NUTRITION'] },
-        scheduled_at: { gte: fromDate, lte: toDate },
-      },
-      orderBy: { scheduled_at: 'asc' },
-      include: {
-        member: { select: { id: true, first_name: true, last_name: true } },
-      },
-    });
+    const [appointments, classSessions] = await Promise.all([
+      this.prisma.appointment.findMany({
+        where: {
+          gym_id: gymId,
+          staff_id: staffId,
+          appointment_type: { in: ['TRAINING', 'NUTRITION'] },
+          scheduled_at: { gte: fromDate, lte: toDate },
+        },
+        include: { member: { select: { first_name: true, last_name: true } } },
+      }),
+      this.prisma.classSession.findMany({
+        where: { gym_id: gymId, trainer_id: staffId, scheduled_at: { gte: fromDate, lte: toDate } },
+        include: {
+          class_type: { select: { name: true } },
+          _count: { select: { enrollments: true } },
+        },
+      }),
+    ]);
+
+    const items = [
+      ...appointments.map((a) => ({
+        id: a.id,
+        kind: 'APPOINTMENT' as const,
+        appointment_type: a.appointment_type,
+        title: `${a.member.first_name} ${a.member.last_name}`,
+        status: a.status,
+        scheduled_at: a.scheduled_at,
+        duration_min: a.duration_min,
+      })),
+      ...classSessions.map((c) => ({
+        id: c.id,
+        kind: 'CLASS' as const,
+        appointment_type: 'CLASS',
+        title: `${c.class_type.name} (${c._count.enrollments}/${c.capacity})`,
+        status: c.status,
+        scheduled_at: c.scheduled_at,
+        duration_min: c.duration_minutes,
+      })),
+    ];
+
+    return items.sort((a, b) => a.scheduled_at.getTime() - b.scheduled_at.getTime());
   }
 
   async updateAppointmentStatus(

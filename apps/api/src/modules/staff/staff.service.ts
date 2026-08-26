@@ -199,6 +199,67 @@ export class StaffService {
     return { total, active, byRole: roleMap };
   }
 
+  // ─── HORARIO DE TRABAJO (Fase 2 del calendario de agenda) ──────────────────
+  // Recurrente por día de semana, sin fechas puntuales — cubre el caso real
+  // ("Erick trabaja L-V 6am-2pm") sin la complejidad de excepciones (feriados,
+  // vacaciones puntuales), que se puede sumar después si hace falta.
+
+  async getAvailability(gymId: string, staffId: string) {
+    const staff = await this.prisma.staff.findFirst({ where: { id: staffId, gym_id: gymId } });
+    if (!staff) throw new NotFoundException('Staff no encontrado');
+
+    return this.prisma.staffAvailability.findMany({
+      where: { gym_id: gymId, staff_id: staffId, is_active: true },
+      orderBy: { day_of_week: 'asc' },
+    });
+  }
+
+  async setAvailability(
+    gymId: string,
+    staffId: string,
+    blocks: { dayOfWeek: number; startTime: string; endTime: string }[],
+  ) {
+    const staff = await this.prisma.staff.findFirst({ where: { id: staffId, gym_id: gymId } });
+    if (!staff) throw new NotFoundException('Staff no encontrado');
+
+    const timePattern = /^([01]\d|2[0-3]):[0-5]\d$/;
+    for (const b of blocks) {
+      if (!Number.isInteger(b.dayOfWeek) || b.dayOfWeek < 0 || b.dayOfWeek > 6) {
+        throw new BadRequestException(
+          'dayOfWeek debe ser un entero entre 0 (domingo) y 6 (sábado)',
+        );
+      }
+      if (!timePattern.test(b.startTime) || !timePattern.test(b.endTime)) {
+        throw new BadRequestException('startTime/endTime deben tener formato HH:mm');
+      }
+      if (b.startTime >= b.endTime) {
+        throw new BadRequestException('startTime debe ser antes que endTime');
+      }
+    }
+
+    // Reemplazo completo: se borra el horario anterior y se crea el nuevo en
+    // una transacción — más simple y predecible que diffear bloque por bloque
+    // para algo que el operador edita como una lista completa cada vez.
+    return this.prisma.$transaction(async (tx) => {
+      await tx.staffAvailability.deleteMany({ where: { gym_id: gymId, staff_id: staffId } });
+      if (blocks.length > 0) {
+        await tx.staffAvailability.createMany({
+          data: blocks.map((b) => ({
+            gym_id: gymId,
+            staff_id: staffId,
+            day_of_week: b.dayOfWeek,
+            start_time: b.startTime,
+            end_time: b.endTime,
+          })),
+        });
+      }
+      return tx.staffAvailability.findMany({
+        where: { gym_id: gymId, staff_id: staffId },
+        orderBy: { day_of_week: 'asc' },
+      });
+    });
+  }
+
   private generateTempPassword(): string {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#';
     return Array.from({ length: 12 }, () => chars[Math.floor(Math.random() * chars.length)]).join(

@@ -155,6 +155,7 @@ model Gym {
   challenges            Challenge[]
   rewards               Reward[]
   stock_movements       StockMovement[]
+  staff_availability    StaffAvailability[]
 
   @@index([saas_plan, is_active])
   @@map("gyms")
@@ -225,15 +226,38 @@ model Staff {
   created_at   DateTime @default(now())
   updated_at   DateTime @updatedAt
 
-  gym              Gym              @relation(fields: [gym_id], references: [id], onDelete: Cascade)
-  user             User             @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  gym              Gym                 @relation(fields: [gym_id], references: [id], onDelete: Cascade)
+  user             User                @relation(fields: [user_id], references: [id], onDelete: Cascade)
   crm_interactions CrmInteraction[]
   appointments     Appointment[]
   class_sessions   ClassSession[]
   assigned_leads   Lead[]
+  availability     StaffAvailability[]
 
   @@index([gym_id, is_active])
   @@map("staff")
+}
+
+// Horario de trabajo recurrente por día de semana — lo define el operador
+// desde el panel web (hoy no existe un panel propio para el staff). Base
+// para pintar "disponible" vs "ocupado" en el calendario (Fase 2) y para el
+// buscador de disponibilidad (Fase 3).
+model StaffAvailability {
+  id         String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gym_id     String  @db.Uuid
+  staff_id   String  @db.Uuid
+  day_of_week Int    // 0 = domingo ... 6 = sábado
+  start_time String  @db.VarChar(5) // "HH:mm"
+  end_time   String  @db.VarChar(5) // "HH:mm"
+  is_active  Boolean @default(true)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  gym   Gym   @relation(fields: [gym_id], references: [id], onDelete: Cascade)
+  staff Staff @relation(fields: [staff_id], references: [id], onDelete: Cascade)
+
+  @@index([gym_id, staff_id, day_of_week])
+  @@map("staff_availability")
 }
 
 // ─── MEMBERS (miembros del gym) ──────────────────────────────────────────────

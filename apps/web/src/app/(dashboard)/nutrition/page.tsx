@@ -1,6 +1,15 @@
 import { serverFetch } from '@/lib/server-api';
 import Link from 'next/link';
-import { Salad, Plus, Users, BookOpen, Target, AlertTriangle, Apple } from 'lucide-react';
+import {
+  Salad,
+  Plus,
+  Users,
+  BookOpen,
+  Target,
+  AlertTriangle,
+  Apple,
+  CalendarDays,
+} from 'lucide-react';
 
 interface Plan {
   id: string;
@@ -91,6 +100,12 @@ export default async function NutritionPage() {
           </p>
         </div>
         <div className="flex gap-2">
+          <Link
+            href="/nutrition/calendar"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            <CalendarDays className="h-4 w-4" /> Calendario
+          </Link>
           <Link
             href="/nutrition/food-library"
             className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
