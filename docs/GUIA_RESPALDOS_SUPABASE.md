@@ -67,3 +67,14 @@ El plan Free de Supabase no incluye backups automáticos ni point-in-time recove
 - **Costo:** $0 adicional — corre dentro de los minutos gratis de GitHub Actions (un job de pocos minutos, una vez al día) y R2 no cobra egress; el almacenamiento de los dumps (unos pocos MB/GB para un solo gym) cae dentro de la capa gratuita de R2.
 - **Esto no es point-in-time recovery.** El peor caso de pérdida de datos es de hasta 24 horas (lo que pasó entre el último dump y el incidente). Si eso deja de ser aceptable, es momento de evaluar subir a Supabase Pro.
 - **Nombre del archivo:** incluye fecha y hora en El Salvador (`gymapp-backup-YYYY-MM-DD_HHMM.dump`), no solo la fecha — así, si en el futuro se agrega un botón de "respaldar ahora" en el panel web, un respaldo manual el mismo día no sobreescribe el automático de la madrugada. La purga por `RETENTION_DAYS` solo reconoce este formato con hora; un archivo viejo sin hora en el nombre (de antes de este cambio) no se borra automáticamente y hay que limpiarlo a mano si hace falta.
+
+## Ideas futuras (no implementado)
+
+Hoy todo este proceso vive fuera de GymApp — GitHub Actions y el dashboard de Cloudflare R2 son la única forma de ver o disparar un respaldo. Si en algún momento se quiere traer esto al panel web admin, quedan dos piezas separadas, evaluadas pero no construidas:
+
+- **Listar respaldos en el panel** — complejidad baja. Un endpoint en `apps/api` que llame `ListObjectsV2` de la API S3-compatible de R2 (posiblemente reusando el cliente de R2 que ya existe para el storage general de la app) más una página sencilla en `apps/web`. Medio día de trabajo aproximadamente; lo único que agrega fricción es que hay que duplicar las credenciales de R2 hacia Railway — hoy solo existen como secrets de GitHub Actions.
+- **Botón "Respaldar ahora"** — complejidad moderada (uno o dos días). Dos formas de hacerlo:
+  1. El botón dispara remotamente el workflow `Supabase DB Backup` vía la API de GitHub (`workflow_dispatch`, necesita un token con permiso `actions:write`) y el panel consulta el estado hasta que termine — reusa la lógica ya probada, sin duplicar código.
+  2. Correr `pg_dump` directo desde el proceso de la API en Railway — evita depender de GitHub, pero obliga a instalar el cliente de Postgres ahí y manejarlo como job en background (el proyecto ya usa BullMQ, así que encajaría con ese patrón).
+
+**Salvedad importante antes de implementar cualquiera de las dos:** este respaldo es de **toda la base de datos compartida de todos los gyms** (GymApp es multi-tenant sobre una sola base de datos), no de uno solo — es una herramienta de operador de la plataforma, no algo que un `GYM_OWNER` normal debería poder ver ni disparar. Si se construye, debe quedar restringido a `SUPER_ADMIN` únicamente; exponerlo a un rol de gym individual filtraría la existencia de otros gyms en la misma base de datos.
