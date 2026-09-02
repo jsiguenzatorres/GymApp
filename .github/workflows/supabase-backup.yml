@@ -41,7 +41,13 @@ jobs:
           FILENAME="gymapp-backup-${TIMESTAMP}.dump"
           echo "FILENAME=${FILENAME}" >> "$GITHUB_ENV"
 
-          /usr/lib/postgresql/17/bin/pg_dump "${{ secrets.SUPABASE_DB_URL }}" -Fc -f "${FILENAME}"
+          # Se excluyen los esquemas internos de Supabase (cron: jobs
+          # programados de pg_cron, sin valor fuera de ese proyecto; vault:
+          # secretos internos cifrados de Supabase) — no son datos de GymApp
+          # y no tiene sentido respaldarlos ni restaurarlos en otro destino.
+          /usr/lib/postgresql/17/bin/pg_dump "${{ secrets.SUPABASE_DB_URL }}" \
+            --exclude-schema=cron --exclude-schema=vault \
+            -Fc -f "${FILENAME}"
 
           SIZE=$(stat -c%s "${FILENAME}")
           echo "Tamaño del dump: ${SIZE} bytes"

@@ -112,8 +112,8 @@ jobs:
           psql "$TARGET" -tAc "select table_name from information_schema.tables where table_schema='public' order by table_name limit 30"
           echo "-----------------------------------------"
 
-          GYM_COUNT=$(psql "$TARGET" -tAc 'select count(*) from "Gym"' 2>&1) || GYM_COUNT="ERROR: $GYM_COUNT"
-          MEMBER_COUNT=$(psql "$TARGET" -tAc 'select count(*) from "Member"' 2>&1) || MEMBER_COUNT="ERROR: $MEMBER_COUNT"
+          GYM_COUNT=$(psql "$TARGET" -tAc 'select count(*) from gyms' 2>&1) || GYM_COUNT="ERROR: $GYM_COUNT"
+          MEMBER_COUNT=$(psql "$TARGET" -tAc 'select count(*) from members' 2>&1) || MEMBER_COUNT="ERROR: $MEMBER_COUNT"
 
           echo "Gyms: ${GYM_COUNT}"
           echo "Members: ${MEMBER_COUNT}"
@@ -133,7 +133,7 @@ jobs:
             exit 1
           fi
           if ! [[ "$GYM_COUNT" =~ ^[0-9]+$ ]] || [ "$GYM_COUNT" -lt 1 ]; then
-            echo "::error::Se restauraron tablas, pero no la tabla 'Gym' con datos — revisa el nombre real de la tabla arriba."
+            echo "::error::Se restauraron tablas, pero no la tabla 'gyms' con datos — revisa el nombre real de la tabla arriba."
             exit 1
           fi
 
