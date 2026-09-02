@@ -54,6 +54,12 @@ El plan Free de Supabase no incluye backups automáticos ni point-in-time recove
     ```
     El script usa `pg_restore --clean --if-exists`, así que sobreescribe los objetos existentes en la base de datos destino — úsalo contra una base vacía o de la que ya sabes que quieres reemplazar el contenido, nunca a ciegas contra producción.
 
+## 7. Probar que un respaldo es restaurable (sin tocar producción)
+
+17. Ve a **Actions → Supabase Restore Test → Run workflow**. Este workflow separado (`.github/workflows/supabase-restore-test.yml`) descarga el respaldo más reciente de R2 (o el que le indiques en el campo `dump_filename`), lo restaura en un Postgres desechable creado dentro del propio runner, y verifica con consultas reales que las tablas y los datos llegaron — todo se destruye al terminar el job, no usa la base de datos de producción en ningún momento.
+18. Revisa el resumen del run (pestaña **Summary**) para ver cuántas tablas, gyms y miembros se restauraron. Si el job falla, el respaldo probado tiene un problema real.
+19. Es normal ver una advertencia sobre la extensión `pg_cron` durante la restauración — ese Postgres desechable no la soporta (necesita configuración de servidor que un contenedor de prueba no tiene), pero no afecta la verificación de las tablas ni de los datos.
+
 ## Notas
 
 - **Retención:** el workflow borra automáticamente del bucket los respaldos con más de 30 días — ajustable cambiando `RETENTION_DAYS` al inicio de `.github/workflows/supabase-backup.yml`.

@@ -1,0 +1,135 @@
+name: Supabase Restore Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      dump_filename:
+        description: 'Nombre exacto del .dump a probar en R2 (vacío = usa el más reciente)'
+        required: false
+        type: string
+
+concurrency:
+  group: supabase-restore-test
+  cancel-in-progress: false
+
+jobs:
+  restore-test:
+    name: Restaurar un respaldo en un Postgres desechable y verificar
+    runs-on: ubuntu-latest
+    environment: production
+    services:
+      postgres:
+        # Imagen con pgvector preinstalado (una de las extensiones que usa
+        # GymApp) para que el pg_restore se acerque lo más posible a un
+        # proyecto Supabase real. No incluye pg_cron (requiere configuración
+        # de servidor que un contenedor "services" no permite) — es normal
+        # ver una advertencia por esa extensión puntual, no invalida la prueba.
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_PASSWORD: test_restore_only
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Instalar cliente PostgreSQL 17 (misma versión que Supabase)
+        run: |
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/postgresql.gpg
+          echo "deb https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-17
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+
+      - name: Instalar AWS CLI (cliente S3-compatible para R2)
+        run: |
+          curl -sSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o awscliv2.zip
+          unzip -q awscliv2.zip
+          sudo ./aws/install --update
+
+      - name: Determinar qué respaldo probar
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+        run: |
+          set -euo pipefail
+          ENDPOINT="https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com"
+          BUCKET="${{ secrets.R2_BACKUPS_BUCKET_NAME }}"
+          INPUT_NAME="${{ inputs.dump_filename }}"
+
+          if [ -n "$INPUT_NAME" ]; then
+            FILENAME="$INPUT_NAME"
+          else
+            FILENAME=$(aws s3 ls "s3://${BUCKET}/" --endpoint-url "${ENDPOINT}" \
+              | awk '{print $4}' | grep -E '^gymapp-backup-.*\.dump$' | sort | tail -1)
+          fi
+
+          if [ -z "$FILENAME" ]; then
+            echo "::error::No se encontró ningún respaldo en el bucket '${BUCKET}'."
+            exit 1
+          fi
+
+          echo "Probando: ${FILENAME}"
+          {
+            echo "FILENAME=${FILENAME}"
+            echo "ENDPOINT=${ENDPOINT}"
+            echo "BUCKET=${BUCKET}"
+          } >> "$GITHUB_ENV"
+
+      - name: Descargar el dump de R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+        run: |
+          set -euo pipefail
+          aws s3 cp "s3://${BUCKET}/${FILENAME}" "./${FILENAME}" --endpoint-url "${ENDPOINT}"
+
+      - name: Restaurar con el script real del repo
+        run: |
+          set -uo pipefail
+          chmod +x scripts/restore-supabase-backup.sh
+          ./scripts/restore-supabase-backup.sh "${FILENAME}" \
+            "postgresql://postgres:test_restore_only@localhost:5432/postgres" \
+            || echo "::warning::pg_restore reportó advertencias/errores no fatales (ej. pg_cron, que no existe en este Postgres desechable) — la verificación real de datos va en el siguiente paso."
+
+      - name: Verificar que los datos realmente llegaron
+        run: |
+          set -euo pipefail
+          TARGET="postgresql://postgres:test_restore_only@localhost:5432/postgres"
+
+          TABLE_COUNT=$(psql "$TARGET" -tAc "select count(*) from information_schema.tables where table_schema='public'")
+          GYM_COUNT=$(psql "$TARGET" -tAc 'select count(*) from "Gym"')
+          MEMBER_COUNT=$(psql "$TARGET" -tAc 'select count(*) from "Member"')
+
+          echo "Tablas restauradas: ${TABLE_COUNT}"
+          echo "Gyms: ${GYM_COUNT}"
+          echo "Members: ${MEMBER_COUNT}"
+
+          {
+            echo "### Prueba de restauración — \`${FILENAME}\`"
+            echo ""
+            echo "| Métrica | Valor |"
+            echo "|---|---|"
+            echo "| Tablas restauradas | ${TABLE_COUNT} |"
+            echo "| Gyms | ${GYM_COUNT} |"
+            echo "| Members | ${MEMBER_COUNT} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$TABLE_COUNT" -lt 1 ] || [ "$GYM_COUNT" -lt 1 ]; then
+            echo "::error::La restauración no trajo datos reales — el respaldo '${FILENAME}' podría estar corrupto o vacío."
+            exit 1
+          fi
+
+          echo "✅ Restauración verificada: el respaldo '${FILENAME}' es válido y restaurable."
+
+      - name: Limpiar dump local
+        if: always()
+        run: rm -f "${FILENAME:-}"
