@@ -648,19 +648,19 @@ Los siguientes MCP servers son necesarios para el desarrollo de GymApp:
 
 Ver carpeta `docs/adr/`:
 
-| ADR                                                      | Decisión                                              |
-| -------------------------------------------------------- | ----------------------------------------------------- |
-| [ADR-001](docs/adr/ADR-001-monolith-vs-microservices.md) | Modular Monolith en P1–P2, Microservices opcional P3+ |
-| [ADR-002](docs/adr/ADR-002-multi-tenancy-rls.md)         | Shared DB + Shared Schema + PostgreSQL RLS            |
-| [ADR-003](docs/adr/ADR-003-api-rest-trpc.md)             | REST para APIs externas + tRPC para web-admin interno |
-| [ADR-004](docs/adr/ADR-004-railway-aws-migration.md)     | Railway P1–P2 → AWS ECS Fargate P3+                   |
-| [ADR-005](docs/adr/ADR-005-dual-payment-gateway.md)      | Stripe primario (intl) + MercadoPago (LATAM)          |
-| [ADR-006](docs/adr/ADR-006-offline-first-mobile.md)      | WatermelonDB para sesiones de workout offline         |
-| [ADR-007](docs/adr/ADR-007-event-bus-internal.md)        | Event Bus pub/sub interno con GymEvent enum           |
-| [ADR-008](docs/adr/ADR-008-white-label-ai-agents.md)     | Agentes IA con nombre configurable por gym            |
-| [ADR-009](docs/adr/ADR-009-access-control-phasing.md)    | QR propio P1 → Kisi/NFC P2 → HID/Facial P3            |
-| [ADR-010](docs/adr/ADR-010-edge-computing-access.md)     | Raspberry Pi edge para decisiones de acceso offline   |
-| [ADR-011](docs/adr/ADR-011-supabase-backup-strategy.md) | Respaldo diario propio (pg_dump → R2) mientras Supabase está en plan Free |
+| ADR                                                      | Decisión                                                                  |
+| -------------------------------------------------------- | ------------------------------------------------------------------------- |
+| [ADR-001](docs/adr/ADR-001-monolith-vs-microservices.md) | Modular Monolith en P1–P2, Microservices opcional P3+                     |
+| [ADR-002](docs/adr/ADR-002-multi-tenancy-rls.md)         | Shared DB + Shared Schema + PostgreSQL RLS                                |
+| [ADR-003](docs/adr/ADR-003-api-rest-trpc.md)             | REST para APIs externas + tRPC para web-admin interno                     |
+| [ADR-004](docs/adr/ADR-004-railway-aws-migration.md)     | Railway P1–P2 → AWS ECS Fargate P3+                                       |
+| [ADR-005](docs/adr/ADR-005-dual-payment-gateway.md)      | Stripe primario (intl) + MercadoPago (LATAM)                              |
+| [ADR-006](docs/adr/ADR-006-offline-first-mobile.md)      | WatermelonDB para sesiones de workout offline                             |
+| [ADR-007](docs/adr/ADR-007-event-bus-internal.md)        | Event Bus pub/sub interno con GymEvent enum                               |
+| [ADR-008](docs/adr/ADR-008-white-label-ai-agents.md)     | Agentes IA con nombre configurable por gym                                |
+| [ADR-009](docs/adr/ADR-009-access-control-phasing.md)    | QR propio P1 → Kisi/NFC P2 → HID/Facial P3                                |
+| [ADR-010](docs/adr/ADR-010-edge-computing-access.md)     | Raspberry Pi edge para decisiones de acceso offline                       |
+| [ADR-011](docs/adr/ADR-011-supabase-backup-strategy.md)  | Respaldo diario propio (pg_dump → R2) mientras Supabase está en plan Free |
 
 ---
 
@@ -725,6 +725,16 @@ Ver `docs/PLAN_TRABAJO.md` para desglose completo de tareas por sprint.
 - **SSH alias:** `github-js`
 - **Key:** `~/.ssh/id_ed25519_jsiguenzatorres`
 - **Remote:** `git@github-js:jsiguenzatorres/GymApp.git` (por crear)
+
+### Cuentas de servicios externos
+
+- **Supabase (base de datos de producción):** cuenta `familiasiguenzalopez@gmail.com`.
+  ⚠️ Antes de resetear la contraseña de la base de datos o generar una nueva
+  connection string, confirmar que se está parado en el proyecto Supabase
+  correcto de GymApp — crear o entrar a un proyecto distinto por error genera
+  una `DATABASE_URL`/`DIRECT_URL` con otra referencia de proyecto (el prefijo
+  `postgres.XXXXXXXX`) y otra región, que apunta a una base vacía sin los
+  datos reales.
 
 ### Branching Strategy
 

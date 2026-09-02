@@ -34,7 +34,10 @@ jobs:
       - name: Generar el dump
         run: |
           set -euo pipefail
-          TIMESTAMP=$(date -u +%Y-%m-%d)
+          # Incluye hora:minuto (hora de El Salvador, UTC-6) además de la fecha —
+          # así un futuro botón de "respaldar ahora" desde la web no pisa el
+          # respaldo automático de la madrugada si corren el mismo día.
+          TIMESTAMP=$(TZ=America/El_Salvador date +%Y-%m-%d_%H%M)
           FILENAME="gymapp-backup-${TIMESTAMP}.dump"
           echo "FILENAME=${FILENAME}" >> "$GITHUB_ENV"
 
@@ -67,10 +70,10 @@ jobs:
           set -euo pipefail
           ENDPOINT="https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com"
           BUCKET="${{ secrets.R2_BACKUPS_BUCKET_NAME }}"
-          CUTOFF=$(date -u -d "-${RETENTION_DAYS} days" +%Y-%m-%d)
+          CUTOFF=$(TZ=America/El_Salvador date -d "-${RETENTION_DAYS} days" +%Y-%m-%d)
 
           aws s3 ls "s3://${BUCKET}/" --endpoint-url "${ENDPOINT}" | awk '{print $4}' | grep '^gymapp-backup-' | while read -r key; do
-            FILE_DATE=$(echo "$key" | sed -E 's/gymapp-backup-([0-9]{4}-[0-9]{2}-[0-9]{2})\.dump/\1/')
+            FILE_DATE=$(echo "$key" | sed -E 's/gymapp-backup-([0-9]{4}-[0-9]{2}-[0-9]{2})_[0-9]{4}\.dump/\1/')
             if [[ "$FILE_DATE" < "$CUTOFF" ]]; then
               echo "Borrando respaldo vencido: $key (${FILE_DATE} < ${CUTOFF})"
               aws s3 rm "s3://${BUCKET}/${key}" --endpoint-url "${ENDPOINT}"

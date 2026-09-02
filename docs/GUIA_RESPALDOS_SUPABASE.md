@@ -25,13 +25,13 @@ El plan Free de Supabase no incluye backups automáticos ni point-in-time recove
 
 11. Ve a **Settings → Secrets and variables → Actions** en el repo y crea:
 
-    | Secret                     | Valor                                                                 |
-    | --------------------------- | ---------------------------------------------------------------------- |
-    | `SUPABASE_DB_URL`           | El connection string del "Session pooler" del paso 9-10                |
-    | `R2_ACCESS_KEY_ID`           | El Access Key ID del paso 6                                            |
-    | `R2_SECRET_ACCESS_KEY`       | El Secret Access Key del paso 6                                        |
-    | `CLOUDFLARE_ACCOUNT_ID`      | El Account ID del paso 7                                               |
-    | `R2_BACKUPS_BUCKET_NAME`     | `gymapp-backups` (o el nombre que le hayas dado en el paso 2)          |
+    | Secret                   | Valor                                                         |
+    | ------------------------ | ------------------------------------------------------------- |
+    | `SUPABASE_DB_URL`        | El connection string del "Session pooler" del paso 9-10       |
+    | `R2_ACCESS_KEY_ID`       | El Access Key ID del paso 6                                   |
+    | `R2_SECRET_ACCESS_KEY`   | El Secret Access Key del paso 6                               |
+    | `CLOUDFLARE_ACCOUNT_ID`  | El Account ID del paso 7                                      |
+    | `R2_BACKUPS_BUCKET_NAME` | `gymapp-backups` (o el nombre que le hayas dado en el paso 2) |
 
     Si el repo tiene un ambiente `production` configurado (Settings → Environments), crea estos secrets ahí — el workflow ya está declarado con `environment: production`.
 
@@ -45,12 +45,12 @@ El plan Free de Supabase no incluye backups automáticos ni point-in-time recove
 
 15. Baja el dump que necesites desde R2:
     ```bash
-    aws s3 cp s3://gymapp-backups/gymapp-backup-2026-09-01.dump . \
+    aws s3 cp s3://gymapp-backups/gymapp-backup-2026-09-01_0300.dump . \
       --endpoint-url https://<CLOUDFLARE_ACCOUNT_ID>.r2.cloudflarestorage.com
     ```
 16. Restaura con el script incluido en el repo:
     ```bash
-    ./scripts/restore-supabase-backup.sh gymapp-backup-2026-09-01.dump "<connection-string-destino>"
+    ./scripts/restore-supabase-backup.sh gymapp-backup-2026-09-01_0300.dump "<connection-string-destino>"
     ```
     El script usa `pg_restore --clean --if-exists`, así que sobreescribe los objetos existentes en la base de datos destino — úsalo contra una base vacía o de la que ya sabes que quieres reemplazar el contenido, nunca a ciegas contra producción.
 
@@ -60,3 +60,4 @@ El plan Free de Supabase no incluye backups automáticos ni point-in-time recove
 - **Efecto secundario útil:** al conectarse a diario, este mismo job cuenta como actividad real contra la base de datos y evita que Supabase pause el proyecto Free por inactividad.
 - **Costo:** $0 adicional — corre dentro de los minutos gratis de GitHub Actions (un job de pocos minutos, una vez al día) y R2 no cobra egress; el almacenamiento de los dumps (unos pocos MB/GB para un solo gym) cae dentro de la capa gratuita de R2.
 - **Esto no es point-in-time recovery.** El peor caso de pérdida de datos es de hasta 24 horas (lo que pasó entre el último dump y el incidente). Si eso deja de ser aceptable, es momento de evaluar subir a Supabase Pro.
+- **Nombre del archivo:** incluye fecha y hora en El Salvador (`gymapp-backup-YYYY-MM-DD_HHMM.dump`), no solo la fecha — así, si en el futuro se agrega un botón de "respaldar ahora" en el panel web, un respaldo manual el mismo día no sobreescribe el automático de la madrugada. La purga por `RETENTION_DAYS` solo reconoce este formato con hora; un archivo viejo sin hora en el nombre (de antes de este cambio) no se borra automáticamente y hay que limpiarlo a mano si hace falta.
