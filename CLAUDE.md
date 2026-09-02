@@ -660,6 +660,7 @@ Ver carpeta `docs/adr/`:
 | [ADR-008](docs/adr/ADR-008-white-label-ai-agents.md)     | Agentes IA con nombre configurable por gym            |
 | [ADR-009](docs/adr/ADR-009-access-control-phasing.md)    | QR propio P1 → Kisi/NFC P2 → HID/Facial P3            |
 | [ADR-010](docs/adr/ADR-010-edge-computing-access.md)     | Raspberry Pi edge para decisiones de acceso offline   |
+| [ADR-011](docs/adr/ADR-011-supabase-backup-strategy.md) | Respaldo diario propio (pg_dump → R2) mientras Supabase está en plan Free |
 
 ---
 

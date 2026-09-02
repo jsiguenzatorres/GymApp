@@ -1,0 +1,82 @@
+name: Supabase DB Backup
+
+on:
+  schedule:
+    # 09:00 UTC = 03:00 America/El_Salvador (UTC-6, sin horario de verano)
+    - cron: '0 9 * * *'
+  workflow_dispatch: {}
+
+concurrency:
+  group: supabase-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    name: Backup & upload a R2
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      RETENTION_DAYS: 30
+    steps:
+      - name: Instalar cliente PostgreSQL 16 (misma versión que Supabase)
+        run: |
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/postgresql.gpg
+          echo "deb https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-16
+
+      - name: Instalar AWS CLI (cliente S3-compatible para R2)
+        run: |
+          curl -sSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o awscliv2.zip
+          unzip -q awscliv2.zip
+          sudo ./aws/install --update
+
+      - name: Generar el dump
+        run: |
+          set -euo pipefail
+          TIMESTAMP=$(date -u +%Y-%m-%d)
+          FILENAME="gymapp-backup-${TIMESTAMP}.dump"
+          echo "FILENAME=${FILENAME}" >> "$GITHUB_ENV"
+
+          pg_dump "${{ secrets.SUPABASE_DB_URL }}" -Fc -f "${FILENAME}"
+
+          SIZE=$(stat -c%s "${FILENAME}")
+          echo "Tamaño del dump: ${SIZE} bytes"
+          if [ "${SIZE}" -lt 1024 ]; then
+            echo "::error::El dump generado es sospechosamente pequeño (${SIZE} bytes) — abortando antes de subirlo."
+            exit 1
+          fi
+
+      - name: Subir a Cloudflare R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+        run: |
+          set -euo pipefail
+          aws s3 cp "${FILENAME}" \
+            "s3://${{ secrets.R2_BACKUPS_BUCKET_NAME }}/${FILENAME}" \
+            --endpoint-url "https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com"
+
+      - name: Purgar respaldos con más de RETENTION_DAYS días
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+        run: |
+          set -euo pipefail
+          ENDPOINT="https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com"
+          BUCKET="${{ secrets.R2_BACKUPS_BUCKET_NAME }}"
+          CUTOFF=$(date -u -d "-${RETENTION_DAYS} days" +%Y-%m-%d)
+
+          aws s3 ls "s3://${BUCKET}/" --endpoint-url "${ENDPOINT}" | awk '{print $4}' | grep '^gymapp-backup-' | while read -r key; do
+            FILE_DATE=$(echo "$key" | sed -E 's/gymapp-backup-([0-9]{4}-[0-9]{2}-[0-9]{2})\.dump/\1/')
+            if [[ "$FILE_DATE" < "$CUTOFF" ]]; then
+              echo "Borrando respaldo vencido: $key (${FILE_DATE} < ${CUTOFF})"
+              aws s3 rm "s3://${BUCKET}/${key}" --endpoint-url "${ENDPOINT}"
+            fi
+          done
+
+      - name: Limpiar dump local
+        if: always()
+        run: rm -f "${FILENAME:-}"
