@@ -102,14 +102,19 @@ jobs:
 
       - name: Verificar que los datos realmente llegaron
         run: |
-          set -euo pipefail
+          set -uo pipefail
           TARGET="postgresql://postgres:test_restore_only@localhost:5432/postgres"
 
-          TABLE_COUNT=$(psql "$TARGET" -tAc "select count(*) from information_schema.tables where table_schema='public'")
-          GYM_COUNT=$(psql "$TARGET" -tAc 'select count(*) from "Gym"')
-          MEMBER_COUNT=$(psql "$TARGET" -tAc 'select count(*) from "Member"')
+          TABLE_COUNT=$(psql "$TARGET" -tAc "select count(*) from information_schema.tables where table_schema='public'" 2>&1)
+          echo "Tablas en 'public': ${TABLE_COUNT}"
 
-          echo "Tablas restauradas: ${TABLE_COUNT}"
+          echo "--- Tablas restauradas (primeras 30) ---"
+          psql "$TARGET" -tAc "select table_name from information_schema.tables where table_schema='public' order by table_name limit 30"
+          echo "-----------------------------------------"
+
+          GYM_COUNT=$(psql "$TARGET" -tAc 'select count(*) from "Gym"' 2>&1) || GYM_COUNT="ERROR: $GYM_COUNT"
+          MEMBER_COUNT=$(psql "$TARGET" -tAc 'select count(*) from "Member"' 2>&1) || MEMBER_COUNT="ERROR: $MEMBER_COUNT"
+
           echo "Gyms: ${GYM_COUNT}"
           echo "Members: ${MEMBER_COUNT}"
 
@@ -118,13 +123,17 @@ jobs:
             echo ""
             echo "| Métrica | Valor |"
             echo "|---|---|"
-            echo "| Tablas restauradas | ${TABLE_COUNT} |"
+            echo "| Tablas en 'public' | ${TABLE_COUNT} |"
             echo "| Gyms | ${GYM_COUNT} |"
             echo "| Members | ${MEMBER_COUNT} |"
           } >> "$GITHUB_STEP_SUMMARY"
 
-          if [ "$TABLE_COUNT" -lt 1 ] || [ "$GYM_COUNT" -lt 1 ]; then
-            echo "::error::La restauración no trajo datos reales — el respaldo '${FILENAME}' podría estar corrupto o vacío."
+          if ! [[ "$TABLE_COUNT" =~ ^[0-9]+$ ]] || [ "$TABLE_COUNT" -lt 1 ]; then
+            echo "::error::La restauración no creó ninguna tabla en 'public' — el respaldo '${FILENAME}' podría estar corrupto o vacío."
+            exit 1
+          fi
+          if ! [[ "$GYM_COUNT" =~ ^[0-9]+$ ]] || [ "$GYM_COUNT" -lt 1 ]; then
+            echo "::error::Se restauraron tablas, pero no la tabla 'Gym' con datos — revisa el nombre real de la tabla arriba."
             exit 1
           fi
 
