@@ -1,0 +1,7 @@
+FROM node:24-bookworm
+WORKDIR /app
+RUN npm install -g corepack@0.24.1 && corepack enable
+COPY . /app/
+RUN pnpm i --frozen-lockfile
+RUN pnpm --filter @gymapp/shared-types build
+RUN pnpm --filter web build
